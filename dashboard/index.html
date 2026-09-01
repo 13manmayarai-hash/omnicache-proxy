@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniCache AI Proxy - Analytics & Governance</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Standalone CSS Fallback if CDN is unreachable */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background-color: #0b0f19; color: #f8fafc; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 1.5rem; line-height: 1.5; }
+    .max-w-7xl { max-width: 80rem; margin-left: auto; margin-right: auto; }
+    .card { background: #131b2e; border: 1px solid #232f48; border-radius: 1rem; padding: 1.25rem; }
+    .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .grid-main { display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .grid-main { grid-template-columns: 1fr; } }
+    .btn { background: #2563eb; color: white; padding: 0.5rem 1rem; border-radius: 0.5rem; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+    .btn:hover { background: #1d4ed8; }
+    .btn-red { background: #e11d48; }
+    .btn-red:hover { background: #be123c; }
+    .btn-cyan { background: #0891b2; }
+    .btn-cyan:hover { background: #0e7490; }
+    .input-box { background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.5rem 0.75rem; color: #f8fafc; width: 100%; font-size: 0.875rem; }
+    .input-box:focus { outline: none; border-color: #06b6d4; }
+    .kpi-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 600; margin-bottom: 0.5rem; }
+    .kpi-value { font-size: 2rem; font-weight: 800; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+    .text-emerald { color: #10b981; }
+    .text-cyan { color: #06b6d4; }
+    .text-purple { color: #c084fc; }
+    .text-amber { color: #fbbf24; }
+    .text-rose { color: #f43f5e; }
+    .progress-track { background: #1e293b; border-radius: 9999px; height: 0.5rem; width: 100%; margin-top: 0.25rem; overflow: hidden; }
+    .progress-bar { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
+    pre { background: #080c14; border: 1px solid #1e293b; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; color: #34d399; font-family: monospace; font-size: 0.8rem; }
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+    .badge { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; font-family: monospace; }
+  </style>
+</head>
+<body>
+
+  <div class="max-w-7xl">
+    <!-- Header -->
+    <div class="header-bar">
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="width: 2.5rem; height: 2.5rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: bold; color: white;">⚡</div>
+          <div>
+            <h1 style="font-size: 1.5rem; font-weight: 700;">OmniCache AI Proxy <span class="badge">v1.0.0 ACTIVE</span></h1>
+            <p style="font-size: 0.8rem; color: #94a3b8;">Zero-Latency Vector Semantic Caching & Upstream Cost Gateway</p>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="background: #1e293b; padding: 0.4rem 0.8rem; border-radius: 0.5rem; font-size: 0.75rem; color: #cbd5e1; font-family: monospace; border: 1px solid #334155;">
+          🟢 Gateway: <strong>http://localhost:8000</strong>
+        </div>
+        <button onclick="refreshData()" class="btn" style="background: #334155;">🔄 Refresh</button>
+      </div>
+    </div>
+
+    <!-- Top KPI Grid -->
+    <div class="grid-kpi">
+      <div class="card" style="box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.2);">
+        <div class="kpi-title">Total Cost Saved</div>
+        <div class="kpi-value text-emerald" id="stat-savings">$0.0000</div>
+        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">📈 100% saved on cache hits</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-title">Cache Hit Rate</div>
+        <div class="kpi-value text-cyan" id="stat-hitrate">0.0%</div>
+        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;"><span id="stat-total-hits">0</span> hits / <span id="stat-total-reqs">0</span> reqs</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-title">Hot Cache Latency</div>
+        <div class="kpi-value text-purple">&lt; 0.8 ms</div>
+        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">⚡ In-memory vector lookup</div>
+      </div>
+
+      <div class="card">
+        <div class="kpi-title">Active Vector Entries</div>
+        <div class="kpi-value text-amber" id="stat-entries">0</div>
+        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.5rem;">L1: <span id="stat-l1">0</span> | L2: <span id="stat-l2">0</span> (LRU)</div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid-main">
+      
+      <!-- Left Column: Traffic Distribution -->
+      <div class="card">
+        <h2 style="font-size: 0.875rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 1rem;">📊 Traffic Distribution</h2>
+        
+        <div style="margin-bottom: 0.75rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; font-weight: 600;">
+            <span class="text-emerald">L1 Exact Hits</span>
+            <span id="dist-l1" style="color: #f8fafc;">0</span>
+          </div>
+          <div class="progress-track"><div id="bar-l1" class="progress-bar" style="background: #10b981; width: 0%;"></div></div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; font-weight: 600;">
+            <span class="text-cyan">L2 Semantic Hits</span>
+            <span id="dist-l2" style="color: #f8fafc;">0</span>
+          </div>
+          <div class="progress-track"><div id="bar-l2" class="progress-bar" style="background: #06b6d4; width: 0%;"></div></div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; font-weight: 600;">
+            <span class="text-rose">Cache Misses</span>
+            <span id="dist-miss" style="color: #f8fafc;">0</span>
+          </div>
+          <div class="progress-track"><div id="bar-miss" class="progress-bar" style="background: #f43f5e; width: 0%;"></div></div>
+        </div>
+
+        <div style="margin-bottom: 0.75rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; font-weight: 600;">
+            <span class="text-amber">Intent Bypasses (Temp &ge; 0.7)</span>
+            <span id="dist-bypass" style="color: #f8fafc;">0</span>
+          </div>
+          <div class="progress-track"><div id="bar-bypass" class="progress-bar" style="background: #fbbf24; width: 0%;"></div></div>
+        </div>
+
+        <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #1e293b; font-size: 0.75rem; color: #94a3b8;">
+          <div>Prompt Tokens Saved: <strong id="stat-prompt-tok" style="color: #f8fafc; font-family: monospace;">0</strong></div>
+          <div style="margin-top: 0.25rem;">Completion Tokens Saved: <strong id="stat-comp-tok" style="color: #f8fafc; font-family: monospace;">0</strong></div>
+        </div>
+      </div>
+
+      <!-- Right Column: Cache Operations & Drop-in snippet -->
+      <div class="card" style="display: flex; flex-direction: column; gap: 1rem;">
+        <h2 style="font-size: 0.875rem; font-weight: 700; text-transform: uppercase; color: #94a3b8;">🛠️ Cache Governance & Operations</h2>
+
+        <!-- Action Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <!-- Invalidate Tag -->
+          <div style="background: #0f172a; padding: 1rem; border-radius: 0.75rem; border: 1px solid #1e293b;">
+            <div style="font-size: 0.8rem; font-weight: 600;">Invalidate by Tag</div>
+            <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 0.5rem;">Purge domain tags (e.g. <code>docs-v2</code>)</div>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="tag-input" placeholder="Tag name" class="input-box">
+              <button onclick="invalidateTag()" class="btn btn-cyan">Invalidate</button>
+            </div>
+          </div>
+
+          <!-- Purge Tenant -->
+          <div style="background: #0f172a; padding: 1rem; border-radius: 0.75rem; border: 1px solid #1e293b;">
+            <div style="font-size: 0.8rem; font-weight: 600;">Purge Tenant Cache</div>
+            <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 0.5rem;">Wipe memory for an organization</div>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="org-input" placeholder="Tenant ID" value="default" class="input-box">
+              <button onclick="purgeTenant()" class="btn btn-red">Purge</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="action-banner" style="display: none; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.8rem; font-family: monospace;"></div>
+
+        <!-- Drop-in Code Snippet -->
+        <div style="background: #0f172a; padding: 1rem; border-radius: 0.75rem; border: 1px solid #1e293b;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-size: 0.8rem; font-weight: 600;">Python SDK Drop-in Snippet</span>
+            <span style="font-size: 0.7rem; color: #64748b;">Zero Code Changes</span>
+          </div>
+          <pre><code>from openai import OpenAI
+
+# Simply route baseURL to OmniCache Proxy
+client = OpenAI(
+    api_key="your-api-key",
+    base_url="http://localhost:8000/v1"
+)
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "How do I optimize SQL queries?"}]
+)</code></pre>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    async function refreshData() {
+      try {
+        const res = await fetch('/v1/cache/stats');
+        const data = await res.json();
+
+        const exact = data.exact_hits || 0;
+        const semantic = data.semantic_hits || 0;
+        const misses = data.misses || 0;
+        const bypasses = data.bypasses || 0;
+        const total = data.total_requests || 0;
+        const totalHits = exact + semantic;
+
+        document.getElementById('stat-savings').textContent = `$${(data.financial_metrics?.total_savings_usd || 0).toFixed(4)}`;
+        document.getElementById('stat-hitrate').textContent = `${data.hit_rate_percentage || 0}%`;
+        document.getElementById('stat-total-hits').textContent = totalHits;
+        document.getElementById('stat-total-reqs').textContent = total;
+        document.getElementById('stat-entries').textContent = (data.active_l1_exact_entries || 0) + (data.active_l2_semantic_entries || 0);
+        document.getElementById('stat-l1').textContent = data.active_l1_exact_entries || 0;
+        document.getElementById('stat-l2').textContent = data.active_l2_semantic_entries || 0;
+
+        document.getElementById('dist-l1').textContent = exact;
+        document.getElementById('dist-l2').textContent = semantic;
+        document.getElementById('dist-miss').textContent = misses;
+        document.getElementById('dist-bypass').textContent = bypasses;
+
+        const maxVal = Math.max(1, total);
+        document.getElementById('bar-l1').style.width = `${(exact / maxVal) * 100}%`;
+        document.getElementById('bar-l2').style.width = `${(semantic / maxVal) * 100}%`;
+        document.getElementById('bar-miss').style.width = `${(misses / maxVal) * 100}%`;
+        document.getElementById('bar-bypass').style.width = `${(bypasses / maxVal) * 100}%`;
+
+        document.getElementById('stat-prompt-tok').textContent = (data.financial_metrics?.total_cached_prompt_tokens || 0).toLocaleString();
+        document.getElementById('stat-comp-tok').textContent = (data.financial_metrics?.total_cached_completion_tokens || 0).toLocaleString();
+      } catch (err) {
+        console.error("Failed to fetch stats:", err);
+      }
+    }
+
+    async function invalidateTag() {
+      const tag = document.getElementById('tag-input').value.trim();
+      if (!tag) return;
+      try {
+        const res = await fetch('/v1/cache/invalidate-tag', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({tag: tag})
+        });
+        const data = await res.json();
+        showBanner(`Tag '${tag}' invalidated (${data.invalidated_entries} entries removed).`, '#06b6d4');
+        refreshData();
+      } catch (e) {
+        showBanner(`Error: ${e.message}`, '#f43f5e');
+      }
+    }
+
+    async function purgeTenant() {
+      const org = document.getElementById('org-input').value.trim() || 'default';
+      try {
+        const res = await fetch('/v1/cache/purge', {
+          method: 'POST',
+          headers: {'x-org-id': org}
+        });
+        const data = await res.json();
+        showBanner(`Cache purged for tenant '${org}' (${data.purged_entries} entries removed).`, '#f43f5e');
+        refreshData();
+      } catch (e) {
+        showBanner(`Error: ${e.message}`, '#f43f5e');
+      }
+    }
+
+    function showBanner(text, color) {
+      const banner = document.getElementById('action-banner');
+      banner.style.display = 'block';
+      banner.style.background = 'rgba(15, 23, 42, 0.9)';
+      banner.style.border = `1px solid ${color}`;
+      banner.style.color = color;
+      banner.textContent = text;
+      setTimeout(() => banner.style.display = 'none', 5000);
+    }
+
+    refreshData();
+    setInterval(refreshData, 3000);
+  </script>
+</body>
+</html>

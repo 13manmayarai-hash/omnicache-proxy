@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnicache-proxy"
+version = "1.0.0"
+description = "Zero-latency semantic caching and cost gateway for LLMs."
+readme = "README.md"
+authors = [{ name = "OmniCache Team", email = "hello@omnicache.dev" }]
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "starlette>=0.30.0",
+    "uvicorn>=0.20.0",
+    "httpx>=0.24.0"
+]
+
+[project.scripts]
+omnicache = "main:start"
+omnicache-mcp = "mcp.server:run_stdio_server"

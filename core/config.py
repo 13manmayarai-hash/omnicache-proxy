@@ -1,0 +1,62 @@
+"""
+Configuration and pricing registry for OmniCache AI Proxy.
+"""
+
+import os
+from typing import Dict, Any
+
+# Provider Pricing Table (USD per 1,000,000 tokens)
+# Updated to reflect 2025/2026 current provider pricing
+MODEL_PRICING: Dict[str, Dict[str, float]] = {
+    # OpenAI Models
+    "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached_input": 0.075},
+    "o1": {"input": 15.00, "output": 60.00, "cached_input": 7.50},
+    "o3-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
+    "gpt-4-turbo": {"input": 10.00, "output": 30.00, "cached_input": 5.00},
+    "gpt-3.5-turbo": {"input": 0.50, "output": 1.50, "cached_input": 0.25},
+    
+    # Anthropic Models
+    "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00, "cached_input": 0.30},
+    "claude-3-5-haiku-20241022": {"input": 0.80, "output": 4.00, "cached_input": 0.08},
+    "claude-3-7-sonnet": {"input": 3.00, "output": 15.00, "cached_input": 0.30},
+    
+    # Google Gemini Models
+    "gemini-2.5-flash": {"input": 0.10, "output": 0.40, "cached_input": 0.025},
+    "gemini-1.5-pro": {"input": 1.25, "output": 5.00, "cached_input": 0.3125},
+    "gemini-1.5-flash": {"input": 0.075, "output": 0.30, "cached_input": 0.01875},
+    
+    # Default fallback
+    "default": {"input": 2.00, "output": 8.00, "cached_input": 1.00},
+}
+
+class ProxyConfig:
+    PORT: int = int(os.getenv("OMNICACHE_PORT", "8000"))
+    HOST: str = os.getenv("OMNICACHE_HOST", "0.0.0.0")
+    
+    # Default Upstream Provider endpoints
+    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    ANTHROPIC_BASE_URL: str = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1")
+    GEMINI_BASE_URL: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+    
+    # Cache Configuration
+    DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.92"))
+    EXACT_CACHE_TTL_SECONDS: int = int(os.getenv("EXACT_CACHE_TTL", "604800"))  # 7 days
+    SEMANTIC_CACHE_TTL_SECONDS: int = int(os.getenv("SEMANTIC_CACHE_TTL", "604800"))  # 7 days
+    MAX_CACHE_ENTRIES_PER_TENANT: int = int(os.getenv("MAX_CACHE_ENTRIES", "10000"))
+    
+    # Temperature threshold above which semantic cache is bypassed
+    TEMPERATURE_BYPASS_THRESHOLD: float = 0.7
+    
+    # Token Jitter Stream Velocity (tokens per second for cached stream playback)
+    STREAM_REPLAY_TOKENS_PER_SEC: float = 65.0
+    
+    # SingleFlight lock timeout in seconds
+    SINGLEFLIGHT_TIMEOUT_SECONDS: float = 30.0
+    
+    # Upstream Connection Pool settings
+    HTTP_POOL_MAX_CONNECTIONS: int = 100
+    HTTP_POOL_MAX_KEEPALIVE: int = 20
+    HTTP_TIMEOUT_SECONDS: float = 60.0
+
+config = ProxyConfig()

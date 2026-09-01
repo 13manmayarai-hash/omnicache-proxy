@@ -1,0 +1,257 @@
+"""
+OmniCache Model Context Protocol (MCP) Server.
+Standard JSON-RPC 2.0 stdio server providing semantic caching, vector search,
+knowledge storage, and cost telemetry tools to AI assistants and IDEs.
+"""
+
+import sys
+import os
+import json
+import time
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from core.embeddings import FastSemanticEmbedder
+from core.vector_cache import cache_instance
+from persistence.snapshot_store import snapshot_store
+from server.upstream import upstream_client
+
+# Restore persistent entries into cache
+snapshot_store.load_into_cache(cache_instance)
+
+TOOLS_METADATA = [
+    {
+        "name": "omnicache_query",
+        "description": "Performs an intent-gated semantic cache lookup for a prompt. Returns cached answer if similarity exceeds threshold (<1ms latency), saving 100% LLM tokens and API cost.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "The user prompt or query to look up in cache."},
+                "model": {"type": "string", "description": "Target model (default: gpt-4o).", "default": "gpt-4o"},
+                "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"},
+                "threshold": {"type": "number", "description": "Optional minimum cosine similarity (0.0 - 1.0)."}
+            },
+            "required": ["prompt"]
+        }
+    },
+    {
+        "name": "omnicache_store",
+        "description": "Explicitly stores a high-value answer, documentation snippet, or code solution into the OmniCache vector memory for future instant retrieval.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string", "description": "The prompt or question associated with this answer."},
+                "answer": {"type": "string", "description": "The generated answer, code, or explanation to cache."},
+                "model": {"type": "string", "description": "Model associated with answer (default: gpt-4o).", "default": "gpt-4o"},
+                "tag": {"type": "string", "description": "Optional domain tag (e.g. 'docs-v1', 'sql-tips')."},
+                "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"}
+            },
+            "required": ["prompt", "answer"]
+        }
+    },
+    {
+        "name": "omnicache_search",
+        "description": "Performs sub-millisecond semantic similarity vector search across all cached prompts and solutions.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search term or concept."},
+                "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"},
+                "top_k": {"type": "integer", "description": "Number of top results to return (default: 5).", "default": 5}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "omnicache_invalidate",
+        "description": "Purges or invalidates cached knowledge by tag, tenant ID, or pattern.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tag": {"type": "string", "description": "Tag to invalidate (e.g. 'docs-v1')."},
+                "org_id": {"type": "string", "description": "Tenant ID to purge completely."}
+            }
+        }
+    },
+    {
+        "name": "omnicache_stats",
+        "description": "Returns real-time telemetry: cache hit ratios, total requests, and total dollars saved in LLM costs.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "org_id": {"type": "string", "description": "Optional tenant ID filter."}
+            }
+        }
+    }
+]
+
+def handle_tool_call(name: str, arguments: dict) -> dict:
+    org_id = arguments.get("org_id", "default")
+
+    if name == "omnicache_query":
+        prompt = arguments.get("prompt", "")
+        model = arguments.get("model", "gpt-4o")
+        threshold = arguments.get("threshold", None)
+
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0
+        }
+        status, entry, sim = cache_instance.lookup(payload, org_id=org_id, custom_threshold=threshold)
+
+        if entry and status in ("HIT_EXACT", "HIT_SEMANTIC"):
+            content = entry.response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "cache_status": status,
+                        "similarity_score": round(sim, 4),
+                        "cached_model": entry.model,
+                        "cached_response": content
+                    }, indent=2)
+                }]
+            }
+        else:
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "cache_status": "MISS",
+                        "best_similarity": round(sim, 4),
+                        "message": "No sufficiently close cached answer found."
+                    }, indent=2)
+                }]
+            }
+
+    elif name == "omnicache_store":
+        prompt = arguments.get("prompt", "")
+        answer = arguments.get("answer", "")
+        model = arguments.get("model", "gpt-4o")
+        tag = arguments.get("tag", None)
+
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0
+        }
+        res_payload = {
+            "id": f"chatcmpl-mcp-{int(time.time()*1000)}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{"message": {"role": "assistant", "content": answer}}],
+            "usage": {"prompt_tokens": len(prompt.split()), "completion_tokens": len(answer.split())}
+        }
+        entry = cache_instance.store(payload, res_payload, org_id=org_id, tag=tag)
+        snapshot_store.persist_entry(entry)
+
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"Successfully stored entry into OmniCache (Key: {entry.key[:12]}..., Tag: {tag}, Org: {org_id})."
+            }]
+        }
+
+    elif name == "omnicache_search":
+        query = arguments.get("query", "")
+        top_k = arguments.get("top_k", 5)
+        entries = cache_instance.l2_semantic_cache.get(org_id, [])
+        query_vec = FastSemanticEmbedder.embed(query)
+
+        scored = []
+        for e in entries:
+            sim = FastSemanticEmbedder.cosine_similarity(query_vec, e.vector)
+            scored.append({
+                "user_prompt": e.user_prompt,
+                "similarity": round(sim, 4),
+                "model": e.model,
+                "tag": e.tag,
+                "response_snippet": e.response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")[:200]
+            })
+
+        scored.sort(key=lambda x: x["similarity"], reverse=True)
+        return {
+            "content": [{"type": "text", "text": json.dumps(scored[:top_k], indent=2)}]
+        }
+
+    elif name == "omnicache_invalidate":
+        tag = arguments.get("tag")
+        if tag:
+            removed = cache_instance.invalidate_tag(tag, org_id=arguments.get("org_id"))
+            snapshot_store.remove_by_tag(tag, org_id=arguments.get("org_id"))
+            return {"content": [{"type": "text", "text": f"Invalidated {removed} entries with tag '{tag}'."}]}
+        elif arguments.get("org_id"):
+            removed = cache_instance.purge_tenant(arguments["org_id"])
+            snapshot_store.remove_by_org(arguments["org_id"])
+            return {"content": [{"type": "text", "text": f"Purged {removed} entries for tenant '{arguments['org_id']}'."}]}
+        return {"content": [{"type": "text", "text": "Specify either 'tag' or 'org_id' to invalidate."}]}
+
+    elif name == "omnicache_stats":
+        stats = cache_instance.get_stats(arguments.get("org_id"))
+        return {"content": [{"type": "text", "text": json.dumps(stats, indent=2)}]}
+
+    return {"error": {"code": -32601, "message": f"Unknown tool: {name}"}}
+
+def run_stdio_server():
+    """Main JSON-RPC stdio event loop."""
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        try:
+            req = json.loads(line)
+        except Exception:
+            continue
+
+        req_id = req.get("id")
+        method = req.get("method")
+        params = req.get("params", {})
+
+        if method == "initialize":
+            res = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "protocolVersion": "2024-11-05",
+                    "serverInfo": {
+                        "name": "omnicache-mcp",
+                        "version": "1.0.0"
+                    },
+                    "capabilities": {
+                        "tools": {"listChanged": False},
+                        "resources": {"listChanged": False}
+                    }
+                }
+            }
+        elif method == "notifications/initialized":
+            continue
+        elif method == "tools/list":
+            res = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"tools": TOOLS_METADATA}
+            }
+        elif method == "tools/call":
+            tool_name = params.get("name")
+            tool_args = params.get("arguments", {})
+            tool_res = handle_tool_call(tool_name, tool_args)
+            res = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": tool_res
+            }
+        elif method == "ping":
+            res = {"jsonrpc": "2.0", "id": req_id, "result": {}}
+        else:
+            res = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32601, "message": f"Method not found: {method}"}
+            }
+
+        sys.stdout.write(json.dumps(res) + "\n")
+        sys.stdout.flush()
+
+if __name__ == "__main__":
+    run_stdio_server()

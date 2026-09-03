@@ -372,7 +372,11 @@ async def handle_anthropic_messages(request: Request) -> Response:
         return JSONResponse(rehydrated, headers=resp_headers)
 
     # Cache MISS -> Forward to Live Anthropic API
-    auth_key = request.headers.get("x-api-key") or request.headers.get("authorization") or config.ANTHROPIC_API_KEY
+    auth_header = request.headers.get("x-api-key") or request.headers.get("authorization")
+    if auth_header and auth_header.strip() not in ("default", ""):
+        auth_key = auth_header
+    else:
+        auth_key = config.ANTHROPIC_API_KEY
     
     if auth_key:
         status_code, anthropic_res, upstream_resp_headers = await upstream_client.forward_anthropic_messages(anthropic_payload, api_key_header=auth_key)

@@ -102,7 +102,7 @@ class DualTierCache:
         """
         messages = payload.get("messages", [])
         system_prompt, user_prompt, is_multimodal = RequestHasher.extract_system_and_user_prompts(messages)
-        temperature = float(payload.get("temperature", 1.0))
+        temperature = float(payload.get("temperature", 0.0))
         response_format = payload.get("response_format", None)
         tools = payload.get("tools", None)
         schema_hash = RequestHasher.compute_schema_hash(response_format)

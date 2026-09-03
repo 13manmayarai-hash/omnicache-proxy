@@ -1,6 +1,6 @@
 """
 Upstream Provider Client with HTTP/2 Connection Pooling and Failover.
-Full Pass-Through Header Preservation for Claude Pro OAuth and Anthropic API Keys.
+Full Pass-Through Header & Query Parameter Preservation.
 """
 
 import httpx
@@ -104,13 +104,11 @@ class UpstreamClient:
                 headers["x-api-key"] = config.ANTHROPIC_API_KEY
             return headers
 
-        # Preserve all Anthropic & Auth headers from client with 100% fidelity
         for k, v in incoming_headers.items():
             k_lower = k.lower()
             if k_lower in ("authorization", "x-api-key", "cookie", "anthropic-version", "anthropic-beta", "user-agent", "x-anthropic-client"):
                 headers[k_lower] = v
 
-        # Fallback to configured key if no auth header passed
         if "x-api-key" not in headers and "authorization" not in headers:
             if config.ANTHROPIC_API_KEY:
                 headers["x-api-key"] = config.ANTHROPIC_API_KEY
@@ -120,7 +118,8 @@ class UpstreamClient:
     async def forward_anthropic_messages(
         self,
         payload: Dict[str, Any],
-        incoming_headers: Optional[Dict[str, str]] = None
+        incoming_headers: Optional[Dict[str, str]] = None,
+        params: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         client = self.get_client()
         url = "https://api.anthropic.com/v1/messages"
@@ -130,7 +129,7 @@ class UpstreamClient:
         if "max_tokens" not in clean_payload:
             clean_payload["max_tokens"] = 1024
 
-        response = await client.post(url, json=clean_payload, headers=headers)
+        response = await client.post(url, json=clean_payload, headers=headers, params=params)
         try:
             res_data = response.json()
         except Exception:
@@ -141,7 +140,8 @@ class UpstreamClient:
     async def forward_anthropic_stream(
         self,
         payload: Dict[str, Any],
-        incoming_headers: Optional[Dict[str, str]] = None
+        incoming_headers: Optional[Dict[str, str]] = None,
+        params: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any]]:
         client = self.get_client()
         url = "https://api.anthropic.com/v1/messages"
@@ -152,7 +152,7 @@ class UpstreamClient:
         if "max_tokens" not in clean_payload:
             clean_payload["max_tokens"] = 1024
 
-        req = client.build_request("POST", url, json=clean_payload, headers=headers)
+        req = client.build_request("POST", url, json=clean_payload, headers=headers, params=params)
         response = await client.send(req, stream=True)
 
         if response.status_code != 200:

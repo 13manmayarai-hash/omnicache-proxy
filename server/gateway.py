@@ -314,8 +314,13 @@ async def handle_anthropic_messages(request: Request) -> Response:
             return JSONResponse(rehydrated, headers=resp_headers)
 
     # 2. Anthropic Cache MISS -> Forward Upstream
+    req_params = dict(request.query_params) if request.query_params else None
     if is_stream:
-        status_code, stream_resp, err_data = await upstream_client.forward_anthropic_stream(anthropic_payload, incoming_headers=dict(request.headers))
+        status_code, stream_resp, err_data = await upstream_client.forward_anthropic_stream(
+            anthropic_payload,
+            incoming_headers=dict(request.headers),
+            params=req_params
+        )
         if status_code != 200 or stream_resp is None:
             return JSONResponse(err_data or {"error": "Upstream error"}, status_code=status_code)
 
@@ -360,7 +365,11 @@ async def handle_anthropic_messages(request: Request) -> Response:
         })
 
     # Non-streaming forward
-    status_code, anthropic_res, _ = await upstream_client.forward_anthropic_messages(anthropic_payload, incoming_headers=dict(request.headers))
+    status_code, anthropic_res, _ = await upstream_client.forward_anthropic_messages(
+        anthropic_payload,
+        incoming_headers=dict(request.headers),
+        params=req_params
+    )
     latency_ms = (time.perf_counter() - start_time) * 1000
     if status_code == 200:
         usage = anthropic_res.get("usage", {})

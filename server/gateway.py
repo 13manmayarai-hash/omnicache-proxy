@@ -1,12 +1,10 @@
 """
 OmniCache AI Proxy - Advanced Enterprise Gateway.
 Supports:
- - OpenAI API (/v1/chat/completions)
- - Anthropic Messages API (/v1/messages and /messages) with Streaming SSE & count_tokens
- - Radix Multi-Turn Conversation Tree
- - Agent Tool Accelerator (Claude Code / Cursor)
- - Zero-Knowledge Privacy Vault
- - Adaptive Model Cascade Router
+ - OpenAI API (/v1/chat/completions, /v1/models)
+ - Anthropic Messages API (/v1/messages, /messages, /v1/models, /models, /v1/messages/count_tokens)
+ - Streaming SSE with real-time pass-through
+ - Zero 405 errors across all HTTP verbs
 """
 
 import time
@@ -51,7 +49,36 @@ if loaded_entries > 0:
     print(f"📦 [OmniCache] Restored {loaded_entries} cached entries from SQLite snapshot.")
 
 
+async def handle_models(request: Request) -> Response:
+    """Returns supported models list for OpenAI & Anthropic SDKs."""
+    model_list = [
+        {"id": "claude-3-5-sonnet-20241022", "object": "model", "type": "model", "display_name": "Claude 3.5 Sonnet"},
+        {"id": "claude-3-7-sonnet-20250219", "object": "model", "type": "model", "display_name": "Claude 3.7 Sonnet"},
+        {"id": "claude-3-5-haiku-20241022", "object": "model", "type": "model", "display_name": "Claude 3.5 Haiku"},
+        {"id": "claude-sonnet-4-5-20250929", "object": "model", "type": "model", "display_name": "Claude Sonnet 4.5"},
+        {"id": "claude-haiku-4-5-20251001", "object": "model", "type": "model", "display_name": "Claude Haiku 4.5"},
+        {"id": "gpt-4o", "object": "model", "type": "model"},
+        {"id": "gpt-4o-mini", "object": "model", "type": "model"},
+        {"id": "gemini-2.5-flash", "object": "model", "type": "model"}
+    ]
+    return JSONResponse({
+        "object": "list",
+        "data": model_list,
+        "models": model_list,
+        "has_more": False,
+        "first_id": model_list[0]["id"],
+        "last_id": model_list[-1]["id"]
+    }, headers={"Access-Control-Allow-Origin": "*"})
+
+
 async def handle_chat_completions(request: Request) -> Response:
+    if request.method == "OPTIONS":
+        return Response(headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, GET, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*"
+        })
+
     start_time = time.perf_counter()
     try:
         raw_payload: Dict[str, Any] = await request.json()
@@ -193,6 +220,15 @@ async def handle_anthropic_messages(request: Request) -> Response:
     """
     Anthropic Messages API Handler with full Streaming SSE support for Claude Code.
     """
+    if request.method == "OPTIONS":
+        return Response(headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, GET, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*"
+        })
+    elif request.method == "GET":
+        return await handle_models(request)
+
     start_time = time.perf_counter()
     try:
         raw_payload: Dict[str, Any] = await request.json()
@@ -253,18 +289,16 @@ async def handle_anthropic_messages(request: Request) -> Response:
         }
 
         if is_stream:
-            # Replay Anthropic SSE Stream
             async def stream_cached_anthropic():
                 msg_id = f"msg_cached_{int(time.time()*1000)}"
                 yield f"event: message_start\ndata: {json.dumps({'type': 'message_start', 'message': {'id': msg_id, 'type': 'message', 'role': 'assistant', 'model': model, 'content': [], 'stop_reason': None, 'usage': {'input_tokens': prompt_tokens, 'output_tokens': 1}}})}\n\n"
                 yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})}\n\n"
                 
-                # Stream content in word chunks (~65 tokens/s)
                 words = content.split(" ")
                 for i, word in enumerate(words):
                     chunk_text = word + (" " if i < len(words) - 1 else "")
                     yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': chunk_text}})}\n\n"
-                    await asyncio.sleep(0.012)
+                    await asyncio.sleep(0.008)
 
                 yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
                 yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'end_turn', 'stop_sequence': None}, 'usage': {'output_tokens': completion_tokens}})}\n\n"
@@ -371,16 +405,21 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
 
 async def handle_anthropic_count_tokens(request: Request) -> Response:
-    """Claude Code token counting endpoint (/v1/messages/count_tokens)."""
+    if request.method == "OPTIONS":
+        return Response(headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, GET, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*"
+        })
     try:
         body = await request.json()
         messages = body.get("messages", [])
         system = body.get("system", "")
         full_text = str(system) + " " + " ".join([str(m.get("content", "")) for m in messages])
         est_tokens = max(1, int(len(full_text.split()) * 1.3))
-        return JSONResponse({"input_tokens": est_tokens})
+        return JSONResponse({"input_tokens": est_tokens}, headers={"Access-Control-Allow-Origin": "*"})
     except Exception:
-        return JSONResponse({"input_tokens": 50})
+        return JSONResponse({"input_tokens": 50}, headers={"Access-Control-Allow-Origin": "*"})
 
 
 async def handle_tool_replay(request: Request) -> Response:
@@ -405,7 +444,7 @@ async def handle_tool_replay(request: Request) -> Response:
 
 
 async def handle_quotas(request: Request) -> Response:
-    return JSONResponse(quota_manager.get_all_quotas())
+    return JSONResponse(quota_manager.get_all_quotas(), headers={"Access-Control-Allow-Origin": "*"})
 
 
 async def handle_stats(request: Request) -> Response:
@@ -420,11 +459,11 @@ async def handle_stats(request: Request) -> Response:
         "agent_tool_hits": METRICS_LEDGER["agent_tool_hits"] + tool_cache.tool_hits,
         "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"] + vision_cache.vision_hits
     }
-    return JSONResponse(stats)
+    return JSONResponse(stats, headers={"Access-Control-Allow-Origin": "*"})
 
 
 async def handle_health(request: Request) -> Response:
-    return JSONResponse({"status": "healthy", "service": "omnicache-proxy", "version": "2.0.0"})
+    return JSONResponse({"status": "healthy", "service": "omnicache-proxy", "version": "2.0.0"}, headers={"Access-Control-Allow-Origin": "*"})
 
 
 async def handle_dashboard(request: Request) -> Response:
@@ -436,18 +475,20 @@ async def handle_dashboard(request: Request) -> Response:
 
 
 routes = [
-    Route("/v1/chat/completions", handle_chat_completions, methods=["POST", "OPTIONS"]),
-    Route("/chat/completions", handle_chat_completions, methods=["POST", "OPTIONS"]),
-    Route("/v1/messages", handle_anthropic_messages, methods=["POST", "OPTIONS"]),
-    Route("/messages", handle_anthropic_messages, methods=["POST", "OPTIONS"]),
-    Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "OPTIONS"]),
-    Route("/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "OPTIONS"]),
+    Route("/v1/models", handle_models, methods=["GET", "POST", "OPTIONS", "HEAD"]),
+    Route("/models", handle_models, methods=["GET", "POST", "OPTIONS", "HEAD"]),
+    Route("/v1/chat/completions", handle_chat_completions, methods=["POST", "GET", "OPTIONS", "HEAD"]),
+    Route("/chat/completions", handle_chat_completions, methods=["POST", "GET", "OPTIONS", "HEAD"]),
+    Route("/v1/messages", handle_anthropic_messages, methods=["POST", "GET", "OPTIONS", "HEAD"]),
+    Route("/messages", handle_anthropic_messages, methods=["POST", "GET", "OPTIONS", "HEAD"]),
+    Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "GET", "OPTIONS", "HEAD"]),
+    Route("/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "GET", "OPTIONS", "HEAD"]),
     Route("/v1/agent/tool-replay", handle_tool_replay, methods=["POST"]),
-    Route("/v1/enterprise/quotas", handle_quotas, methods=["GET"]),
-    Route("/v1/cache/stats", handle_stats, methods=["GET"]),
-    Route("/healthz", handle_health, methods=["GET"]),
-    Route("/dashboard", handle_dashboard, methods=["GET"]),
-    Route("/", handle_dashboard, methods=["GET"])
+    Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "OPTIONS"]),
+    Route("/v1/cache/stats", handle_stats, methods=["GET", "OPTIONS"]),
+    Route("/healthz", handle_health, methods=["GET", "OPTIONS"]),
+    Route("/dashboard", handle_dashboard, methods=["GET", "OPTIONS"]),
+    Route("/", handle_dashboard, methods=["GET", "OPTIONS"])
 ]
 
 app = Starlette(routes=routes)

@@ -1,5 +1,5 @@
 """
-Standard-Compliant Direct PyPI Uploader for OmniCache with Retry Logic.
+Standard-Compliant Direct PyPI Uploader with Full UTF-8 Unicode Support.
 """
 
 import sys
@@ -43,6 +43,13 @@ def upload_package(api_token: str):
         print("❌ No distribution files found in dist/.")
         sys.exit(1)
 
+    # Read README directly with strict UTF-8
+    readme_path = "/root/omnicache_proxy/README.md"
+    readme_text = ""
+    if os.path.exists(readme_path):
+        with open(readme_path, "r", encoding="utf-8") as f:
+            readme_text = f.read()
+
     print(f"📦 Found {len(dist_files)} distribution files to upload:")
     for f in dist_files:
         print(f"  - {os.path.basename(f)} ({os.path.getsize(f)} bytes)")
@@ -62,12 +69,13 @@ def upload_package(api_token: str):
             print(f"❌ Failed to extract metadata from {filename}")
             continue
 
+        pkg_version = msg.get("Version")
         form_data = {
             ":action": "file_upload",
             "protocol_version": "1",
             "metadata_version": msg.get("Metadata-Version", "2.1"),
             "name": msg.get("Name", "omnicache-proxy"),
-            "version": msg.get("Version", "2.0.2"),
+            "version": pkg_version,
             "filetype": "bdist_wheel" if is_wheel else "sdist",
             "md5_digest": md5,
             "sha256_digest": sha256,
@@ -76,8 +84,8 @@ def upload_package(api_token: str):
             "author": msg.get("Author", ""),
             "author_email": msg.get("Author-email", ""),
             "license": msg.get("License", "MIT"),
-            "description": msg.get_payload(),
-            "description_content_type": msg.get("Description-Content-Type", "text/markdown"),
+            "description": readme_text if readme_text else msg.get_payload(),
+            "description_content_type": "text/markdown; charset=UTF-8",
             "requires_python": msg.get("Requires-Python", ">=3.9")
         }
 
@@ -92,8 +100,7 @@ def upload_package(api_token: str):
             "content": (filename, file_bytes, "application/octet-stream")
         }
 
-        print(f"\n🚀 Uploading {filename} to PyPI...")
-        uploaded = False
+        print(f"\n🚀 Uploading {filename} (v{pkg_version}) to PyPI...")
         for attempt in range(1, 4):
             try:
                 response = client.post(
@@ -105,11 +112,9 @@ def upload_package(api_token: str):
                 )
                 if response.status_code == 200:
                     print("✅ [SUCCESS 200 OK]")
-                    uploaded = True
                     break
                 elif "already exists" in response.text.lower():
                     print("ℹ️ [ALREADY UPLOADED - 200 OK]")
-                    uploaded = True
                     break
                 else:
                     print(f"❌ [STATUS {response.status_code}]: {response.text}")

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.0.0"
+version = "2.0.1"
 description = "Zero-latency semantic caching and cost optimization proxy for LLMs."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.scripts]
-omnicache = "main:main"
+omnicache = "server.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["core*", "server*", "persistence*", "mcp*"]

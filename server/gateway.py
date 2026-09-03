@@ -371,7 +371,48 @@ async def handle_anthropic_messages(request: Request) -> Response:
         rehydrated = privacy_shield.rehydrate_response(anthropic_response, pii_token_map)
         return JSONResponse(rehydrated, headers=resp_headers)
 
-    # Initial Mock/Cache for Claude Code
+    # Cache MISS -> Forward to Live Anthropic API
+    auth_key = request.headers.get("x-api-key") or request.headers.get("authorization") or config.ANTHROPIC_API_KEY
+    
+    if auth_key:
+        status_code, anthropic_res, upstream_resp_headers = await upstream_client.forward_anthropic_messages(anthropic_payload, api_key_header=auth_key)
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        
+        if status_code == 200:
+            usage = anthropic_res.get("usage", {})
+            p_tok = usage.get("input_tokens", 35)
+            c_tok = usage.get("output_tokens", 65)
+            tokens_used = p_tok + c_tok
+            METRICS_LEDGER["total_tokens_used"] += tokens_used
+
+            # Extract text content for caching
+            content_blocks = anthropic_res.get("content", [])
+            full_text_blocks = [b.get("text", "") for b in content_blocks if isinstance(b, dict) and b.get("type") == "text"]
+            full_content = "\n".join(full_text_blocks)
+
+            # Store in vector cache & SQLite snapshot
+            cacheable_res_payload = {
+                "id": anthropic_res.get("id", f"msg_{int(time.time()*1000)}"),
+                "object": "chat.completion",
+                "choices": [{"message": {"role": "assistant", "content": full_content}}],
+                "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": tokens_used}
+            }
+            saved_entry = cache_instance.store(payload=normalized_payload, response_payload=cacheable_res_payload, org_id=org_id)
+            snapshot_store.persist_entry(saved_entry)
+            radix_tree.insert_conversation(messages, cacheable_res_payload)
+
+            rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
+            return JSONResponse(rehydrated, headers={
+                "X-Cache-Status": "MISS",
+                "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
+                "X-Tokens-Used": str(tokens_used),
+                "X-Tokens-Saved": "0",
+                "Access-Control-Allow-Origin": "*"
+            })
+        else:
+            return JSONResponse(anthropic_res, status_code=status_code)
+
+    # Fallback simulation if no API key
     latency_ms = (time.perf_counter() - start_time) * 1000
     user_prompt = messages[-1]["content"] if messages else "Hello"
     generated_text = f"```python\n# [OmniCache Claude Code Solution]\ndef solution():\n    # Processed query: {user_prompt}\n    return 'Optimized result'\n```"

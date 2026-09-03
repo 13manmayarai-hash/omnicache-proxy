@@ -5,8 +5,23 @@ Configuration and pricing registry for OmniCache AI Proxy.
 import os
 from typing import Dict, Any
 
+# Simple .env file loader
+def load_dotenv():
+    env_file = "/root/omnicache_proxy/.env"
+    if os.path.exists(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'").strip('"')
+                    if k not in os.environ:
+                        os.environ[k] = v
+
+load_dotenv()
+
 # Provider Pricing Table (USD per 1,000,000 tokens)
-# Updated to reflect 2025/2026 current provider pricing
 MODEL_PRICING: Dict[str, Dict[str, float]] = {
     # OpenAI Models
     "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
@@ -31,30 +46,29 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 }
 
 class ProxyConfig:
-    PORT: int = int(os.getenv("OMNICACHE_PORT", "8000"))
-    HOST: str = os.getenv("OMNICACHE_HOST", "0.0.0.0")
+    PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
+    HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "0.0.0.0"))
     
+    # Upstream API Keys
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+
     # Default Upstream Provider endpoints
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    ANTHROPIC_BASE_URL: str = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1")
+    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
     GEMINI_BASE_URL: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
     
     # Cache Configuration
     DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.92"))
-    EXACT_CACHE_TTL_SECONDS: int = int(os.getenv("EXACT_CACHE_TTL", "604800"))  # 7 days
-    SEMANTIC_CACHE_TTL_SECONDS: int = int(os.getenv("SEMANTIC_CACHE_TTL", "604800"))  # 7 days
+    EXACT_CACHE_TTL_SECONDS: int = int(os.getenv("EXACT_CACHE_TTL", "604800"))
+    SEMANTIC_CACHE_TTL_SECONDS: int = int(os.getenv("SEMANTIC_CACHE_TTL", "604800"))
     MAX_CACHE_ENTRIES_PER_TENANT: int = int(os.getenv("MAX_CACHE_ENTRIES", "10000"))
     
-    # Temperature threshold above which semantic cache is bypassed
-    TEMPERATURE_BYPASS_THRESHOLD: float = 0.7
-    
-    # Token Jitter Stream Velocity (tokens per second for cached stream playback)
+    TEMPERATURE_BYPASS_THRESHOLD: float = 0.85
     STREAM_REPLAY_TOKENS_PER_SEC: float = 65.0
-    
-    # SingleFlight lock timeout in seconds
     SINGLEFLIGHT_TIMEOUT_SECONDS: float = 30.0
     
-    # Upstream Connection Pool settings
     HTTP_POOL_MAX_CONNECTIONS: int = 100
     HTTP_POOL_MAX_KEEPALIVE: int = 20
     HTTP_TIMEOUT_SECONDS: float = 60.0

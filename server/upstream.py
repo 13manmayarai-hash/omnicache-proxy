@@ -32,7 +32,7 @@ class UpstreamClient:
         if "gemini" in model_lower:
             return f"{config.GEMINI_BASE_URL}/chat/completions"
         elif "claude" in model_lower:
-            return f"{config.OPENAI_BASE_URL}/chat/completions"  # or Anthropic translator
+            return f"{config.OPENAI_BASE_URL}/chat/completions"
         return f"{config.OPENAI_BASE_URL}/chat/completions"
 
     @classmethod
@@ -48,18 +48,15 @@ class UpstreamClient:
         payload: Dict[str, Any],
         auth_header: Optional[str] = None
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
-        """
-        Forwards a non-streaming chat completion request upstream.
-        """
         client = self.get_client()
         url = self.get_endpoint_for_model(payload.get("model", ""))
         headers = {"Content-Type": "application/json"}
         if auth_header:
             headers["Authorization"] = auth_header
+        elif config.OPENAI_API_KEY:
+            headers["Authorization"] = f"Bearer {config.OPENAI_API_KEY}"
 
-        # Strip internal fields
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
-        
         response = await client.post(url, json=clean_payload, headers=headers)
         try:
             res_data = response.json()
@@ -68,40 +65,37 @@ class UpstreamClient:
             
         return response.status_code, res_data, dict(response.headers)
 
-    async def forward_stream(
+    async def forward_anthropic_messages(
         self,
         payload: Dict[str, Any],
-        auth_header: Optional[str] = None
-    ) -> Tuple[int, AsyncGenerator[str, None], Dict[str, Any], List[Dict[str, Any]]]:
+        api_key_header: Optional[str] = None
+    ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         """
-        Forwards a streaming chat completion request upstream.
-        Yields SSE chunks to the client while recording full payload for caching.
+        Directly forwards an Anthropic Messages API payload to https://api.anthropic.com/v1/messages.
         """
         client = self.get_client()
-        url = self.get_endpoint_for_model(payload.get("model", ""))
-        headers = {"Content-Type": "application/json"}
-        if auth_header:
-            headers["Authorization"] = auth_header
+        url = "https://api.anthropic.com/v1/messages"
+        
+        api_key = api_key_header or config.ANTHROPIC_API_KEY
+        if api_key and api_key.startswith("Bearer "):
+            api_key = api_key.replace("Bearer ", "").strip()
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01"
+        }
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
-        clean_payload["stream"] = True
+        if "max_tokens" not in clean_payload:
+            clean_payload["max_tokens"] = 1024
 
-        req = client.build_request("POST", url, json=clean_payload, headers=headers)
-        response = await client.send(req, stream=True)
+        response = await client.post(url, json=clean_payload, headers=headers)
+        try:
+            res_data = response.json()
+        except Exception:
+            res_data = {"type": "error", "error": {"message": response.text, "type": "upstream_error"}}
 
-        if response.status_code != 200:
-            content = await response.aread()
-            try:
-                err_json = json.loads(content.decode("utf-8"))
-            except Exception:
-                err_json = {"error": {"message": content.decode("utf-8"), "code": response.status_code}}
-            await response.aclose()
-            return response.status_code, None, err_json, []
-
-        return response.status_code, response, None, []
-
-    async def close(self):
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
+        return response.status_code, res_data, dict(response.headers)
 
 upstream_client = UpstreamClient()

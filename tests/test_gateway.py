@@ -184,5 +184,19 @@ class TestOmniCacheGateway(unittest.TestCase):
         self.assertGreater(data["exact_hits"], 0)
         self.assertGreater(data["financial_metrics"]["total_savings_usd"], 0.0)
 
+    def test_08_prometheus_and_csv_export(self):
+        """Verify /metrics Prometheus scraper and /v1/cache/export CSV generation."""
+        # Test Prometheus Metrics
+        prom_resp = self.client.get("/metrics")
+        self.assertEqual(prom_resp.status_code, 200)
+        self.assertIn("omnicache_savings_usd", prom_resp.text)
+        self.assertIn("omnicache_tokens_saved_total", prom_resp.text)
+
+        # Test CSV Export
+        csv_resp = self.client.get("/v1/cache/export")
+        self.assertEqual(csv_resp.status_code, 200)
+        self.assertEqual(csv_resp.headers.get("content-type"), "text/csv; charset=utf-8")
+        self.assertIn("Key,Org_ID,Model,Tag", csv_resp.text)
+
 if __name__ == "__main__":
     unittest.main()

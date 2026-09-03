@@ -1,0 +1,41 @@
+name: OmniCache CI/CD & Multi-Platform Quality Matrix
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test Suite (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Dependencies & Package
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pytest
+          pip install -e .
+
+      - name: Run Full Pytest Regression Suite
+        run: |
+          pytest tests/ -v
+
+      - name: Run OmniCache CLI Micro-Benchmark & Doctor
+        run: |
+          omnicache doctor
+          omnicache benchmark

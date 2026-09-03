@@ -148,14 +148,20 @@ class SnapshotStore:
         finally:
             conn.close()
 
-    def delete_by_tag(self, tag: str, org_id: str) -> int:
+    def delete_by_tag(self, tag: str, org_id: Optional[str] = None) -> int:
         conn = sqlite3.connect(self.db_path)
         try:
             with conn:
-                cursor = conn.execute("DELETE FROM cache_records WHERE tag = ? AND org_id = ?", (tag, org_id))
+                if org_id:
+                    cursor = conn.execute("DELETE FROM cache_records WHERE tag = ? AND org_id = ?", (tag, org_id))
+                else:
+                    cursor = conn.execute("DELETE FROM cache_records WHERE tag = ?", (tag,))
                 return cursor.rowcount
         finally:
             conn.close()
+
+    def remove_by_tag(self, tag: str, org_id: Optional[str] = None) -> int:
+        return self.delete_by_tag(tag, org_id)
 
     def purge_all(self, org_id: Optional[str] = None) -> int:
         conn = sqlite3.connect(self.db_path)

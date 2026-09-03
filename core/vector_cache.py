@@ -239,6 +239,14 @@ class DualTierCache:
             
         return removed
 
+    def purge(self, org_id: Optional[str] = None) -> int:
+        """Purges cache entries for a tenant or globally."""
+        if org_id:
+            return self.purge_tenant(org_id)
+        removed = len(self.l1_exact_cache) + sum(len(v) for v in self.l2_semantic_cache.values())
+        self.clear()
+        return removed
+
     def invalidate_tag(self, tag: str, org_id: Optional[str] = None) -> int:
         """Invalidates all cache entries with a specific tag."""
         removed = 0

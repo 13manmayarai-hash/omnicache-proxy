@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.0.5"
-description = "Zero-latency semantic caching and cost optimization proxy for LLMs."
+version = "2.1.0"
+description = "Zero-latency semantic caching, micro-benchmarks, Prometheus FinOps, and cost optimization proxy for LLMs."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

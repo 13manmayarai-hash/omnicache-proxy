@@ -508,6 +508,76 @@ async def handle_dashboard(request: Request) -> Response:
     return HTMLResponse("<h1>OmniCache AI Proxy Active</h1><p>Visit /v1/cache/stats for metrics.</p>")
 
 
+async def handle_invalidate_tag(request: Request) -> Response:
+    org_id = request.headers.get("x-org-id", "default")
+    try:
+        body = await request.json()
+        tag = body.get("tag")
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    
+    if not tag:
+        return JSONResponse({"error": "Missing tag"}, status_code=400)
+    
+    count = cache_instance.invalidate_tag(tag, org_id=org_id)
+    snapshot_store.delete_by_tag(tag, org_id=org_id)
+    return JSONResponse({"status": "success", "invalidated_count": count}, headers={"Access-Control-Allow-Origin": "*"})
+
+
+async def handle_purge(request: Request) -> Response:
+    org_id = request.headers.get("x-org-id", None)
+    count = cache_instance.purge(org_id=org_id)
+    snapshot_store.purge_all(org_id=org_id)
+    return JSONResponse({"status": "success", "purged_count": count}, headers={"Access-Control-Allow-Origin": "*"})
+
+
+async def handle_prometheus_metrics(request: Request) -> Response:
+    stats = cache_instance.get_stats()
+    lines = [
+        "# HELP omnicache_savings_usd Total financial savings in USD",
+        "# TYPE omnicache_savings_usd counter",
+        f"omnicache_savings_usd {METRICS_LEDGER['total_savings_usd']:.6f}",
+        "# HELP omnicache_tokens_saved_total Total tokens saved by cache hits",
+        "# TYPE omnicache_tokens_saved_total counter",
+        f"omnicache_tokens_saved_total {METRICS_LEDGER['total_tokens_saved']}",
+        "# HELP omnicache_tokens_used_total Total tokens forwarded to upstream",
+        "# TYPE omnicache_tokens_used_total counter",
+        f"omnicache_tokens_used_total {METRICS_LEDGER['total_tokens_used']}",
+        "# HELP omnicache_exact_hits_total L1 exact cache hits",
+        "# TYPE omnicache_exact_hits_total counter",
+        f"omnicache_exact_hits_total {stats.get('exact_hits', 0)}",
+        "# HELP omnicache_semantic_hits_total L2 semantic cache hits",
+        "# TYPE omnicache_semantic_hits_total counter",
+        f"omnicache_semantic_hits_total {stats.get('semantic_hits', 0)}",
+        "# HELP omnicache_hit_rate_percentage Current cache hit rate percentage",
+        "# TYPE omnicache_hit_rate_percentage gauge",
+        f"omnicache_hit_rate_percentage {stats.get('hit_rate_percentage', 0.0)}"
+    ]
+    return Response("\n".join(lines) + "\n", media_type="text/plain; version=0.0.4", headers={"Access-Control-Allow-Origin": "*"})
+
+
+async def handle_export_csv(request: Request) -> Response:
+    import io
+    import csv
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Key", "Org_ID", "Model", "Tag", "User_Prompt_Snippet", "Hit_Count", "Created_At"])
+    
+    for key, entry in list(cache_instance.l1_exact_cache.items()):
+        snippet = (entry.user_prompt[:80] + "...") if len(entry.user_prompt) > 80 else entry.user_prompt
+        writer.writerow([key, entry.org_id, entry.model, entry.tag or "none", snippet, entry.hit_count, entry.created_at])
+        
+    csv_data = output.getvalue()
+    return Response(
+        csv_data,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=omnicache_export.csv",
+            "Access-Control-Allow-Origin": "*"
+        }
+    )
+
+
 routes = [
     Route("/v1/models", handle_models, methods=["GET", "POST", "OPTIONS", "HEAD"]),
     Route("/models", handle_models, methods=["GET", "POST", "OPTIONS", "HEAD"]),
@@ -517,9 +587,13 @@ routes = [
     Route("/messages", handle_anthropic_messages, methods=["POST", "GET", "OPTIONS", "HEAD"]),
     Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "GET", "OPTIONS", "HEAD"]),
     Route("/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "GET", "OPTIONS", "HEAD"]),
+    Route("/v1/cache/invalidate-tag", handle_invalidate_tag, methods=["POST", "OPTIONS"]),
+    Route("/v1/cache/purge", handle_purge, methods=["POST", "OPTIONS"]),
+    Route("/v1/cache/export", handle_export_csv, methods=["GET", "OPTIONS"]),
     Route("/v1/agent/tool-replay", handle_tool_replay, methods=["POST", "OPTIONS"]),
     Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "OPTIONS"]),
     Route("/v1/cache/stats", handle_stats, methods=["GET", "OPTIONS"]),
+    Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
     Route("/healthz", handle_health, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET", "OPTIONS"]),
     Route("/", handle_dashboard, methods=["GET", "OPTIONS"]),

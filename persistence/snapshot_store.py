@@ -10,11 +10,20 @@ import time
 from typing import Optional, List, Dict, Any
 from core.vector_cache import CacheEntry, DualTierCache
 
-DB_PATH = os.getenv("OMNICACHE_DB_PATH", "/root/omnicache_proxy/omnicache.db")
+def get_default_db_path() -> str:
+    base_dir = os.getenv("OMNICACHE_DATA_DIR", os.path.expanduser("~/.omnicache"))
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "omnicache.db")
+
+DB_PATH = os.getenv("OMNICACHE_DB_PATH", get_default_db_path())
 
 class SnapshotStore:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
+        # Ensure parent directory exists
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         self._init_db()
 
     def _init_db(self):
@@ -41,119 +50,122 @@ class SnapshotStore:
                         hit_count INTEGER DEFAULT 0
                     )
                 """)
-                conn.execute("CREATE INDEX IF NOT EXISTS idx_org_id ON cache_records(org_id)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_org_model ON cache_records(org_id, model)")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_tag ON cache_records(tag)")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_expiry ON cache_records(created_at, ttl_seconds)")
         finally:
             conn.close()
 
-    def persist_entry(self, entry: CacheEntry):
-        """Persists a CacheEntry to SQLite."""
+    def persist_entry(self, entry: CacheEntry) -> bool:
+        conn = sqlite3.connect(self.db_path)
         try:
-            conn = sqlite3.connect(self.db_path)
-            try:
-                with conn:
-                    conn.execute("""
-                        INSERT OR REPLACE INTO cache_records (
-                            key, org_id, model, user_prompt, system_prompt, schema_hash, tools_hash,
-                            vector_json, response_json, tag, is_stream, stream_chunks_json,
-                            created_at, last_accessed_at, ttl_seconds, hit_count
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        entry.key,
-                        entry.org_id,
-                        entry.model,
-                        entry.user_prompt,
-                        entry.system_prompt,
-                        entry.schema_hash,
-                        entry.tools_hash,
-                        json.dumps(entry.vector),
-                        json.dumps(entry.response_payload),
-                        entry.tag,
-                        1 if entry.is_stream else 0,
-                        json.dumps(entry.stream_chunks),
-                        entry.created_at,
-                        entry.last_accessed_at,
-                        entry.ttl_seconds,
-                        entry.hit_count
-                    ))
-            finally:
-                conn.close()
-        except Exception:
-            pass
+            with conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO cache_records (
+                        key, org_id, model, user_prompt, system_prompt, schema_hash,
+                        tools_hash, vector_json, response_json, tag, is_stream,
+                        stream_chunks_json, created_at, last_accessed_at, ttl_seconds, hit_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    entry.key,
+                    entry.org_id,
+                    entry.model,
+                    entry.user_prompt,
+                    entry.system_prompt,
+                    entry.schema_hash,
+                    entry.tools_hash,
+                    json.dumps(entry.vector),
+                    json.dumps(entry.response_payload),
+                    entry.tag,
+                    1 if entry.is_stream else 0,
+                    json.dumps(entry.stream_chunks) if entry.stream_chunks else None,
+                    entry.created_at,
+                    entry.last_accessed_at,
+                    entry.ttl_seconds,
+                    entry.hit_count
+                ))
+            return True
+        except Exception as e:
+            print(f"⚠️ [SnapshotStore] Failed to persist entry {entry.key}: {e}")
+            return False
+        finally:
+            conn.close()
 
     def load_into_cache(self, cache: DualTierCache) -> int:
-        """Loads all non-expired records from SQLite into the hot DualTierCache."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
         now = time.time()
-        loaded_count = 0
+        loaded = 0
         try:
-            conn = sqlite3.connect(self.db_path)
-            conn.row_factory = sqlite3.Row
-            try:
-                cursor = conn.execute("SELECT * FROM cache_records")
-                rows = cursor.fetchall()
-                for row in rows:
-                    created_at = row["created_at"]
-                    ttl_seconds = row["ttl_seconds"]
-                    if (now - created_at) > ttl_seconds:
-                        continue
+            cursor.execute("SELECT * FROM cache_records")
+            rows = cursor.fetchall()
+            for row in rows:
+                key, org_id, model, user_prompt, system_prompt, schema_hash, \
+                tools_hash, vector_json, response_json, tag, is_stream, \
+                stream_chunks_json, created_at, last_accessed_at, ttl_seconds, hit_count = row
 
-                    entry = CacheEntry(
-                        key=row["key"],
-                        org_id=row["org_id"],
-                        model=row["model"],
-                        user_prompt=row["user_prompt"] or "",
-                        system_prompt=row["system_prompt"] or "",
-                        schema_hash=row["schema_hash"] or "no_schema",
-                        tools_hash=row["tools_hash"] or "no_tools",
-                        vector=json.loads(row["vector_json"]) if row["vector_json"] else [],
-                        response_payload=json.loads(row["response_json"]),
-                        tag=row["tag"],
-                        is_stream=bool(row["is_stream"]),
-                        stream_chunks=json.loads(row["stream_chunks_json"]) if row["stream_chunks_json"] else [],
-                        ttl_seconds=ttl_seconds
-                    )
-                    entry.created_at = created_at
-                    entry.last_accessed_at = row["last_accessed_at"]
-                    entry.hit_count = row["hit_count"]
+                # Skip expired entries
+                if (now - created_at) > ttl_seconds:
+                    continue
 
-                    cache.l1_exact_cache[entry.key] = entry
-                    if entry.vector:
-                        if entry.org_id not in cache.l2_semantic_cache:
-                            cache.l2_semantic_cache[entry.org_id] = []
-                        cache.l2_semantic_cache[entry.org_id].append(entry)
+                vector = json.loads(vector_json) if vector_json else []
+                response_payload = json.loads(response_json)
+                stream_chunks = json.loads(stream_chunks_json) if stream_chunks_json else None
 
-                    loaded_count += 1
-            finally:
-                conn.close()
-        except Exception:
-            pass
+                entry = CacheEntry(
+                    key=key,
+                    org_id=org_id,
+                    model=model,
+                    user_prompt=user_prompt or "",
+                    system_prompt=system_prompt or "",
+                    schema_hash=schema_hash or "no_schema",
+                    tools_hash=tools_hash or "no_tools",
+                    vector=vector,
+                    response_payload=response_payload,
+                    tag=tag,
+                    is_stream=bool(is_stream),
+                    stream_chunks=stream_chunks,
+                    ttl_seconds=ttl_seconds
+                )
+                entry.created_at = created_at
+                entry.last_accessed_at = last_accessed_at
+                entry.hit_count = hit_count
 
-        return loaded_count
+                # Restore into L1
+                cache.l1_exact_cache[key] = entry
 
-    def remove_by_key(self, key: str):
-        conn = sqlite3.connect(self.db_path)
-        try:
-            with conn:
-                conn.execute("DELETE FROM cache_records WHERE key = ?", (key,))
+                # Restore into L2 if conversational
+                if entry.vector and schema_hash == "no_schema" and tools_hash == "no_tools":
+                    if org_id not in cache.l2_semantic_cache:
+                        cache.l2_semantic_cache[org_id] = []
+                    cache.l2_semantic_cache[org_id].append(entry)
+
+                loaded += 1
+            return loaded
+        except Exception as e:
+            print(f"⚠️ [SnapshotStore] Recovery failed: {e}")
+            return 0
         finally:
             conn.close()
 
-    def remove_by_org(self, org_id: str):
+    def delete_by_tag(self, tag: str, org_id: str) -> int:
         conn = sqlite3.connect(self.db_path)
         try:
             with conn:
-                conn.execute("DELETE FROM cache_records WHERE org_id = ?", (org_id,))
+                cursor = conn.execute("DELETE FROM cache_records WHERE tag = ? AND org_id = ?", (tag, org_id))
+                return cursor.rowcount
         finally:
             conn.close()
 
-    def remove_by_tag(self, tag: str, org_id: Optional[str] = None):
+    def purge_all(self, org_id: Optional[str] = None) -> int:
         conn = sqlite3.connect(self.db_path)
         try:
             with conn:
                 if org_id:
-                    conn.execute("DELETE FROM cache_records WHERE tag = ? AND org_id = ?", (tag, org_id))
+                    cursor = conn.execute("DELETE FROM cache_records WHERE org_id = ?", (org_id,))
                 else:
-                    conn.execute("DELETE FROM cache_records WHERE tag = ?", (tag,))
+                    cursor = conn.execute("DELETE FROM cache_records")
+                return cursor.rowcount
         finally:
             conn.close()
 

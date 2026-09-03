@@ -314,14 +314,8 @@ async def handle_anthropic_messages(request: Request) -> Response:
             return JSONResponse(rehydrated, headers=resp_headers)
 
     # 2. Anthropic Cache MISS -> Forward Upstream
-    auth_header = request.headers.get("x-api-key") or request.headers.get("authorization")
-    if auth_header and auth_header.strip() not in ("default", ""):
-        auth_key = auth_header
-    else:
-        auth_key = config.ANTHROPIC_API_KEY
-
     if is_stream:
-        status_code, stream_resp, err_data = await upstream_client.forward_anthropic_stream(anthropic_payload, api_key_header=auth_key)
+        status_code, stream_resp, err_data = await upstream_client.forward_anthropic_stream(anthropic_payload, incoming_headers=dict(request.headers))
         if status_code != 200 or stream_resp is None:
             return JSONResponse(err_data or {"error": "Upstream error"}, status_code=status_code)
 
@@ -366,7 +360,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
         })
 
     # Non-streaming forward
-    status_code, anthropic_res, _ = await upstream_client.forward_anthropic_messages(anthropic_payload, api_key_header=auth_key)
+    status_code, anthropic_res, _ = await upstream_client.forward_anthropic_messages(anthropic_payload, incoming_headers=dict(request.headers))
     latency_ms = (time.perf_counter() - start_time) * 1000
     if status_code == 200:
         usage = anthropic_res.get("usage", {})
@@ -488,11 +482,21 @@ async def handle_health(request: Request) -> Response:
 
 
 async def handle_dashboard(request: Request) -> Response:
-    html_path = "/root/omnicache_proxy/dashboard/index.html"
-    if os.path.exists(html_path):
-        with open(html_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(f.read())
-    return JSONResponse({"status": "healthy", "service": "omnicache-proxy"})
+    cur_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(os.path.dirname(cur_dir), "dashboard", "index.html"),
+        os.path.join(cur_dir, "dashboard", "index.html"),
+        os.path.join(os.getcwd(), "dashboard", "index.html"),
+        "/root/omnicache_proxy/dashboard/index.html"
+    ]
+    for html_path in candidates:
+        if os.path.exists(html_path):
+            try:
+                with open(html_path, "r", encoding="utf-8") as f:
+                    return HTMLResponse(f.read())
+            except Exception:
+                pass
+    return HTMLResponse("<h1>OmniCache AI Proxy Active</h1><p>Visit /v1/cache/stats for metrics.</p>")
 
 
 routes = [

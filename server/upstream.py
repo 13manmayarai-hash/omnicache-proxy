@@ -1,6 +1,6 @@
 """
 Upstream Provider Client with HTTP/2 Connection Pooling and Failover.
-Forwards requests to OpenAI/Anthropic/Gemini and intercepts completions for caching.
+Full Pass-Through Header Preservation for Claude Pro OAuth and Anthropic API Keys.
 """
 
 import httpx
@@ -37,7 +37,6 @@ class UpstreamClient:
 
     @classmethod
     def calculate_savings(cls, model: str, prompt_tokens: int, completion_tokens: int) -> float:
-        """Calculates total dollar savings for a cache hit."""
         pricing = MODEL_PRICING.get(model.lower(), MODEL_PRICING["default"])
         in_cost = (prompt_tokens / 1_000_000.0) * pricing["input"]
         out_cost = (completion_tokens / 1_000_000.0) * pricing["output"]
@@ -95,23 +94,37 @@ class UpstreamClient:
 
         return response.status_code, response, {}, []
 
+    def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01"
+        }
+        if not incoming_headers:
+            if config.ANTHROPIC_API_KEY:
+                headers["x-api-key"] = config.ANTHROPIC_API_KEY
+            return headers
+
+        # Preserve all Anthropic & Auth headers from client with 100% fidelity
+        for k, v in incoming_headers.items():
+            k_lower = k.lower()
+            if k_lower in ("authorization", "x-api-key", "cookie", "anthropic-version", "anthropic-beta", "user-agent", "x-anthropic-client"):
+                headers[k_lower] = v
+
+        # Fallback to configured key if no auth header passed
+        if "x-api-key" not in headers and "authorization" not in headers:
+            if config.ANTHROPIC_API_KEY:
+                headers["x-api-key"] = config.ANTHROPIC_API_KEY
+
+        return headers
+
     async def forward_anthropic_messages(
         self,
         payload: Dict[str, Any],
-        api_key_header: Optional[str] = None
+        incoming_headers: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         client = self.get_client()
         url = "https://api.anthropic.com/v1/messages"
-        
-        api_key = api_key_header or config.ANTHROPIC_API_KEY
-        if api_key and api_key.startswith("Bearer "):
-            api_key = api_key.replace("Bearer ", "").strip()
-
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01"
-        }
+        headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
         if "max_tokens" not in clean_payload:
@@ -128,21 +141,11 @@ class UpstreamClient:
     async def forward_anthropic_stream(
         self,
         payload: Dict[str, Any],
-        api_key_header: Optional[str] = None
+        incoming_headers: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any]]:
-        """Forwards a streaming Anthropic request."""
         client = self.get_client()
         url = "https://api.anthropic.com/v1/messages"
-
-        api_key = api_key_header or config.ANTHROPIC_API_KEY
-        if api_key and api_key.startswith("Bearer "):
-            api_key = api_key.replace("Bearer ", "").strip()
-
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01"
-        }
+        headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
         clean_payload["stream"] = True

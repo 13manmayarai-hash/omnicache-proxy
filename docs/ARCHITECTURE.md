@@ -1,99 +1,65 @@
-# 🏛️ OmniCache AI Proxy 2.0: Deep Technical Architecture Specification
+# Architecture Overview
+
+This document outlines the internal architecture and request lifecycle of OmniCache.
 
 ---
 
-## 1. System Overview & Component Hierarchy
+## 1. System Components
 
-OmniCache AI Proxy is an asynchronous, high-throughput, sub-millisecond AI gateway built to sit seamlessly between client applications and foundation model providers (OpenAI, Anthropic, Google Gemini, Ollama, Groq).
+OmniCache is designed as an asynchronous, low-overhead HTTP proxy sitting between LLM client applications and upstream AI providers.
 
-```
-                             [ Client Applications & Coding Agents ]
-                           (OpenAI SDK, Anthropic SDK, Cursor, Claude)
-                                               │
-                                               ▼
-                      ┌──────────────────────────────────────────────────┐
-                      │            Layer 1: Security & Auth Gate         │
-                      │  - Virtual Key Manager (Rate limits & Quotas)    │
-                      │  - Zero-Knowledge PII Masking Tokenizer          │
-                      └────────────────────────┬─────────────────────────┘
-                                               │
-                                               ▼
-                      ┌──────────────────────────────────────────────────┐
-                      │          Layer 2: Dual-Tier Cache Engine         │
-                      │  - L1 Exact Hash (Sorted SHA-256 <0.1ms)         │
-                      │  - L2 Semantic Vector Cache (512-d Cosine <0.8ms)│
-                      │  - Radix Prefix Tree (Multi-Turn Agent Dialogues)│
-                      │  - Multi-Modal Vision Cache (64-bit dHash/pHash) │
-                      │  - Deterministic Agent Tool Output Replayer      │
-                      └────────────────────────┬─────────────────────────┘
-                                               │
-                        ┌──────────────────────┴──────────────────────┐
-                        ▼ HIT (<1ms)                                  ▼ MISS / BYPASS
-             ┌─────────────────────┐                       ┌─────────────────────┐
-             │ Token Jitter SSE    │                       │ SingleFlight Bus    │
-             │ Streaming Replayer  │                       │ In-flight Mutex Lock│
-             │ (~65 tok/s, <10ms)  │                       └──────────┬──────────┘
-             └──────────┬──────────┘                                  │ Leader Only
-                        │                                             ▼
-                        │                                  ┌─────────────────────┐
-                        │                                  │ Adaptive Cascade    │
-                        │                                  │ Model Router        │
-                        │                                  │ (<0.2ms Classifier) │
-                        │                                  └──────────┬──────────┘
-                        │                                             │
-                        │                                             ▼
-                        │                                  ┌─────────────────────┐
-                        │                                  │ Upstream HTTP/2     │
-                        │                                  │ Connection Pool     │
-                        │                                  │ & Circuit Breaker   │
-                        │                                  └──────────┬──────────┘
-                        │                                             │
-                        │                                             ▼
-                        │                                  ┌─────────────────────┐
-                        │                                  │ SQLite Persistence  │
-                        │                                  │ Async Warm Snapshot │
-                        │                                  └──────────┬──────────┘
-                        │                                             │
-                        └──────────────────────┬──────────────────────┘
-                                               ▼
-                               [ Client Response Delivery ]
+```text
+[ Client / Coding Agent ] (Claude Code, Cursor, Python SDK)
+         │
+         ▼
+[ Ingestion & Auth Gateway ]
+  - Header inspection (OAuth bearer tokens, API keys)
+  - Virtual key quotas & rate limiter
+  - Optional PII token masking
+         │
+         ▼
+[ Dual-Tier Cache Engine ]
+  - L1 Exact Cache (Sorted SHA-256 trie lookup: ~0.03ms)
+  - L2 Semantic Cache (512-dimension vector cosine similarity: ~0.6ms)
+  - Radix Prefix Tree (conversation history caching)
+  - SQLite Persistence Store (~/.omnicache/omnicache.db)
+         │
+    ┌────┴──────────────────────────┐
+    │                               │
+    ▼ (Cache HIT: < 1ms)            ▼ (Cache MISS)
+[ Token Jitter SSE Replayer ]   [ SingleFlight Coalescing Mutex ]
+  - Emulates ~65 tok/s stream       │ (Only 1 upstream request per prompt)
+  - Zero cloud API billing          ▼
+                                [ Upstream HTTP/2 Connection Pool ]
+                                (Anthropic, OpenAI, Gemini)
 ```
 
 ---
 
-## 2. Core Subsystems
+## 2. Request Lifecycle
 
-### 2.1 Fast In-Memory 512-Dimensional Vector Embedder (`core/embeddings.py`)
-- **Mathematical Foundation:** Feature projection over subword n-grams, content bigrams, and lexical token sets with L2 normalization.
-- **Latency Profile:** `< 0.5 ms` per 1,000 words. Zero GPU requirement; runs 100% in CPU cache with zero remote API overhead.
-- **Cosine Similarity:** Computed via vectorized dot product:
-  $$\text{Similarity}(u, v) = \frac{u \cdot v}{\|u\|_2 \|v\|_2} = u \cdot v \quad (\text{since } \|u\|=\|v\|=1)$$
+1. **Client Request Ingestion:**
+   Incoming requests to `/v1/chat/completions` (OpenAI format) or `/v1/messages` (Anthropic format) are parsed for messages, model, temperature, tools, and response format.
 
-### 2.2 Dynamic Intent Gating Matrix (`core/vector_cache.py`)
-To prevent semantic hallucinations, OmniCache applies an adaptive similarity threshold based on prompt semantics:
+2. **L1 Exact Cache Lookup:**
+   A deterministic SHA-256 hash is computed across the normalized messages, tool schemas, and model parameters. If an exact match exists in memory, it is returned immediately.
 
-| Intent Category | Detected Triggers | Enforced Threshold ($\tau$) | Rationale |
-|:---|:---|:---:|:---|
-| **JSON Schema / Function Tools** | `tools`, `response_format: json_object` | **`1.00` (Exact Schema Hash)** | Guarantees zero parsing errors in downstream application code. |
-| **Code & Algorithms** | `def `, `class `, `SELECT `, ```` ` | **`0.98`** | Prevents subtle logic inversions (e.g. ascending vs descending sort). |
-| **Math & Calculation** | Numbers, formulas, `calc`, `evaluate` | **`0.98`** | Ensures exact numerical answers. |
-| **Creative Generation** | `temperature >= 0.7` | **`1.01` (Auto-Bypass)** | Preserves generative diversity on high-temperature prompts. |
-| **General FAQ / Conversational**| Default conversational prose | **`0.92`** | Captures natural language synonyms and paraphrasings. |
+3. **L2 Semantic Cache Lookup (Cosine Similarity):**
+   If no exact match is found, user prompt text is projected into a 512-dimension vector embedding using an in-memory linear algebra projection. If the cosine similarity against existing cached entries exceeds `SEMANTIC_SIMILARITY_THRESHOLD` (default: `0.92`), the cached response is returned.
 
-### 2.3 Radix Prefix-Tree Engine (`core/radix_tree.py`)
-- Represents multi-turn conversations as nodes in a prefix tree.
-- Enables instant branching on turn $N$ of an autonomous agent dialogue.
-- Aligns tokens to 1024-token boundaries, injecting ephemeral cache directives to unlock 90% downstream provider prompt caching discounts.
+4. **SingleFlight Mutex (Cache MISS):**
+   When a cache miss occurs, the prompt key is registered in a SingleFlight mutex table. If multiple concurrent requests for the same prompt arrive simultaneously, only the first request is forwarded upstream; other waiting callers share the resulting response once it completes.
 
-### 2.4 Token Jitter SSE Replayer (`server/stream_replayer.py`)
-- Calibrated Poisson-distributed inter-token delays ($\lambda = 65\text{ tokens/sec}$).
-- Preserves distinct reasoning channels (`delta.reasoning_content` for `o1`/`o3` and Claude Thinking).
-- Guarantees Time-To-First-Token (TTFT) `< 10ms`.
+5. **Upstream Forwarding & SQLite Persistence:**
+   The upstream response is streamed back to the client while simultaneously recording chunks and token counts. On completion, the result is saved to the in-memory cache and persisted to `~/.omnicache/omnicache.db`.
 
-### 2.5 SingleFlight Concurrency Bus (`server/singleflight.py`)
-- Async mutex lock on `exact_hash`.
-- When 100 concurrent requests arrive for the same cold prompt, only **1 leader request** is sent upstream. The remaining 99 await the shared leader future, preventing API rate-limit stampedes.
+---
 
-### 2.6 Zero-Knowledge Privacy Vault (`core/privacy_shield.py`)
-- Reversible tokenized masking of SSNs, credit cards, emails, API keys, and PHI before sending to upstream LLMs.
-- Seamless rehydration on response delivery ensures zero raw PII is exposed to third-party model providers.
+## 3. SSE Stream Replay
+
+Many coding assistants (such as Claude Code) require Server-Sent Events (SSE) streaming. Returning an entire cached response in a single 0ms chunk can cause buffer overflows or display anomalies in terminal UIs.
+
+OmniCache solves this with an event replayer:
+- Emulates natural token streaming cadence (~65 tokens/second with slight random jitter).
+- Maintains `<10ms` Time-To-First-Token (TTFT).
+- Emits standard `message_start`, `content_block_delta`, `message_delta`, and `message_stop` events.

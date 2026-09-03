@@ -1,87 +1,52 @@
-# OmniCache AI Proxy 2.1
+# OmniCache
 
-> **Zero-Latency Semantic Caching, Autonomous Agent Accelerator & Enterprise Cost Gateway for LLMs.**  
-> *Slash your OpenAI & Anthropic API bills by 40% to 75%. Deliver sub-millisecond AI responses with zero code refactoring.*
+[![PyPI version](https://img.shields.io/pypi/v/omnicache-proxy.svg)](https://pypi.org/project/omnicache-proxy/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE)
 
-[![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](https://pypi.org/project/omnicache-proxy/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-28%2F28%20passing-emerald.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/tree/main/tests)
-[![Latency](https://img.shields.io/badge/latency-%3C%200.8ms-purple.svg)](https://github.com/13manmayarai-hash/omnicache-proxy#benchmarks)
-[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-cyan.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/pyproject.toml)
+OmniCache is a lightweight, local caching proxy for Anthropic (Claude), OpenAI (GPT), and Google (Gemini) APIs. 
+
+When developing with AI agents (like Claude Code, Cursor, Aider, or custom LLM scripts), repeated prompts, test runs, and static file queries frequently make duplicate upstream API calls. OmniCache sits between your client and upstream providers to intercept matching requests locally in `<1ms`, saving API costs and eliminating remote network latency.
 
 ---
 
-```text
-+----------------------------------------------------------------------------------------+
-|                              THE OMNICACHE ARCHITECTURE                                |
-+----------------------------------------------------------------------------------------+
-
- [ Client / Agent / IDE ] ---> (POST /v1/chat/completions OR /v1/messages)
-                                       |
-                                       v
-                       +------------------------------+
-                       |   OmniCache AI Gateway 2.1   |
-                       |  - Virtual Key Quota Guard   |
-                       |  - Zero-Knowledge PII Shield |
-                       |  - Prometheus /metrics FinOps|
-                       +--------------+---------------+
-                                      |
-              +-----------------------+-----------------------+
-              | HIT (< 1ms, $0.00)                            | MISS / BYPASS
-              v                                               v
-  +-----------------------+                       +-----------------------+
-  | Token Jitter SSE      |                       | SingleFlight Mutex    |
-  | Stream Replayer       |                       | & Cost Cascade Router |
-  | (~65 tok/s, <10ms TTFT|                       | (Gemini 2.5 / Claude) |
-  | & Agent Tool Replayer |                       +-----------+-----------+
-  +-----------------------+                                   |
-                                                              v
-                                                  [ Upstream AI Providers ]
-                                                  (OpenAI / Anthropic / Gemini)
-```
-
----
-
-## Why OmniCache?
-
-* **Sub-Millisecond Vector Semantic Caching (<0.8ms):** Pure in-memory 512-d feature projection embedder matches paraphrased queries with zero remote API lag.
-* **Coding Agent Tool-Loop Accelerator:** Caches idempotent tool calls (`read_file`, `git status`, `grep`) for **Claude Code, Cursor, and Devin**, cutting agent loop runtimes from 15s to 350ms.
-* **Adaptive Cost Arbitrage & Model Cascade:** Automatically routes simple formatting / classification queries to **Gemini 2.5 Flash ($0.05/1M)**, slashing non-cached cloud bills by 75%.
-* **Multi-Modal Vision Perception Cache:** Uses **64-bit Perceptual Hashing (dHash)** to match UI screenshots, invoices, and images in **<0.3ms at $0.00**.
-* **Zero-Knowledge Privacy Vault:** Reversible tokenized masking of SSNs, credit cards, emails, and API keys before sending upstream (HIPAA & SOC2 ready).
-* **Token Jitter SSE Streaming:** Smoothly replays cached tokens at natural typing speed (~65 tokens/sec) with `<10ms` Time-To-First-Token, fixing the 0ms UI typing blast.
-* **Built-in System Doctor & Benchmarker:** Instant `omnicache doctor` and `omnicache benchmark` micro-profiling right from the terminal.
-* **Enterprise Prometheus & CSV Ledger:** Exposes `/metrics` for Grafana and one-click `/v1/cache/export` CSV financial downloads.
-
----
-
-## Quickstart (1-Line Integration)
-
-### 1. Install & Start OmniCache
+## Installation
 
 ```bash
-# Install from PyPI
 pip install omnicache-proxy
-
-# Start proxy in background
-omnicache &
 ```
-*The gateway is now live at `http://localhost:8000` with the analytics dashboard at `http://localhost:8000/dashboard`.*
 
 ---
 
-### 2. Connect Your Application (Zero Code Changes)
+## Quickstart
 
-#### Claude Code (Terminal Assistant):
+### 1. Start the Proxy Server
+
 ```bash
-ANTHROPIC_BASE_URL="http://localhost:8000" claude
+omnicache
 ```
 
-#### Python (OpenAI SDK):
+By default, the proxy runs on `http://localhost:8000`. You can change the port with `--port`:
+
+```bash
+omnicache --port 8080
+```
+
+### 2. Connect Your Client
+
+#### Claude Code (Terminal CLI)
+Set the Anthropic base URL environment variable before running `claude`:
+
+```bash
+export ANTHROPIC_BASE_URL="http://localhost:8000"
+claude
+```
+
+#### Python (OpenAI SDK)
+Route the `base_url` parameter to the local proxy:
+
 ```python
 from openai import OpenAI
 
-# Simply route baseURL to OmniCache
 client = OpenAI(
     api_key="your-api-key",
     base_url="http://localhost:8000/v1"
@@ -89,64 +54,98 @@ client = OpenAI(
 
 response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "How do I optimize SQL queries?"}]
+    messages=[{"role": "user", "content": "How do I reverse a linked list in Python?"}]
 )
 print(response.choices[0].message.content)
 ```
 
-#### TypeScript / Node.js:
-```typescript
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: "your-api-key",
-  baseURL: "http://localhost:8000/v1"
-});
-```
+#### Cursor / VS Code / Other Tools
+In your tool's model settings, set the API Base URL to `http://localhost:8000/v1`.
 
 ---
 
-## Live Web Telemetry Dashboard
+## Key Features
 
-Open **`http://localhost:8000/dashboard`** in your browser to inspect live:
-* **Total Cost Saved ($ USD)** & **Tokens Saved (100% Free)**
-* **P99 Sub-Millisecond Latency**
-* **PII Masked Items Scrubbed**
-* **Virtual Key Quotas & Team Spending**
-* **One-Click CSV Export & Prometheus `/metrics`**
-
----
-
-## Complete Documentation Suite
-
-| Document | Description |
-|:---|:---|
-| [**Architecture Specification**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/ARCHITECTURE.md) | Deep technical breakdown of Radix Trees, Intent Gating, SingleFlight, and SSE Replay. |
-| [**API Reference**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/API_REFERENCE.md) | Full REST & Messages API specification, developer headers, and error codes. |
-| [**Quickstart Guide**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md) | Step-by-step onboarding for Python, Node.js, Claude Code, Cursor, and Docker. |
-| [**Troubleshooting & FAQ**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/TROUBLESHOOTING_AND_FAQ.md) | The complete "Help Me" diagnostic manual and debugging guide. |
-| [**Research & Product Strategy**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/RESEARCH_AND_PRODUCT_STRATEGY.md) | Competitive teardown, provider prompt caching math, and 24-month roadmap. |
-| [**Security Policy**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/SECURITY.md) | Responsible vulnerability disclosure, encryption, and patch SLAs. |
-| [**Privacy Policy**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/legal/PRIVACY_POLICY.md) | Zero-knowledge architecture, no-retention guarantee, and HIPAA/GDPR disclosures. |
-| [**Terms of Service & SLA**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/legal/TERMS_OF_SERVICE.md) | 99.99% uptime guarantee, sub-ms latency SLA, and enterprise support tiers. |
-| [**Contributing Guide**](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/CONTRIBUTING.md) | Development setup, PR workflow, and test verification guidelines. |
+* **Two-Tier Cache Engine:**
+  * **L1 Exact Match (Trie Hash):** Sub-0.05ms lookup for identical payloads.
+  * **L2 Semantic Match (Cosine Similarity):** Matches semantically equivalent prompts using an in-memory 512-dimension vector projection.
+* **Agent Stream Replayer:** Emulates natural token-streaming for cached responses so interactive CLIs (like Claude Code) stream smoothly without terminal glitches.
+* **Request Coalescing (SingleFlight):** Deduplicates concurrent in-flight requests for the same prompt, making only one upstream call.
+* **Zero Configuration Persistence:** Automatically writes cache snapshots to `~/.omnicache/omnicache.db` (SQLite) so cache state survives restarts.
+* **Built-in CLI Utilities:**
+  * `omnicache doctor`: Checks database state, port bindings, and embedder health.
+  * `omnicache benchmark`: Measures P50, P95, and P99 cache lookup latencies on your machine.
+  * `omnicache stats`: Prints total tokens and cost savings directly to the console.
+* **Observability:**
+  * Web Dashboard: `http://localhost:8000/dashboard`
+  * Prometheus Metrics: `http://localhost:8000/metrics`
+  * CSV Ledger Export: `http://localhost:8000/v1/cache/export`
 
 ---
 
-## Running the Test Suite & Benchmarks
+## CLI Reference
 
 ```bash
-# Run 28 Unit & Integration Tests
-pytest tests/ -v
+# Start server with clean terminal output
+omnicache
 
-# Run Built-in Micro-Benchmark
+# Start on custom port and host
+omnicache --host 0.0.0.0 --port 9000
+
+# Run with verbose HTTP access logs
+omnicache --verbose
+
+# Run system diagnostic checks
+omnicache doctor
+
+# Run local micro-benchmarks (1,000 queries)
 omnicache benchmark
 
-# Run Subsystem Doctor Diagnostics
-omnicache doctor
+# View current token and cost savings
+omnicache stats
 ```
+
+---
+
+## Configuration
+
+OmniCache can be configured via command-line flags or environment variables (in your shell or a local `.env` file):
+
+| Environment Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PORT` | `8000` | Port to bind the proxy server to. |
+| `HOST` | `0.0.0.0` | Host interface to listen on. |
+| `SEMANTIC_CACHE_TTL_SECONDS` | `86400` | Default time-to-live for cache entries (24 hours). |
+| `SEMANTIC_SIMILARITY_THRESHOLD` | `0.92` | Minimum cosine similarity required for an L2 semantic cache hit. |
+| `OMNICACHE_DB_PATH` | `~/.omnicache/omnicache.db` | Path to SQLite persistence database. |
+| `ANTHROPIC_API_KEY` | *(Optional)* | Default upstream Anthropic API key (if not passed in client headers). |
+| `OPENAI_API_KEY` | *(Optional)* | Default upstream OpenAI API key (if not passed in client headers). |
+| `GEMINI_API_KEY` | *(Optional)* | Default upstream Google Gemini API key. |
+
+---
+
+## Running Tests
+
+Run the test suite using `pytest`:
+
+```bash
+git clone https://github.com/13manmayarai-hash/omnicache-proxy.git
+cd omnicache-proxy
+pip install -e .
+pytest tests/ -v
+```
+
+---
+
+## Documentation
+
+* [API Reference](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/API_REFERENCE.md)
+* [Architecture Overview](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/ARCHITECTURE.md)
+* [Troubleshooting & FAQ](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/TROUBLESHOOTING_AND_FAQ.md)
+* [Contributing Guidelines](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/CONTRIBUTING.md)
 
 ---
 
 ## License
-OmniCache AI Proxy is open-source software licensed under the [MIT License](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE).
+
+MIT License. See [LICENSE](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE) for details.

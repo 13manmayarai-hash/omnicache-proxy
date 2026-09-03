@@ -1,121 +1,90 @@
-# 📖 OmniCache AI Proxy 2.0: API Reference & Developer Specification
+# API Reference
+
+OmniCache implements standard OpenAI and Anthropic REST endpoints, alongside administrative cache and telemetry routes.
 
 ---
 
-## 1. Gateway Endpoints
+## Core Endpoints
 
-### 1.1 `POST /v1/chat/completions` (OpenAI Drop-In Route)
-Accepts standard OpenAI chat completion JSON payloads.
+### 1. OpenAI Chat Completions
+`POST /v1/chat/completions`
 
-#### Developer Control Headers:
-| Header Name | Type | Description | Default |
-|:---|:---|:---|:---|
-| `Authorization` | String | Upstream API key (`Bearer sk-...`) or Virtual Key | `None` |
-| `X-Org-Id` | String | Tenant / Workspace identifier for vector isolation | `"default"` |
-| `X-Cache-Bypass` | Boolean | Force bypass cache and call upstream directly | `false` |
-| `X-Cache-Threshold` | Float | Override similarity threshold (e.g. `0.95`) | Dynamic |
-| `X-Cache-TTL` | Integer | Custom cache TTL in seconds | `604800` (7 days) |
-| `X-Cache-Tag` | String | Domain tag for bulk invalidation (e.g. `docs-v2`) | `None` |
-| `X-Allow-Cascade` | Boolean | Enable automatic cost-arbitrage model cascade | `true` |
+Accepts standard OpenAI-format chat completion payloads.
 
-#### Output Telemetry Headers:
-```http
-X-Cache-Status: HIT_SEMANTIC
-X-Cache-Similarity: 0.9842
-X-Cache-Latency-Ms: 0.74
-X-Cost-Saved-USD: 0.003500
-X-Tokens-Saved: 140
-X-Tokens-Used: 0
-X-Routed-Model: gpt-4o
-```
+#### Custom Request Headers:
+* `X-Cache-Bypass: true` – Forces a cache bypass and fetches a fresh response from upstream.
+* `X-Org-Id: <tenant-name>` – Logical tenant identifier for multi-tenant isolation.
+* `X-Cache-Tag: <tag-name>` – Assigns an invalidation tag to the cached entry.
+
+#### Response Headers:
+* `X-Cache-Status`: `HIT_EXACT`, `HIT_SEMANTIC`, `MISS`, or `BYPASS`
+* `X-Cache-Latency-Ms`: Lookup latency in milliseconds
+* `X-Tokens-Saved`: Total tokens saved by cache hit
+* `X-Cost-Saved-USD`: Estimated USD saved based on model price card
 
 ---
 
-### 1.2 `POST /v1/messages` (Anthropic Messages API / Claude Code)
-Accepts native Anthropic Messages API payloads:
+### 2. Anthropic Messages
+`POST /v1/messages`
+
+Accepts standard Anthropic Messages API payloads (used by Claude Code and Anthropic SDKs). Supports both JSON responses and Server-Sent Events (`stream: true`).
+
+---
+
+### 3. Model List
+`GET /v1/models`
+
+Returns available upstream models.
+
+---
+
+## Cache Management Endpoints
+
+### 4. Invalidate by Tag
+`POST /v1/cache/invalidate-tag`
+
+Invalidates all cached entries associated with a specific tag.
+
 ```json
 {
-  "model": "claude-3-5-sonnet-20241022",
-  "messages": [{"role": "user", "content": "How do I optimize SQL indexes?"}],
-  "max_tokens": 1024,
-  "system": "You are a database architect."
+  "tag": "schema_v1"
 }
 ```
 
 ---
 
-### 1.3 `POST /v1/agent/tool-replay` (Agent Tool Accelerator)
-Caches and replays deterministic tool execution outputs (`read_file`, `git_diff`, `grep`).
-```json
-// Request
-{
-  "tool_name": "read_file",
-  "arguments": {"filepath": "server.py"},
-  "workspace_fingerprint": "repo_v1",
-  "output": "import starlette..." // optional: provided to store
-}
+### 5. Purge Cache
+`POST /v1/cache/purge`
 
-// Response (on hit)
-{
-  "cached": true,
-  "output": "import starlette...",
-  "key": "a1b2c3..."
-}
-```
+Purges all entries for a given tenant (via `X-Org-Id` header) or globally if no tenant header is provided.
 
 ---
 
-### 1.4 `GET /v1/enterprise/quotas` (Team Spending & Quotas)
-Returns real-time spending and budget utilization across all virtual keys:
-```json
-{
-  "team_fintech": {
-    "team_name": "Fintech Core",
-    "monthly_budget_usd": 500.0,
-    "current_spend_usd": 42.15,
-    "budget_used_pct": 8.43,
-    "active_rpm": 14
-  }
-}
-```
+### 6. CSV Ledger Export
+`GET /v1/cache/export`
+
+Downloads a `.csv` file containing the current cached prompt inventory, access counts, and creation timestamps.
 
 ---
 
-### 1.5 `POST /v1/cache/invalidate-tag` (Domain Purge)
-Purges all cached entries matching a domain tag:
-```json
-{ "tag": "release-v2.1" }
-```
+## Observability & Diagnostics
+
+### 7. Prometheus Metrics
+`GET /metrics`
+
+Standard Prometheus text format metrics for Grafana or Datadog scrapers.
+Exposes `omnicache_savings_usd`, `omnicache_tokens_saved_total`, `omnicache_exact_hits_total`, `omnicache_semantic_hits_total`, and `omnicache_hit_rate_percentage`.
 
 ---
 
-### 1.6 `GET /v1/cache/stats` (Telemetry Dashboard API)
-Returns real-time global cache metrics:
-```json
-{
-  "total_requests": 1420,
-  "exact_hits": 450,
-  "semantic_hits": 680,
-  "misses": 290,
-  "hit_rate_percentage": 79.58,
-  "financial_metrics": {
-    "total_savings_usd": 18.4250,
-    "total_tokens_saved": 842000,
-    "total_tokens_used": 120500,
-    "privacy_scrubbed_count": 48,
-    "agent_tool_hits": 312
-  }
-}
-```
+### 8. Cache Statistics
+`GET /v1/cache/stats`
+
+Returns runtime JSON metrics including total requests, exact hits, semantic hits, hit rate percentage, and active entry counts.
 
 ---
 
-### 1.7 `GET /healthz` (Health Check)
-```json
-{
-  "status": "healthy",
-  "service": "omnicache-proxy",
-  "version": "2.0.0",
-  "features": ["radix_tree", "agent_tool_replay", "cost_cascade", "vision_cache", "privacy_shield", "virtual_quotas"]
-}
-```
+### 9. Health Check
+`GET /healthz`
+
+Returns `{"status": "ok", "version": "2.1.3"}`.

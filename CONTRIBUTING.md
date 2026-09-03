@@ -1,28 +1,32 @@
-# 🤝 Contributing to OmniCache AI Proxy
+# Contributing to OmniCache
 
-Thank you for your interest in contributing to OmniCache! We welcome contributions from developers worldwide.
+Thank you for your interest in contributing to OmniCache.
 
 ---
 
-## 🚀 Getting Started
+## Development Setup
 
-1. **Fork and Clone the Repository:**
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/13manmayarai-hash/omnicache-proxy.git
    cd omnicache-proxy
    ```
-2. **Install Development Dependencies:**
+
+2. **Install in editable mode with development dependencies:**
    ```bash
-   pip install starlette uvicorn httpx
+   pip install -e .
+   pip install pytest
    ```
-3. **Run the Test Suite:**
+
+3. **Run the test suite:**
    ```bash
-   python3 -m unittest discover -s tests
+   pytest tests/ -v
    ```
 
 ---
 
-## 📋 Pull Request (PR) Guidelines
-* Ensure all 27 unit tests pass with 100% pass rate before submitting.
-* Write clean, type-annotated code with minimal external dependencies.
-* Keep core lookups strictly under **< 1.0 ms**.
+## Guidelines
+
+* Follow standard PEP 8 styling conventions.
+* Add unit tests in `tests/` for any new endpoints or features.
+* Avoid introducing heavy binary dependencies to preserve cross-platform compatibility across macOS, Linux, Windows, and ARM architectures.

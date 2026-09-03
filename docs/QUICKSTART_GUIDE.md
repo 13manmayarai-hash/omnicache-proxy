@@ -1,59 +1,59 @@
-# 🚀 OmniCache AI Proxy 2.0: Developer Quickstart Guide
+# Quickstart Guide
+
+Get OmniCache running in under a minute.
 
 ---
 
-## 1. 30-Second Local Setup
+## 1. Install & Run
 
-### Step 1: Clone & Run
 ```bash
-git clone https://github.com/13manmayarai-hash/omnicache-proxy.git
-cd omnicache-proxy
-pip install starlette uvicorn httpx
-python3 main.py
+pip install omnicache-proxy
+omnicache
 ```
-*Proxy runs at `http://localhost:8000`.*
+
+The proxy is now listening on `http://localhost:8000`.
 
 ---
 
-## 2. Drop-in Integrations
+## 2. Configure Your Tool
 
-### Python (OpenAI SDK):
+### Claude Code
+```bash
+export ANTHROPIC_BASE_URL="http://localhost:8000"
+claude
+```
+
+### Python (OpenAI SDK)
 ```python
 from openai import OpenAI
-client = OpenAI(api_key="your-key", base_url="http://localhost:8000/v1")
+
+client = OpenAI(
+    api_key="your-api-key",
+    base_url="http://localhost:8000/v1"
+)
+
 response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "How do I optimize SQL indexes?"}]
+    messages=[{"role": "user", "content": "Explain binary search in Python."}]
 )
 print(response.choices[0].message.content)
 ```
 
-### Python (Anthropic SDK / Claude):
-```python
-from anthropic import Anthropic
-client = Anthropic(api_key="your-key", base_url="http://localhost:8000")
-response = client.messages.create(
-    model="claude-3-5-sonnet-20241022",
-    messages=[{"role": "user", "content": "Explain binary search trees"}],
-    max_tokens=1024
-)
-print(response.content[0].text)
-```
-
-### Claude Code CLI:
-```bash
-export ANTHROPIC_BASE_URL="http://localhost:8000/v1"
-claude
-```
-
-### LangChain:
-```python
-from langchain_openai import ChatOpenAI
-llm = ChatOpenAI(model="gpt-4o", openai_api_base="http://localhost:8000/v1")
-print(llm.invoke("Hello world!").content)
+### Cursor / Windsurf
+In your editor settings under **OpenAI Base URL**, enter:
+```text
+http://localhost:8000/v1
 ```
 
 ---
 
-## 3. Telemetry & Web Dashboard
-Open your browser at **`http://localhost:8000/dashboard`** to inspect live cost savings, token accounting, and privacy redactions in real-time.
+## 3. Verify Savings
+
+View live metrics in your terminal or browser:
+```bash
+# Check stats in terminal
+omnicache stats
+
+# Open web dashboard in browser
+open http://localhost:8000/dashboard
+```

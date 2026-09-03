@@ -9,8 +9,7 @@ def load_dotenv():
     paths = [
         os.path.join(os.getcwd(), ".env"),
         os.path.expanduser("~/.omnicache/.env"),
-        os.path.expanduser("~/.env"),
-        "/root/omnicache_proxy/.env"
+        os.path.expanduser("~/.env")
     ]
     for env_file in paths:
         if os.path.exists(env_file):

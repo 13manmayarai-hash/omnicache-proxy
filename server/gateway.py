@@ -30,6 +30,7 @@ from server.upstream import upstream_client
 from server.translator import ProtocolTranslator
 from server.failover import failover_engine
 from persistence.snapshot_store import snapshot_store
+from mcp.server import process_mcp_jsonrpc, TOOLS_METADATA
 
 METRICS_LEDGER = {
     "total_savings_usd": 0.0,
@@ -899,9 +900,9 @@ async def handle_stats(request: Request) -> Response:
             "circuit_breaker": failover_engine.circuit_breaker.get_status()
         },
         "system_info": {
-            "version": "2.3.0",
+            "version": "2.5.0",
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
-            "persistence": "sqlite3_wal",
+            "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
             "port": config.PORT
         }
@@ -1003,7 +1004,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": "2.3.0",
+        "version": "2.5.0",
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1018,6 +1019,38 @@ async def handle_dashboard(request: Request) -> Response:
     return HTMLResponse("<h1>OmniCache Dashboard Not Found</h1>", status_code=404)
 
 
+async def handle_mcp(request: Request) -> Response:
+    """Authenticated Model Context Protocol (MCP) JSON-RPC 2.0 endpoint."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, err_response, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return err_response
+
+    if request.method == "GET":
+        return JSONResponse({
+            "service": "omnicache-mcp",
+            "protocol": "jsonrpc-2.0",
+            "mcp_version": "2024-11-05",
+            "tenant_org_id": org_id,
+            "tools_count": len(TOOLS_METADATA)
+        }, headers=cors_headers)
+
+    try:
+        req_body = await request.json()
+    except Exception:
+        return JSONResponse({
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {"code": -32700, "message": "Parse error: Invalid JSON payload"}
+        }, status_code=400, headers=cors_headers)
+
+    res = process_mcp_jsonrpc(req_body, default_org_id=org_id)
+    return JSONResponse(res, headers=cors_headers)
+
+
 # =====================================================================
 # Starlette Application Routing
 # =====================================================================
@@ -1030,6 +1063,8 @@ routes = [
     Route("/v1/messages", handle_anthropic_messages, methods=["POST", "GET", "OPTIONS"]),
     Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tool_replay", handle_tool_replay, methods=["POST", "OPTIONS"]),
+    Route("/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
+    Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/invalidate-tag", handle_invalidate_tag, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/stats", handle_stats, methods=["GET", "OPTIONS"]),

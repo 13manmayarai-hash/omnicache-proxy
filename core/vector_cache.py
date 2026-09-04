@@ -10,6 +10,7 @@ from .config import config
 from .embeddings import FastSemanticEmbedder
 from .hasher import RequestHasher
 from .storage import BaseCacheStorage, InMemoryCacheStorage, RedisCacheStorage
+from .ann_index import ANNIndexFactory, BaseANNIndex
 
 def get_model_family(model: str) -> str:
     """
@@ -151,16 +152,19 @@ class CacheEntry:
 
 class DualTierCache:
     def __init__(self, storage: Optional[BaseCacheStorage] = None):
-        if storage is not None:
-            self.storage = storage
-        else:
-            self.storage = self._init_storage()
+        self.storage = storage or self._init_storage()
+        self.ann_indices: Dict[str, BaseANNIndex] = {}
 
         # Cumulative Telemetry
         self.total_exact_hits = 0
         self.total_semantic_hits = 0
         self.total_misses = 0
         self.total_bypasses = 0
+
+    def _get_ann_index(self, org_id: str) -> BaseANNIndex:
+        if org_id not in self.ann_indices:
+            self.ann_indices[org_id] = ANNIndexFactory.create(dimensions=FastSemanticEmbedder.DIMENSIONS)
+        return self.ann_indices[org_id]
 
     @property
     def l1_exact_cache(self) -> Dict[str, CacheEntry]:
@@ -286,13 +290,38 @@ class DualTierCache:
         family_mismatches = 0
         system_mismatches = 0
 
-        # Filter, evaluate TTL freshness, and compute cosine similarity
+        # Filter active entries
         active_entries: List[CacheEntry] = []
         for entry in org_entries:
-            if entry.is_expired():
-                continue
-            active_entries.append(entry)
+            if not entry.is_expired():
+                active_entries.append(entry)
 
+        if len(active_entries) != len(org_entries):
+            self.storage.update_semantic_entries(org_id, active_entries)
+
+        if not active_entries:
+            self.total_misses += 1
+            return "MISS", None, 0.0, f"MISS_EMPTY_CACHE: All entries expired for tenant '{org_id}'"
+
+        # ANN Candidate Pruning for high scale (> 50 cached entries)
+        ann_enabled = getattr(config, "ANN_INDEX_ENABLED", True)
+        if ann_enabled and len(active_entries) > 50:
+            ann = self._get_ann_index(org_id)
+            if ann.size() < len(active_entries):
+                for e in active_entries:
+                    if e.vector:
+                        ann.add(e.key, e.vector)
+            top_matches = ann.search(query_vector, top_k=getattr(config, "ANN_TOP_K", 50), min_similarity=0.0)
+            if top_matches:
+                candidate_keys = {k for k, _ in top_matches}
+                eval_candidates = [e for e in active_entries if e.key in candidate_keys]
+            else:
+                eval_candidates = active_entries
+        else:
+            eval_candidates = active_entries
+
+        # Evaluate similarity and strict guardrails
+        for entry in eval_candidates:
             # Strict Model Family Match Guardrail
             if entry.model_family != query_family:
                 family_mismatches += 1
@@ -310,10 +339,6 @@ class DualTierCache:
             if similarity > best_score:
                 best_score = similarity
                 best_entry = entry
-
-        # Update pruned active entries for tenant
-        if len(active_entries) != len(org_entries):
-            self.storage.update_semantic_entries(org_id, active_entries)
 
         if best_entry and best_score >= effective_threshold:
             best_entry.touch()
@@ -385,13 +410,23 @@ class DualTierCache:
         # Store in L2 Semantic Cache if single-turn conversational
         if vector and is_single_turn_text:
             self.storage.add_semantic_entry(org_id, entry, ttl_seconds=ttl_seconds, max_entries=config.MAX_CACHE_ENTRIES_PER_TENANT)
+            ann = self._get_ann_index(org_id)
+            ann.add(exact_key, vector)
 
         return entry
 
     def purge_tenant(self, org_id: str) -> int:
+        if org_id in self.ann_indices:
+            self.ann_indices[org_id].clear()
         return self.storage.purge(org_id=org_id)
 
     def purge(self, org_id: Optional[str] = None) -> int:
+        if org_id and org_id in self.ann_indices:
+            self.ann_indices[org_id].clear()
+        elif org_id is None:
+            for idx in self.ann_indices.values():
+                idx.clear()
+            self.ann_indices.clear()
         return self.storage.purge(org_id=org_id)
 
     def invalidate_tag(self, tag: str, org_id: Optional[str] = None) -> int:
@@ -415,6 +450,9 @@ class DualTierCache:
 
     def clear(self):
         self.storage.clear()
+        for idx in self.ann_indices.values():
+            idx.clear()
+        self.ann_indices.clear()
         self.total_exact_hits = 0
         self.total_semantic_hits = 0
         self.total_misses = 0

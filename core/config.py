@@ -114,6 +114,11 @@ class ProxyConfig:
     CACHE_STORAGE_BACKEND: str = os.getenv("CACHE_STORAGE_BACKEND", "auto").strip().lower()
     REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "omnicache").strip()
 
+    # Embedding & ANN Vector Search Configuration
+    EMBEDDER_BACKEND: str = os.getenv("EMBEDDER_BACKEND", "auto").strip().lower()
+    ANN_INDEX_ENABLED: bool = os.getenv("ANN_INDEX_ENABLED", "true").lower() in ("true", "1")
+    ANN_TOP_K: int = int(os.getenv("ANN_TOP_K", "50"))
+
     TEMPERATURE_BYPASS_THRESHOLD: float = 0.85
     STREAM_REPLAY_TOKENS_PER_SEC: float = 65.0
     SINGLEFLIGHT_TIMEOUT_SECONDS: float = 30.0

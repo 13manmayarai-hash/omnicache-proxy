@@ -1,13 +1,14 @@
 """
-OmniCache Model Context Protocol (MCP) Server.
-Standard JSON-RPC 2.0 stdio server providing semantic caching, vector search,
-knowledge storage, and cost telemetry tools to AI assistants and IDEs.
+OmniCache Model Context Protocol (MCP) Server & Engine.
+Standard JSON-RPC 2.0 server supporting both Stdio transport and authenticated HTTP/SSE transports.
+Provides semantic caching, vector search, knowledge storage, and cost telemetry tools to AI agents and IDEs.
 """
 
 import sys
 import os
 import json
 import time
+from typing import Dict, Any, Optional
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -85,8 +86,9 @@ TOOLS_METADATA = [
     }
 ]
 
-def handle_tool_call(name: str, arguments: dict) -> dict:
-    org_id = arguments.get("org_id", "default")
+
+def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default") -> dict:
+    org_id = arguments.get("org_id") or default_org_id
 
     if name == "omnicache_query":
         prompt = arguments.get("prompt", "")
@@ -145,7 +147,7 @@ def handle_tool_call(name: str, arguments: dict) -> dict:
             "usage": {"prompt_tokens": len(prompt.split()), "completion_tokens": len(answer.split())}
         }
         entry = cache_instance.store(payload, res_payload, org_id=org_id, tag=tag)
-        snapshot_store.persist_entry(entry)
+        snapshot_store.persist_entry(entry, synchronous=False)
 
         return {
             "content": [{
@@ -179,20 +181,75 @@ def handle_tool_call(name: str, arguments: dict) -> dict:
     elif name == "omnicache_invalidate":
         tag = arguments.get("tag")
         if tag:
-            removed = cache_instance.invalidate_tag(tag, org_id=arguments.get("org_id"))
-            snapshot_store.remove_by_tag(tag, org_id=arguments.get("org_id"))
+            removed = cache_instance.invalidate_tag(tag, org_id=org_id)
+            snapshot_store.remove_by_tag(tag, org_id=org_id)
             return {"content": [{"type": "text", "text": f"Invalidated {removed} entries with tag '{tag}'."}]}
-        elif arguments.get("org_id"):
-            removed = cache_instance.purge_tenant(arguments["org_id"])
-            snapshot_store.remove_by_org(arguments["org_id"])
-            return {"content": [{"type": "text", "text": f"Purged {removed} entries for tenant '{arguments['org_id']}'."}]}
-        return {"content": [{"type": "text", "text": "Specify either 'tag' or 'org_id' to invalidate."}]}
+        else:
+            removed = cache_instance.purge(org_id=org_id)
+            snapshot_store.purge_all(org_id=org_id)
+            return {"content": [{"type": "text", "text": f"Purged {removed} entries for tenant '{org_id}'."}]}
 
     elif name == "omnicache_stats":
-        stats = cache_instance.get_stats(arguments.get("org_id"))
+        stats = cache_instance.get_stats(org_id)
         return {"content": [{"type": "text", "text": json.dumps(stats, indent=2)}]}
 
     return {"error": {"code": -32601, "message": f"Unknown tool: {name}"}}
+
+
+def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") -> Dict[str, Any]:
+    """Processes a standard JSON-RPC 2.0 MCP message and returns the response dictionary."""
+    req_id = req.get("id")
+    method = req.get("method")
+    params = req.get("params", {})
+
+    if method == "initialize":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "serverInfo": {
+                    "name": "omnicache-mcp",
+                    "version": "2.4.0"
+                },
+                "capabilities": {
+                    "tools": {"listChanged": False},
+                    "resources": {"listChanged": False}
+                }
+            }
+        }
+    elif method in ("notifications/initialized", "initialized"):
+        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+    elif method == "ping":
+        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+    elif method == "tools/list":
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"tools": TOOLS_METADATA}
+        }
+    elif method == "tools/call":
+        tool_name = params.get("name", "")
+        tool_args = params.get("arguments", {})
+        tool_res = handle_tool_call(tool_name, tool_args, default_org_id=default_org_id)
+        if "error" in tool_res:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": tool_res["error"]
+            }
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": tool_res
+        }
+    else:
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {"code": -32601, "message": f"Method not found: {method}"}
+        }
+
 
 def run_stdio_server():
     """Main JSON-RPC stdio event loop."""
@@ -204,54 +261,10 @@ def run_stdio_server():
         except Exception:
             continue
 
-        req_id = req.get("id")
-        method = req.get("method")
-        params = req.get("params", {})
-
-        if method == "initialize":
-            res = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {
-                    "protocolVersion": "2024-11-05",
-                    "serverInfo": {
-                        "name": "omnicache-mcp",
-                        "version": "1.0.0"
-                    },
-                    "capabilities": {
-                        "tools": {"listChanged": False},
-                        "resources": {"listChanged": False}
-                    }
-                }
-            }
-        elif method == "notifications/initialized":
-            continue
-        elif method == "tools/list":
-            res = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": {"tools": TOOLS_METADATA}
-            }
-        elif method == "tools/call":
-            tool_name = params.get("name")
-            tool_args = params.get("arguments", {})
-            tool_res = handle_tool_call(tool_name, tool_args)
-            res = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "result": tool_res
-            }
-        elif method == "ping":
-            res = {"jsonrpc": "2.0", "id": req_id, "result": {}}
-        else:
-            res = {
-                "jsonrpc": "2.0",
-                "id": req_id,
-                "error": {"code": -32601, "message": f"Method not found: {method}"}
-            }
-
+        res = process_mcp_jsonrpc(req, default_org_id="default")
         sys.stdout.write(json.dumps(res) + "\n")
         sys.stdout.flush()
+
 
 if __name__ == "__main__":
     run_stdio_server()

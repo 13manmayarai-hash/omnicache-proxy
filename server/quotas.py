@@ -1,6 +1,6 @@
 """
 Virtual Key Management, Budget Quotas & Rate Limiting Engine.
-Supports local in-memory storage and distributed Redis backends with atomic spend and sliding-window rate limiting.
+Supports durable SQLite persistence and distributed Redis backends with atomic spend and sliding-window rate limiting.
 """
 
 import time
@@ -10,6 +10,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Tuple, List
 from core.config import config
+from persistence.snapshot_store import snapshot_store, SnapshotStore
 
 logger = logging.getLogger("omnicache.quotas")
 
@@ -82,7 +83,7 @@ class InMemoryQuotaStorage(BaseQuotaStorage):
             return True, 0
         now = time.time()
         window_start = now - 60.0
-        info["request_timestamps"] = [ts for ts in info["request_timestamps"] if ts > window_start]
+        info["request_timestamps"] = [ts for ts in info.get("request_timestamps", []) if ts > window_start]
         if len(info["request_timestamps"]) >= limit_rpm:
             return False, len(info["request_timestamps"])
         info["request_timestamps"].append(now)
@@ -95,6 +96,88 @@ class InMemoryQuotaStorage(BaseQuotaStorage):
     def record_spend(self, key_id: str, spend_usd: float):
         if key_id in self._keys:
             self._keys[key_id]["current_spend_usd"] += spend_usd
+
+    def get_all_keys(self) -> Dict[str, Dict[str, Any]]:
+        return self._keys
+
+
+class SQLiteQuotaStorage(BaseQuotaStorage):
+    """
+    Durable SQLite-backed quota storage with in-memory caching.
+    Ensures virtual key registrations and spend survive restarts.
+    """
+
+    def __init__(self, store: Optional[SnapshotStore] = None):
+        self.store = store or snapshot_store
+        self._keys: Dict[str, Dict[str, Any]] = {}
+        self._load_from_db()
+
+    def _load_from_db(self):
+        try:
+            persisted = self.store.load_virtual_keys()
+            self._keys.update(persisted)
+        except Exception as exc:
+            logger.warning(f"Failed to load keys from SQLite: {exc}")
+
+    def register_key(
+        self,
+        key_id: str,
+        team_name: str,
+        org_id: Optional[str] = None,
+        monthly_budget_usd: float = 100.0,
+        rate_limit_rpm: int = 120,
+        role: str = "tenant"
+    ) -> Dict[str, Any]:
+        now = time.time()
+        current_spend = 0.0
+        
+        info = {
+            "team_name": team_name,
+            "org_id": org_id or team_name,
+            "role": role,
+            "monthly_budget_usd": monthly_budget_usd,
+            "current_spend_usd": current_spend,
+            "rate_limit_rpm": rate_limit_rpm,
+            "request_timestamps": [],
+            "created_at": now
+        }
+        self._keys[key_id] = info
+        self.store.save_virtual_key(
+            key_id=key_id,
+            team_name=team_name,
+            org_id=info["org_id"],
+            role=role,
+            monthly_budget_usd=monthly_budget_usd,
+            rate_limit_rpm=rate_limit_rpm,
+            created_at=info["created_at"],
+            current_spend_usd=current_spend,
+            synchronous=True
+        )
+        return info
+
+    def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
+        return self._keys.get(key_id)
+
+    def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
+        info = self._keys.get(key_id)
+        if not info:
+            return True, 0
+        now = time.time()
+        window_start = now - 60.0
+        info["request_timestamps"] = [ts for ts in info.get("request_timestamps", []) if ts > window_start]
+        if len(info["request_timestamps"]) >= limit_rpm:
+            return False, len(info["request_timestamps"])
+        info["request_timestamps"].append(now)
+        return True, len(info["request_timestamps"])
+
+    def get_spend(self, key_id: str) -> float:
+        info = self._keys.get(key_id)
+        return float(info.get("current_spend_usd", 0.0)) if info else 0.0
+
+    def record_spend(self, key_id: str, spend_usd: float):
+        if key_id in self._keys:
+            self._keys[key_id]["current_spend_usd"] += spend_usd
+            self.store.record_virtual_key_spend(key_id, spend_usd, synchronous=False)
 
     def get_all_keys(self) -> Dict[str, Dict[str, Any]]:
         return self._keys
@@ -244,9 +327,9 @@ class VirtualKeyManager:
             try:
                 return RedisQuotaStorage(redis_url=redis_url, prefix=prefix)
             except Exception as exc:
-                print(f"⚠️ [OmniCache] Failed to connect to Redis quota storage: {exc}. Using InMemory.")
-                return InMemoryQuotaStorage()
-        return InMemoryQuotaStorage()
+                print(f"⚠️ [OmniCache] Failed to connect to Redis quota storage: {exc}. Using SQLite durable storage.")
+                return SQLiteQuotaStorage()
+        return SQLiteQuotaStorage()
 
     def _seed_default_keys(self):
         # Default workspace tenant key

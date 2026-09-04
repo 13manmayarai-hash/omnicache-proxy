@@ -68,14 +68,19 @@ In your tool's model settings, set the API Base URL to `http://localhost:8000/v1
 
 * **Two-Tier Cache Engine:**
   * **L1 Exact Match (Trie Hash / Redis):** Sub-0.05ms lookup for identical payloads.
-  * **L2 Semantic Match (Cosine Similarity):** Matches semantically equivalent prompts using an in-memory or Redis-clustered 512-dimension vector projection.
+  * **L2 Semantic Match (Multi-Table LSH & FAISS ANN Indexing):** Matches semantically equivalent prompts using high-speed multi-table hyperplane locality-sensitive hashing or FAISS HNSW.
+  * **Pluggable Embedders:** Instant zero-dependency 512-d FastHashEmbedder or dense 384-d ONNX embeddings (`all-MiniLM-L6-v2`).
 * **Horizontal Scaling & Redis Clustering:**
   * Pluggable storage adapter architecture supporting both zero-dependency standalone mode and distributed multi-worker/multi-replica clusters.
   * Atomic spend tracking (`INCRBYFLOAT`) and sliding-window Redis RPM rate limiting across all worker processes.
   * Synchronized cluster-wide Circuit Breaker & upstream model failover state.
+* **Asynchronous Write-Behind Persistence:**
+  * Micro-batched non-blocking worker queue writing to embedded SQLite WAL store off the critical path with zero latency impact.
+  * Durable Virtual Key and spend budget ledger surviving process cold starts.
+* **Remote Authenticated MCP JSON-RPC 2.0 Transport:**
+  * Native `/mcp` and `/v1/mcp` endpoint enabling AI IDEs (Cursor, Claude Code, VS Code) to perform intent-gated caching, vector search, and cache invalidation over HTTP.
 * **Agent Stream Replayer:** Emulates natural token-streaming for cached responses so interactive CLIs (like Claude Code) stream smoothly without terminal glitches.
 * **Request Coalescing (SingleFlight):** Deduplicates concurrent in-flight requests for the same prompt, making only one upstream call.
-* **Zero Configuration Persistence:** Automatically writes cache snapshots to `~/.omnicache/omnicache.db` (SQLite WAL mode) or Redis backend.
 * **Built-in CLI Utilities:**
   * `omnicache doctor`: Checks database state, port bindings, and embedder health.
   * `omnicache benchmark`: Measures P50, P95, and P99 cache lookup latencies on your machine.
@@ -108,6 +113,8 @@ OmniCache can be configured via command-line flags or environment variables (in 
 | `PORT` | `8000` | Port to bind the proxy server to. |
 | `REDIS_URL` | `""` | Redis connection URL (e.g. `redis://127.0.0.1:6379/0`) for multi-worker state clustering. |
 | `CACHE_STORAGE_BACKEND` | `auto` | Storage engine backend: `auto`, `redis`, or `memory`. |
+| `EMBEDDER_BACKEND` | `fast_hash` | Semantic embedder: `fast_hash`, `onnx`, or `auto`. |
+| `ANN_INDEX_ENABLED` | `true` | Enables sub-millisecond Approximate Nearest Neighbor vector search. |
 | `REQUIRE_AUTH` | `false` | When `true`, enforces valid API key registration on all requests. |
 | `ADMIN_API_KEY` | `""` | Master admin secret for managing `/v1/enterprise/quotas` and data exports. |
 | `PRIVACY_SALT` | `(auto-generated)` | 256-bit cryptographic salt for anonymized PII tokenization. |

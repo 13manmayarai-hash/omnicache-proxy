@@ -1,17 +1,35 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: omnicache-redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
   omnicache:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: omnicache-proxy
     restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
     environment:
       - OMNICACHE_HOST=0.0.0.0
       - OMNICACHE_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
       - REQUIRE_AUTH=true
       - ADMIN_API_KEY=change-this-to-a-secure-random-admin-key
       - SIMILARITY_THRESHOLD=0.92
@@ -29,3 +47,4 @@ services:
 
 volumes:
   omnicache_data:
+  redis_data:

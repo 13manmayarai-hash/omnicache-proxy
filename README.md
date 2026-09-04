@@ -67,11 +67,15 @@ In your tool's model settings, set the API Base URL to `http://localhost:8000/v1
 ## Key Features
 
 * **Two-Tier Cache Engine:**
-  * **L1 Exact Match (Trie Hash):** Sub-0.05ms lookup for identical payloads.
-  * **L2 Semantic Match (Cosine Similarity):** Matches semantically equivalent prompts using an in-memory 512-dimension vector projection.
+  * **L1 Exact Match (Trie Hash / Redis):** Sub-0.05ms lookup for identical payloads.
+  * **L2 Semantic Match (Cosine Similarity):** Matches semantically equivalent prompts using an in-memory or Redis-clustered 512-dimension vector projection.
+* **Horizontal Scaling & Redis Clustering:**
+  * Pluggable storage adapter architecture supporting both zero-dependency standalone mode and distributed multi-worker/multi-replica clusters.
+  * Atomic spend tracking (`INCRBYFLOAT`) and sliding-window Redis RPM rate limiting across all worker processes.
+  * Synchronized cluster-wide Circuit Breaker & upstream model failover state.
 * **Agent Stream Replayer:** Emulates natural token-streaming for cached responses so interactive CLIs (like Claude Code) stream smoothly without terminal glitches.
 * **Request Coalescing (SingleFlight):** Deduplicates concurrent in-flight requests for the same prompt, making only one upstream call.
-* **Zero Configuration Persistence:** Automatically writes cache snapshots to `~/.omnicache/omnicache.db` (SQLite) so cache state survives restarts.
+* **Zero Configuration Persistence:** Automatically writes cache snapshots to `~/.omnicache/omnicache.db` (SQLite WAL mode) or Redis backend.
 * **Built-in CLI Utilities:**
   * `omnicache doctor`: Checks database state, port bindings, and embedder health.
   * `omnicache benchmark`: Measures P50, P95, and P99 cache lookup latencies on your machine.
@@ -83,26 +87,13 @@ In your tool's model settings, set the API Base URL to `http://localhost:8000/v1
 
 ---
 
-## CLI Reference
+## Horizontal Multi-Worker Deployment
+
+To run OmniCache with multiple worker processes or in a clustered container environment, simply provide `REDIS_URL`:
 
 ```bash
-# Start server with clean terminal output
-omnicache
-
-# Start on custom port and host
-omnicache --host 0.0.0.0 --port 9000
-
-# Run with verbose HTTP access logs
-omnicache --verbose
-
-# Run system diagnostic checks
-omnicache doctor
-
-# Run local micro-benchmarks (1,000 queries)
-omnicache benchmark
-
-# View current token and cost savings
-omnicache stats
+# Multi-worker deployment with Redis distributed state
+REDIS_URL="redis://127.0.0.1:6379/0" uvicorn server.gateway:app --host 127.0.0.1 --port 8000 --workers 4
 ```
 
 ---
@@ -115,6 +106,8 @@ OmniCache can be configured via command-line flags or environment variables (in 
 | :--- | :--- | :--- |
 | `HOST` | `127.0.0.1` | Host interface to listen on (local-first by default). |
 | `PORT` | `8000` | Port to bind the proxy server to. |
+| `REDIS_URL` | `""` | Redis connection URL (e.g. `redis://127.0.0.1:6379/0`) for multi-worker state clustering. |
+| `CACHE_STORAGE_BACKEND` | `auto` | Storage engine backend: `auto`, `redis`, or `memory`. |
 | `REQUIRE_AUTH` | `false` | When `true`, enforces valid API key registration on all requests. |
 | `ADMIN_API_KEY` | `""` | Master admin secret for managing `/v1/enterprise/quotas` and data exports. |
 | `PRIVACY_SALT` | `(auto-generated)` | 256-bit cryptographic salt for anonymized PII tokenization. |

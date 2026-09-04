@@ -899,7 +899,8 @@ async def handle_stats(request: Request) -> Response:
             "circuit_breaker": failover_engine.circuit_breaker.get_status()
         },
         "system_info": {
-            "version": "2.2.1",
+            "version": "2.3.0",
+            "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal",
             "host_binding": config.HOST,
             "port": config.PORT
@@ -1002,7 +1003,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": "2.2.1",
+        "version": "2.3.0",
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)

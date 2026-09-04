@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from .config import config
 from .embeddings import FastSemanticEmbedder
 from .hasher import RequestHasher
+from .storage import BaseCacheStorage, InMemoryCacheStorage, RedisCacheStorage
 
 def get_model_family(model: str) -> str:
     """
@@ -84,6 +85,55 @@ class CacheEntry:
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "key": self.key,
+            "org_id": self.org_id,
+            "model": self.model,
+            "model_family": self.model_family,
+            "user_prompt": self.user_prompt,
+            "system_prompt": self.system_prompt,
+            "schema_hash": self.schema_hash,
+            "tools_hash": self.tools_hash,
+            "vector": self.vector,
+            "response_payload": self.response_payload,
+            "tag": self.tag,
+            "is_stream": self.is_stream,
+            "stream_chunks": self.stream_chunks,
+            "created_at": self.created_at,
+            "last_accessed_at": self.last_accessed_at,
+            "ttl_seconds": self.ttl_seconds,
+            "hit_count": self.hit_count,
+            "is_exact_tokens": self.is_exact_tokens,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "CacheEntry":
+        entry = cls(
+            key=d.get("key", ""),
+            org_id=d.get("org_id", "default"),
+            model=d.get("model", ""),
+            user_prompt=d.get("user_prompt", ""),
+            system_prompt=d.get("system_prompt", ""),
+            schema_hash=d.get("schema_hash", "no_schema"),
+            tools_hash=d.get("tools_hash", "no_tools"),
+            vector=d.get("vector", []),
+            response_payload=d.get("response_payload", {}),
+            tag=d.get("tag", None),
+            is_stream=d.get("is_stream", False),
+            stream_chunks=d.get("stream_chunks", []),
+            ttl_seconds=d.get("ttl_seconds", 604800),
+            is_exact_tokens=d.get("is_exact_tokens", True),
+            prompt_tokens=d.get("prompt_tokens", 0),
+            completion_tokens=d.get("completion_tokens", 0)
+        )
+        entry.created_at = d.get("created_at", entry.created_at)
+        entry.last_accessed_at = d.get("last_accessed_at", entry.last_accessed_at)
+        entry.hit_count = d.get("hit_count", 0)
+        return entry
+
     def is_expired(self) -> bool:
         return (time.time() - self.created_at) > self.ttl_seconds
 
@@ -100,16 +150,41 @@ class CacheEntry:
 
 
 class DualTierCache:
-    def __init__(self):
-        # L1 Exact Cache: key -> CacheEntry
-        self.l1_exact_cache: Dict[str, CacheEntry] = {}
-        # L2 Semantic Cache: org_id -> List[CacheEntry]
-        self.l2_semantic_cache: Dict[str, List[CacheEntry]] = {}
+    def __init__(self, storage: Optional[BaseCacheStorage] = None):
+        if storage is not None:
+            self.storage = storage
+        else:
+            self.storage = self._init_storage()
+
         # Cumulative Telemetry
         self.total_exact_hits = 0
         self.total_semantic_hits = 0
         self.total_misses = 0
         self.total_bypasses = 0
+
+    @property
+    def l1_exact_cache(self) -> Dict[str, CacheEntry]:
+        if isinstance(self.storage, InMemoryCacheStorage):
+            return self.storage.l1_exact_cache
+        return {}
+
+    @property
+    def l2_semantic_cache(self) -> Dict[str, List[CacheEntry]]:
+        if isinstance(self.storage, InMemoryCacheStorage):
+            return self.storage.l2_semantic_cache
+        return {}
+
+    def _init_storage(self) -> BaseCacheStorage:
+        backend = getattr(config, "CACHE_STORAGE_BACKEND", "auto")
+        redis_url = getattr(config, "REDIS_URL", "")
+        prefix = getattr(config, "REDIS_KEY_PREFIX", "omnicache")
+        if backend == "redis" or (backend == "auto" and redis_url):
+            try:
+                return RedisCacheStorage(redis_url=redis_url, prefix=prefix, entry_cls=CacheEntry)
+            except Exception as exc:
+                print(f"⚠️ [OmniCache] Failed to initialize Redis storage: {exc}. Using InMemory.")
+                return InMemoryCacheStorage()
+        return InMemoryCacheStorage()
 
     def classify_intent(self, prompt: str, schema_hash: str, tools_hash: str, temperature: float) -> Tuple[str, float, str]:
         """
@@ -158,15 +233,16 @@ class DualTierCache:
         
         # 1. Check L1 Exact Deterministic Cache
         exact_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
-        if exact_key in self.l1_exact_cache:
-            entry = self.l1_exact_cache[exact_key]
+        entry = self.storage.get_exact(exact_key)
+        if entry is not None:
             if not entry.is_expired():
                 entry.touch()
+                self.storage.set_exact(exact_key, entry, ttl_seconds=entry.ttl_remaining())
                 self.total_exact_hits += 1
                 reason = f"HIT_EXACT_L1: Deterministic SHA-256 hash match on payload for model '{entry.model}'"
                 return "HIT_EXACT", entry, 1.0, reason
             else:
-                del self.l1_exact_cache[exact_key]
+                self.storage.delete_exact(exact_key)
 
         # 2. Safety Gate: Multi-turn, Agent Tools, Schema, Multimodal
         if is_multimodal:
@@ -198,7 +274,7 @@ class DualTierCache:
             return "BYPASS", None, 0.0, intent_reason
 
         # 3. Check L2 Semantic Cache (Strictly scoped to org_id and model_family)
-        org_entries = self.l2_semantic_cache.get(org_id, [])
+        org_entries = self.storage.get_semantic_entries(org_id)
         if not org_entries:
             self.total_misses += 1
             return "MISS", None, 0.0, f"MISS_EMPTY_CACHE: No cached semantic entries for tenant '{org_id}'"
@@ -236,10 +312,12 @@ class DualTierCache:
                 best_entry = entry
 
         # Update pruned active entries for tenant
-        self.l2_semantic_cache[org_id] = active_entries
+        if len(active_entries) != len(org_entries):
+            self.storage.update_semantic_entries(org_id, active_entries)
 
         if best_entry and best_score >= effective_threshold:
             best_entry.touch()
+            self.storage.add_semantic_entry(org_id, best_entry, ttl_seconds=best_entry.ttl_remaining(), max_entries=config.MAX_CACHE_ENTRIES_PER_TENANT)
             self.total_semantic_hits += 1
             reason = f"HIT_SEMANTIC_L2: Semantic similarity {best_score:.4f} >= threshold {effective_threshold:.4f} (Family: '{query_family}')"
             return "HIT_SEMANTIC", best_entry, best_score, reason
@@ -302,66 +380,27 @@ class DualTierCache:
         )
 
         # Store in L1 Exact Cache
-        self.l1_exact_cache[exact_key] = entry
+        self.storage.set_exact(exact_key, entry, ttl_seconds=ttl_seconds)
 
         # Store in L2 Semantic Cache if single-turn conversational
         if vector and is_single_turn_text:
-            if org_id not in self.l2_semantic_cache:
-                self.l2_semantic_cache[org_id] = []
-            
-            org_list = self.l2_semantic_cache[org_id]
-            org_list.append(entry)
-
-            # Enforce LRU eviction if tenant exceeds quota
-            if len(org_list) > config.MAX_CACHE_ENTRIES_PER_TENANT:
-                org_list.sort(key=lambda x: x.last_accessed_at)
-                evict_count = max(1, int(len(org_list) * 0.1))
-                self.l2_semantic_cache[org_id] = org_list[evict_count:]
+            self.storage.add_semantic_entry(org_id, entry, ttl_seconds=ttl_seconds, max_entries=config.MAX_CACHE_ENTRIES_PER_TENANT)
 
         return entry
 
     def purge_tenant(self, org_id: str) -> int:
-        removed = 0
-        l1_keys = [k for k, v in self.l1_exact_cache.items() if v.org_id == org_id]
-        for k in l1_keys:
-            del self.l1_exact_cache[k]
-            removed += 1
-            
-        if org_id in self.l2_semantic_cache:
-            removed += len(self.l2_semantic_cache[org_id])
-            del self.l2_semantic_cache[org_id]
-            
-        return removed
+        return self.storage.purge(org_id=org_id)
 
     def purge(self, org_id: Optional[str] = None) -> int:
-        if org_id:
-            return self.purge_tenant(org_id)
-        removed = len(self.l1_exact_cache) + sum(len(v) for v in self.l2_semantic_cache.values())
-        self.clear()
-        return removed
+        return self.storage.purge(org_id=org_id)
 
     def invalidate_tag(self, tag: str, org_id: Optional[str] = None) -> int:
-        removed = 0
-        l1_keys = [k for k, v in self.l1_exact_cache.items() if v.tag == tag and (org_id is None or v.org_id == org_id)]
-        for k in l1_keys:
-            del self.l1_exact_cache[k]
-            removed += 1
-
-        for org, entries in list(self.l2_semantic_cache.items()):
-            if org_id is not None and org != org_id:
-                continue
-            before_len = len(entries)
-            self.l2_semantic_cache[org] = [e for e in entries if e.tag != tag]
-            removed += (before_len - len(self.l2_semantic_cache[org]))
-
-        return removed
+        return self.storage.invalidate_tag(tag, org_id=org_id)
 
     def get_stats(self, org_id: Optional[str] = None) -> Dict[str, Any]:
         total_requests = self.total_exact_hits + self.total_semantic_hits + self.total_misses + self.total_bypasses
         hit_rate = (self.total_exact_hits + self.total_semantic_hits) / total_requests if total_requests > 0 else 0.0
-        
-        active_l1 = len(self.l1_exact_cache) if org_id is None else sum(1 for v in self.l1_exact_cache.values() if v.org_id == org_id)
-        active_l2 = sum(len(v) for v in self.l2_semantic_cache.values()) if org_id is None else len(self.l2_semantic_cache.get(org_id, []))
+        active_l1, active_l2 = self.storage.get_stats_counts(org_id=org_id)
 
         return {
             "total_requests": total_requests,
@@ -375,8 +414,7 @@ class DualTierCache:
         }
 
     def clear(self):
-        self.l1_exact_cache.clear()
-        self.l2_semantic_cache.clear()
+        self.storage.clear()
         self.total_exact_hits = 0
         self.total_semantic_hits = 0
         self.total_misses = 0

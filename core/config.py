@@ -109,6 +109,11 @@ class ProxyConfig:
     SEMANTIC_CACHE_TTL_SECONDS: int = int(os.getenv("SEMANTIC_CACHE_TTL", "604800"))
     MAX_CACHE_ENTRIES_PER_TENANT: int = int(os.getenv("MAX_CACHE_ENTRIES", "10000"))
     
+    # Distributed State & Redis Configuration
+    REDIS_URL: str = os.getenv("REDIS_URL", os.getenv("OMNICACHE_REDIS_URL", "")).strip()
+    CACHE_STORAGE_BACKEND: str = os.getenv("CACHE_STORAGE_BACKEND", "auto").strip().lower()
+    REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "omnicache").strip()
+
     TEMPERATURE_BYPASS_THRESHOLD: float = 0.85
     STREAM_REPLAY_TOKENS_PER_SEC: float = 65.0
     SINGLEFLIGHT_TIMEOUT_SECONDS: float = 30.0

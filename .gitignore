@@ -12,5 +12,7 @@ dist/
 .eggs/
 *.db
 *.sqlite3
+*.rdb
 .env
 .DS_Store
+

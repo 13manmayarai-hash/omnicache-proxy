@@ -98,7 +98,7 @@ def handle_tool_call(name: str, arguments: dict) -> dict:
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.0
         }
-        status, entry, sim = cache_instance.lookup(payload, org_id=org_id, custom_threshold=threshold)
+        status, entry, sim, reason = cache_instance.lookup(payload, org_id=org_id, custom_threshold=threshold)
 
         if entry and status in ("HIT_EXACT", "HIT_SEMANTIC"):
             content = entry.response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")

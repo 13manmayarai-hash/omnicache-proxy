@@ -1,6 +1,6 @@
 """
-L1/L2 Dual-Tier Caching Engine with Intent Gating, Multi-Tenancy Isolation,
-Tag-based Invalidation, and LRU Eviction.
+L1/L2 Dual-Tier Caching Engine with Intent Gating, Strict Model-Family Matching,
+Multi-Tenancy Isolation, Explainable Decision Reasons, and Proactive Freshness Validation.
 """
 
 import time
@@ -9,6 +9,39 @@ from typing import Dict, Any, List, Optional, Tuple
 from .config import config
 from .embeddings import FastSemanticEmbedder
 from .hasher import RequestHasher
+
+def get_model_family(model: str) -> str:
+    """
+    Maps arbitrary model identifiers into strict vendor and architectural families.
+    Guarantees zero cross-family semantic contamination.
+    """
+    m = model.lower().strip()
+    if "claude" in m:
+        if "sonnet" in m:
+            return "anthropic-claude-sonnet"
+        elif "haiku" in m:
+            return "anthropic-claude-haiku"
+        elif "opus" in m:
+            return "anthropic-claude-opus"
+        return "anthropic-claude"
+    elif "gpt-4o-mini" in m or "gpt-3.5" in m:
+        return "openai-gpt4o-mini"
+    elif "gpt-4o" in m or "gpt-4" in m:
+        return "openai-gpt4o"
+    elif "o1" in m or "o3" in m:
+        return "openai-reasoning"
+    elif "gemini" in m:
+        if "flash" in m:
+            return "google-gemini-flash"
+        elif "pro" in m:
+            return "google-gemini-pro"
+        return "google-gemini"
+    elif "llama" in m:
+        return "meta-llama"
+    elif "mistral" in m or "mixtral" in m:
+        return "mistral-ai"
+    return f"generic-{m.split(':')[0].split('/')[0]}"
+
 
 class CacheEntry:
     def __init__(
@@ -25,11 +58,15 @@ class CacheEntry:
         tag: Optional[str] = None,
         is_stream: bool = False,
         stream_chunks: Optional[List[Dict[str, Any]]] = None,
-        ttl_seconds: int = 604800
+        ttl_seconds: int = 604800,
+        is_exact_tokens: bool = True,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0
     ):
         self.key = key
         self.org_id = org_id
         self.model = model
+        self.model_family = get_model_family(model)
         self.user_prompt = user_prompt
         self.system_prompt = system_prompt
         self.schema_hash = schema_hash
@@ -43,9 +80,19 @@ class CacheEntry:
         self.last_accessed_at = time.time()
         self.ttl_seconds = ttl_seconds
         self.hit_count = 0
+        self.is_exact_tokens = is_exact_tokens
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
 
     def is_expired(self) -> bool:
         return (time.time() - self.created_at) > self.ttl_seconds
+
+    def ttl_remaining(self) -> int:
+        remaining = self.ttl_seconds - (time.time() - self.created_at)
+        return max(0, int(remaining))
+
+    def age_seconds(self) -> float:
+        return max(0.0, time.time() - self.created_at)
 
     def touch(self):
         self.last_accessed_at = time.time()
@@ -64,105 +111,148 @@ class DualTierCache:
         self.total_misses = 0
         self.total_bypasses = 0
 
-    def classify_intent(self, prompt: str, schema_hash: str, tools_hash: str, temperature: float) -> Tuple[str, float]:
+    def classify_intent(self, prompt: str, schema_hash: str, tools_hash: str, temperature: float) -> Tuple[str, float, str]:
         """
-        Determines the intent and the appropriate dynamic similarity threshold.
-        Returns (intent_type, required_threshold).
+        Determines the intent, dynamic similarity threshold, and gating explanation.
         """
-        # If strict structured JSON schema or tools are requested
-        if schema_hash != "no_schema" or tools_hash != "no_tools":
-            return "structured_schema", 1.0  # Exact match only
+        if schema_hash != "no_schema":
+            return "structured_schema", 1.01, "BYPASS_STRUCTURED_SCHEMA: Strict JSON schema requested; semantic fuzzy matching disabled"
 
-        # High temperature means user specifically wants randomness/creativity
+        if tools_hash != "no_tools":
+            return "agent_tools", 1.01, "BYPASS_AGENT_TOOLS: Agent tools defined; semantic fuzzy matching disabled to protect tool call correctness"
+
         if temperature > config.TEMPERATURE_BYPASS_THRESHOLD:
-            return "creative_bypass", 1.01  # Cannot hit semantic cache
+            return "creative_bypass", 1.01, f"BYPASS_HIGH_TEMPERATURE: Temperature {temperature:.2f} > {config.TEMPERATURE_BYPASS_THRESHOLD:.2f} requires non-deterministic execution"
 
-        # Code detection heuristics
         code_patterns = [r"```", r"def\s+\w+\(", r"function\s+\w+\(", r"class\s+\w+:", r"SELECT\s+.+\s+FROM", r"import\s+\w+"]
         for pat in code_patterns:
             if re.search(pat, prompt, re.IGNORECASE):
-                return "code_generation", 0.98
+                return "code_generation", 0.98, "INTENT_CODE_GENERATION: Strict 0.98 threshold applied for syntax fidelity"
 
-        # Math / calculation detection
         if re.search(r"(\d+\s*[\+\-\*\/\^]\s*\d+|\bcalculate\b|\bsolve\b|\bevaluate\b)", prompt, re.IGNORECASE):
-            return "math_calculation", 0.98
+            return "math_calculation", 0.98, "INTENT_MATH_CALCULATION: Strict 0.98 threshold applied for arithmetic accuracy"
 
-        # Default conversational / FAQ QA
-        return "conversational_qa", config.DEFAULT_SIMILARITY_THRESHOLD
+        return "conversational_qa", config.DEFAULT_SIMILARITY_THRESHOLD, f"INTENT_CONVERSATIONAL_QA: Standard threshold {config.DEFAULT_SIMILARITY_THRESHOLD:.2f} applied"
 
     def lookup(
         self,
         payload: Dict[str, Any],
         org_id: str = "default",
         custom_threshold: Optional[float] = None
-    ) -> Tuple[str, Optional[CacheEntry], float]:
+    ) -> Tuple[str, Optional[CacheEntry], float, str]:
         """
-        Performs dual-tier lookup.
-        Returns: (status: 'HIT_EXACT'|'HIT_SEMANTIC'|'MISS'|'BYPASS', entry, similarity_score)
+        Performs dual-tier lookup with explainability reasons.
+        
+        Returns:
+            Tuple[status: 'HIT_EXACT'|'HIT_SEMANTIC'|'MISS'|'BYPASS', entry, similarity_score, decision_reason]
         """
         messages = payload.get("messages", [])
         system_prompt, user_prompt, is_multimodal = RequestHasher.extract_system_and_user_prompts(messages)
         temperature = float(payload.get("temperature", 0.0))
+        model = payload.get("model", "default").strip()
+        query_family = get_model_family(model)
         response_format = payload.get("response_format", None)
         tools = payload.get("tools", None)
         schema_hash = RequestHasher.compute_schema_hash(response_format)
         tools_hash = RequestHasher.compute_tools_hash(tools)
         
-        # 1. Check L1 Exact Cache
+        # 1. Check L1 Exact Deterministic Cache
         exact_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
         if exact_key in self.l1_exact_cache:
             entry = self.l1_exact_cache[exact_key]
             if not entry.is_expired():
                 entry.touch()
                 self.total_exact_hits += 1
-                return "HIT_EXACT", entry, 1.0
+                reason = f"HIT_EXACT_L1: Deterministic SHA-256 hash match on payload for model '{entry.model}'"
+                return "HIT_EXACT", entry, 1.0, reason
             else:
                 del self.l1_exact_cache[exact_key]
 
-        # If multimodal, multi-turn conversation, or tool-using agent request, require exact L1 match to prevent hallucinations
-        if is_multimodal or not user_prompt.strip() or len(messages) > 1 or tools:
+        # 2. Safety Gate: Multi-turn, Agent Tools, Schema, Multimodal
+        if is_multimodal:
+            self.total_bypasses += 1
+            return "BYPASS", None, 0.0, "BYPASS_MULTIMODAL: Vision/multimodal payload requires deterministic L1 exact match"
+
+        if tools or tools_hash != "no_tools":
+            self.total_bypasses += 1
+            return "BYPASS", None, 0.0, "BYPASS_AGENT_TOOLS: Tool/function execution present; fuzzy semantic matching bypassed"
+
+        if schema_hash != "no_schema":
+            self.total_bypasses += 1
+            return "BYPASS", None, 0.0, "BYPASS_STRUCTURED_SCHEMA: Response format schema present; fuzzy semantic matching bypassed"
+
+        if len(messages) > 1:
+            self.total_bypasses += 1
+            return "BYPASS", None, 0.0, f"BYPASS_MULTITURN_CONVERSATION: Multi-turn context ({len(messages)} messages) restricted to L1 exact cache"
+
+        if not user_prompt.strip():
             self.total_misses += 1
-            return "MISS", None, 0.0
+            return "MISS", None, 0.0, "MISS_EMPTY_PROMPT: No substantive text prompt found in payload"
 
         # Intent Classification & Dynamic Thresholding
-        intent, dynamic_threshold = self.classify_intent(user_prompt, schema_hash, tools_hash, temperature)
+        intent, dynamic_threshold, intent_reason = self.classify_intent(user_prompt, schema_hash, tools_hash, temperature)
         effective_threshold = custom_threshold if custom_threshold is not None else dynamic_threshold
         
         if effective_threshold > 1.0:
             self.total_bypasses += 1
-            return "BYPASS", None, 0.0
+            return "BYPASS", None, 0.0, intent_reason
 
-        # 2. Check L2 Semantic Cache (Strictly scoped to org_id)
+        # 3. Check L2 Semantic Cache (Strictly scoped to org_id and model_family)
         org_entries = self.l2_semantic_cache.get(org_id, [])
         if not org_entries:
             self.total_misses += 1
-            return "MISS", None, 0.0
+            return "MISS", None, 0.0, f"MISS_EMPTY_CACHE: No cached semantic entries for tenant '{org_id}'"
 
         query_vector = FastSemanticEmbedder.embed(user_prompt)
         best_score = 0.0
-        best_entry = None
+        best_entry: Optional[CacheEntry] = None
+        candidates_checked = 0
+        family_mismatches = 0
+        system_mismatches = 0
 
-        # Filter and compute cosine similarity
+        # Filter, evaluate TTL freshness, and compute cosine similarity
+        active_entries: List[CacheEntry] = []
         for entry in org_entries:
             if entry.is_expired():
                 continue
-                
-            # Must match system prompt, target schema, tools signature, and model family
-            if entry.system_prompt != system_prompt or entry.schema_hash != schema_hash or entry.tools_hash != tools_hash:
+            active_entries.append(entry)
+
+            # Strict Model Family Match Guardrail
+            if entry.model_family != query_family:
+                family_mismatches += 1
                 continue
 
+            # Strict System Prompt, Schema, and Tools Match Guardrail
+            if entry.system_prompt != system_prompt:
+                system_mismatches += 1
+                continue
+            if entry.schema_hash != schema_hash or entry.tools_hash != tools_hash:
+                continue
+
+            candidates_checked += 1
             similarity = FastSemanticEmbedder.cosine_similarity(query_vector, entry.vector)
             if similarity > best_score:
                 best_score = similarity
                 best_entry = entry
 
+        # Update pruned active entries for tenant
+        self.l2_semantic_cache[org_id] = active_entries
+
         if best_entry and best_score >= effective_threshold:
             best_entry.touch()
             self.total_semantic_hits += 1
-            return "HIT_SEMANTIC", best_entry, best_score
+            reason = f"HIT_SEMANTIC_L2: Semantic similarity {best_score:.4f} >= threshold {effective_threshold:.4f} (Family: '{query_family}')"
+            return "HIT_SEMANTIC", best_entry, best_score, reason
 
         self.total_misses += 1
-        return "MISS", None, best_score
+        if candidates_checked == 0 and family_mismatches > 0:
+            reason = f"MISS_MODEL_FAMILY_MISMATCH: {family_mismatches} candidates rejected due to model family divergence from '{query_family}'"
+        elif candidates_checked == 0 and system_mismatches > 0:
+            reason = f"MISS_SYSTEM_PROMPT_MISMATCH: {system_mismatches} candidates rejected due to differing system instructions"
+        else:
+            reason = f"MISS_BELOW_THRESHOLD: Highest similarity {best_score:.4f} did not meet required threshold {effective_threshold:.4f}"
+
+        return "MISS", None, best_score, reason
 
     def store(
         self,
@@ -171,10 +261,13 @@ class DualTierCache:
         org_id: str = "default",
         tag: Optional[str] = None,
         custom_ttl: Optional[int] = None,
-        stream_chunks: Optional[List[Dict[str, Any]]] = None
+        stream_chunks: Optional[List[Dict[str, Any]]] = None,
+        is_exact_tokens: bool = True,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0
     ) -> CacheEntry:
         """
-        Stores an LLM completion into both L1 and L2 caches.
+        Stores an LLM completion into both L1 and L2 caches with token accounting metadata.
         """
         messages = payload.get("messages", [])
         system_prompt, user_prompt, is_multimodal = RequestHasher.extract_system_and_user_prompts(messages)
@@ -185,7 +278,8 @@ class DualTierCache:
         tools_hash = RequestHasher.compute_tools_hash(tools)
         
         exact_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
-        vector = FastSemanticEmbedder.embed(user_prompt) if (user_prompt and not is_multimodal) else []
+        is_single_turn_text = (len(messages) <= 1 and user_prompt and not is_multimodal and not tools and schema_hash == "no_schema")
+        vector = FastSemanticEmbedder.embed(user_prompt) if is_single_turn_text else []
         ttl_seconds = custom_ttl if custom_ttl is not None else config.SEMANTIC_CACHE_TTL_SECONDS
 
         entry = CacheEntry(
@@ -201,14 +295,17 @@ class DualTierCache:
             tag=tag,
             is_stream=bool(payload.get("stream", False)),
             stream_chunks=stream_chunks or [],
-            ttl_seconds=ttl_seconds
+            ttl_seconds=ttl_seconds,
+            is_exact_tokens=is_exact_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens
         )
 
         # Store in L1 Exact Cache
         self.l1_exact_cache[exact_key] = entry
 
-        # Store in L2 Semantic Cache if vector is valid
-        if vector and not is_multimodal:
+        # Store in L2 Semantic Cache if single-turn conversational
+        if vector and is_single_turn_text:
             if org_id not in self.l2_semantic_cache:
                 self.l2_semantic_cache[org_id] = []
             
@@ -224,15 +321,12 @@ class DualTierCache:
         return entry
 
     def purge_tenant(self, org_id: str) -> int:
-        """Purges all cache entries belonging to a tenant."""
         removed = 0
-        # Remove from L1
-        l1_keys_to_del = [k for k, v in self.l1_exact_cache.items() if v.org_id == org_id]
-        for k in l1_keys_to_del:
+        l1_keys = [k for k, v in self.l1_exact_cache.items() if v.org_id == org_id]
+        for k in l1_keys:
             del self.l1_exact_cache[k]
             removed += 1
             
-        # Remove from L2
         if org_id in self.l2_semantic_cache:
             removed += len(self.l2_semantic_cache[org_id])
             del self.l2_semantic_cache[org_id]
@@ -240,7 +334,6 @@ class DualTierCache:
         return removed
 
     def purge(self, org_id: Optional[str] = None) -> int:
-        """Purges cache entries for a tenant or globally."""
         if org_id:
             return self.purge_tenant(org_id)
         removed = len(self.l1_exact_cache) + sum(len(v) for v in self.l2_semantic_cache.values())
@@ -248,7 +341,6 @@ class DualTierCache:
         return removed
 
     def invalidate_tag(self, tag: str, org_id: Optional[str] = None) -> int:
-        """Invalidates all cache entries with a specific tag."""
         removed = 0
         l1_keys = [k for k, v in self.l1_exact_cache.items() if v.tag == tag and (org_id is None or v.org_id == org_id)]
         for k in l1_keys:
@@ -265,7 +357,6 @@ class DualTierCache:
         return removed
 
     def get_stats(self, org_id: Optional[str] = None) -> Dict[str, Any]:
-        """Returns runtime cache statistics and hit ratios."""
         total_requests = self.total_exact_hits + self.total_semantic_hits + self.total_misses + self.total_bypasses
         hit_rate = (self.total_exact_hits + self.total_semantic_hits) / total_requests if total_requests > 0 else 0.0
         

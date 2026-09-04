@@ -1,13 +1,15 @@
 """
-Upstream Provider Client with HTTP/2 Connection Pooling and Failover.
+Upstream Provider Client with HTTP/2 Connection Pooling, Circuit Breaker, and Multi-Provider Failover.
 Full Pass-Through Header & Query Parameter Preservation.
 """
 
 import httpx
 import json
 import time
-from typing import Dict, Any, Tuple, Optional, AsyncGenerator, List
+from typing import Dict, Any, Tuple, Optional, List
 from core.config import config, MODEL_PRICING
+from server.failover import failover_engine
+from server.translator import ProtocolTranslator
 
 class UpstreamClient:
     def __init__(self):
@@ -31,8 +33,6 @@ class UpstreamClient:
         model_lower = model.lower()
         if "gemini" in model_lower:
             return f"{config.GEMINI_BASE_URL}/chat/completions"
-        elif "claude" in model_lower:
-            return f"{config.OPENAI_BASE_URL}/chat/completions"
         return f"{config.OPENAI_BASE_URL}/chat/completions"
 
     @classmethod
@@ -47,22 +47,75 @@ class UpstreamClient:
         payload: Dict[str, Any],
         auth_header: Optional[str] = None
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
+        """
+        Forwards non-streaming OpenAI-format request with automated CircuitBreaker checking and model failover.
+        """
         client = self.get_client()
-        url = self.get_endpoint_for_model(payload.get("model", ""))
-        headers = {"Content-Type": "application/json"}
-        if auth_header:
-            headers["Authorization"] = auth_header
-        elif config.OPENAI_API_KEY:
-            headers["Authorization"] = f"Bearer {config.OPENAI_API_KEY}"
+        original_model = payload.get("model", "gpt-4o")
+        candidate_models = [original_model] + failover_engine.get_fallback_chain(original_model)
 
-        clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
-        response = await client.post(url, json=clean_payload, headers=headers)
-        try:
-            res_data = response.json()
-        except Exception:
-            res_data = {"error": {"message": response.text, "code": response.status_code}}
-            
-        return response.status_code, res_data, dict(response.headers)
+        last_status = 500
+        last_res_data: Dict[str, Any] = {"error": {"message": "All upstream providers failed."}}
+        last_headers: Dict[str, str] = {}
+
+        for model_candidate in candidate_models:
+            provider = failover_engine.identify_provider(model_candidate)
+            if not failover_engine.circuit_breaker.is_available(provider):
+                continue
+
+            current_payload = dict(payload)
+            current_payload["model"] = model_candidate
+
+            try:
+                # If failover selected an Anthropic model from an OpenAI request:
+                if provider == "anthropic":
+                    anthropic_payload = ProtocolTranslator.openai_to_anthropic_payload(current_payload)
+                    status_code, res_data, headers = await self.forward_anthropic_messages(anthropic_payload)
+                    if status_code == 200:
+                        failover_engine.circuit_breaker.record_success(provider)
+                        translated_openai = ProtocolTranslator.anthropic_to_openai_response(res_data, original_model=model_candidate)
+                        return status_code, translated_openai, headers
+                    elif status_code in (429, 500, 502, 503, 504):
+                        failover_engine.circuit_breaker.record_failure(provider)
+                        last_status, last_res_data, last_headers = status_code, res_data, headers
+                        continue
+                    else:
+                        return status_code, res_data, headers
+
+                # Standard OpenAI / Gemini REST endpoint
+                url = self.get_endpoint_for_model(model_candidate)
+                headers = {"Content-Type": "application/json"}
+                if auth_header:
+                    headers["Authorization"] = auth_header
+                elif "gemini" in model_candidate.lower() and config.GEMINI_API_KEY:
+                    headers["Authorization"] = f"Bearer {config.GEMINI_API_KEY}"
+                elif config.OPENAI_API_KEY:
+                    headers["Authorization"] = f"Bearer {config.OPENAI_API_KEY}"
+
+                clean_payload = {k: v for k, v in current_payload.items() if not k.startswith("_")}
+                response = await client.post(url, json=clean_payload, headers=headers)
+
+                try:
+                    res_data = response.json()
+                except Exception:
+                    res_data = {"error": {"message": response.text, "code": response.status_code}}
+
+                if response.status_code == 200:
+                    failover_engine.circuit_breaker.record_success(provider)
+                    return response.status_code, res_data, dict(response.headers)
+                elif response.status_code in (429, 500, 502, 503, 504):
+                    failover_engine.circuit_breaker.record_failure(provider)
+                    last_status, last_res_data, last_headers = response.status_code, res_data, dict(response.headers)
+                    continue
+                else:
+                    return response.status_code, res_data, dict(response.headers)
+
+            except (httpx.RequestError, httpx.TimeoutException, Exception) as exc:
+                failover_engine.circuit_breaker.record_failure(provider)
+                last_res_data = {"error": {"message": str(exc), "type": "upstream_connection_error"}}
+                continue
+
+        return last_status, last_res_data, last_headers
 
     async def forward_stream(
         self,
@@ -70,29 +123,41 @@ class UpstreamClient:
         auth_header: Optional[str] = None
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any], List[Dict[str, Any]]]:
         client = self.get_client()
-        url = self.get_endpoint_for_model(payload.get("model", ""))
+        model = payload.get("model", "")
+        provider = failover_engine.identify_provider(model)
+
+        url = self.get_endpoint_for_model(model)
         headers = {"Content-Type": "application/json"}
         if auth_header:
             headers["Authorization"] = auth_header
+        elif "gemini" in model.lower() and config.GEMINI_API_KEY:
+            headers["Authorization"] = f"Bearer {config.GEMINI_API_KEY}"
         elif config.OPENAI_API_KEY:
             headers["Authorization"] = f"Bearer {config.OPENAI_API_KEY}"
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
         clean_payload["stream"] = True
 
-        req = client.build_request("POST", url, json=clean_payload, headers=headers)
-        response = await client.send(req, stream=True)
+        try:
+            req = client.build_request("POST", url, json=clean_payload, headers=headers)
+            response = await client.send(req, stream=True)
 
-        if response.status_code != 200:
-            content = await response.aread()
-            try:
-                err_json = json.loads(content.decode("utf-8"))
-            except Exception:
-                err_json = {"error": {"message": content.decode("utf-8"), "code": response.status_code}}
-            await response.aclose()
-            return response.status_code, None, err_json, []
+            if response.status_code != 200:
+                content = await response.aread()
+                try:
+                    err_json = json.loads(content.decode("utf-8"))
+                except Exception:
+                    err_json = {"error": {"message": content.decode("utf-8"), "code": response.status_code}}
+                await response.aclose()
+                if response.status_code in (429, 500, 502, 503, 504):
+                    failover_engine.circuit_breaker.record_failure(provider)
+                return response.status_code, None, err_json, []
 
-        return response.status_code, response, {}, []
+            failover_engine.circuit_breaker.record_success(provider)
+            return response.status_code, response, {}, []
+        except Exception as exc:
+            failover_engine.circuit_breaker.record_failure(provider)
+            return 503, None, {"error": {"message": str(exc)}}, []
 
     def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         headers = {
@@ -129,13 +194,22 @@ class UpstreamClient:
         if "max_tokens" not in clean_payload:
             clean_payload["max_tokens"] = 1024
 
-        response = await client.post(url, json=clean_payload, headers=headers, params=params)
         try:
-            res_data = response.json()
-        except Exception:
-            res_data = {"type": "error", "error": {"message": response.text, "type": "upstream_error"}}
+            response = await client.post(url, json=clean_payload, headers=headers, params=params)
+            try:
+                res_data = response.json()
+            except Exception:
+                res_data = {"type": "error", "error": {"message": response.text, "type": "upstream_error"}}
 
-        return response.status_code, res_data, dict(response.headers)
+            if response.status_code == 200:
+                failover_engine.circuit_breaker.record_success("anthropic")
+            elif response.status_code in (429, 500, 502, 503, 504):
+                failover_engine.circuit_breaker.record_failure("anthropic")
+
+            return response.status_code, res_data, dict(response.headers)
+        except Exception as exc:
+            failover_engine.circuit_breaker.record_failure("anthropic")
+            return 503, {"type": "error", "error": {"message": str(exc), "type": "upstream_error"}}, {}
 
     async def forward_anthropic_stream(
         self,
@@ -152,18 +226,25 @@ class UpstreamClient:
         if "max_tokens" not in clean_payload:
             clean_payload["max_tokens"] = 1024
 
-        req = client.build_request("POST", url, json=clean_payload, headers=headers, params=params)
-        response = await client.send(req, stream=True)
+        try:
+            req = client.build_request("POST", url, json=clean_payload, headers=headers, params=params)
+            response = await client.send(req, stream=True)
 
-        if response.status_code != 200:
-            content = await response.aread()
-            try:
-                err_json = json.loads(content.decode("utf-8"))
-            except Exception:
-                err_json = {"type": "error", "error": {"message": content.decode("utf-8"), "type": "upstream_error"}}
-            await response.aclose()
-            return response.status_code, None, err_json
+            if response.status_code != 200:
+                content = await response.aread()
+                try:
+                    err_json = json.loads(content.decode("utf-8"))
+                except Exception:
+                    err_json = {"type": "error", "error": {"message": content.decode("utf-8"), "type": "upstream_error"}}
+                await response.aclose()
+                if response.status_code in (429, 500, 502, 503, 504):
+                    failover_engine.circuit_breaker.record_failure("anthropic")
+                return response.status_code, None, err_json
 
-        return response.status_code, response, {}
+            failover_engine.circuit_breaker.record_success("anthropic")
+            return response.status_code, response, {}
+        except Exception as exc:
+            failover_engine.circuit_breaker.record_failure("anthropic")
+            return 503, None, {"type": "error", "error": {"message": str(exc)}}, {}
 
 upstream_client = UpstreamClient()

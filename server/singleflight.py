@@ -25,7 +25,7 @@ class SingleFlightGroup:
         """
         Executes fn only once for the given key concurrently.
         Returns (response_payload, stream_chunks, is_leader).
-        is_leader is True if this invocation was the one that executed the function,
+        is_leader is True if this invocation executed the function,
         and False if it coalesced onto an already in-flight execution.
         """
         async with self._lock:
@@ -39,15 +39,15 @@ class SingleFlightGroup:
                 is_leader = True
 
         if not is_leader:
-            # Wait for leader to finish with timeout
+            # Follower: Wait for leader execution result with timeout protection
             try:
                 result = await asyncio.wait_for(asyncio.shield(flight.future), timeout=timeout_seconds)
                 return result[0], result[1], False
             except Exception as e:
-                # If leader failed or timed out, fall back
+                # If leader failed or timed out, follower raises to allow upper layer retry/fallback
                 raise e
 
-        # Leader execution
+        # Leader: Execute upstream request
         try:
             res_payload, chunks = await fn()
             if not flight.future.done():
@@ -59,7 +59,7 @@ class SingleFlightGroup:
             raise e
         finally:
             async with self._lock:
-                if key in self._flights:
+                if key in self._flights and self._flights[key] is flight:
                     del self._flights[key]
 
 flight_bus = SingleFlightGroup()

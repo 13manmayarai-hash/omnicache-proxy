@@ -45,14 +45,14 @@ class TestOmniCacheCore(unittest.TestCase):
         response = {"id": "chatcmpl-123", "choices": [{"message": {"content": "4"}}]}
 
         # Initially MISS
-        status, entry, score = self.cache.lookup(payload)
+        status, entry, score, reason = self.cache.lookup(payload)
         self.assertEqual(status, "MISS")
 
         # Store
         self.cache.store(payload, response)
 
         # Lookup again
-        status, entry, score = self.cache.lookup(payload)
+        status, entry, score, reason = self.cache.lookup(payload)
         self.assertEqual(status, "HIT_EXACT")
         self.assertEqual(score, 1.0)
         self.assertEqual(entry.response_payload["choices"][0]["message"]["content"], "4")
@@ -73,7 +73,7 @@ class TestOmniCacheCore(unittest.TestCase):
             "messages": [{"role": "user", "content": "Tell me where the Eiffel Tower is located in Paris."}],
             "temperature": 0.2
         }
-        status, entry, score = self.cache.lookup(payload_2, org_id="tenant_1")
+        status, entry, score, reason = self.cache.lookup(payload_2, org_id="tenant_1")
         self.assertEqual(status, "HIT_SEMANTIC")
         self.assertIsNotNone(entry)
         self.assertGreaterEqual(score, 0.90)
@@ -86,12 +86,12 @@ class TestOmniCacheCore(unittest.TestCase):
             "messages": [{"role": "user", "content": "Give me a creative name for a coffee shop"}],
             "temperature": 0.9
         }
-        status, entry, score = self.cache.lookup(payload_high_temp)
+        status, entry, score, reason = self.cache.lookup(payload_high_temp)
         self.assertEqual(status, "BYPASS")
 
     def test_05_dynamic_intent_gating_code_strictness(self):
         """Verify code detection applies strict 0.98 threshold."""
-        intent, threshold = self.cache.classify_intent("def quicksort(arr):", "no_schema", "no_tools", 0.2)
+        intent, threshold, reason = self.cache.classify_intent("def quicksort(arr):", "no_schema", "no_tools", 0.2)
         self.assertEqual(intent, "code_generation")
         self.assertEqual(threshold, 0.98)
 
@@ -108,11 +108,11 @@ class TestOmniCacheCore(unittest.TestCase):
         self.cache.store(payload, response_a, org_id="org_a")
 
         # Tenant B looks up the same payload
-        status_b, entry_b, score_b = self.cache.lookup(payload, org_id="org_b")
+        status_b, entry_b, score_b, reason_b = self.cache.lookup(payload, org_id="org_b")
         self.assertEqual(status_b, "MISS")
 
         # Tenant A looks up
-        status_a, entry_a, score_a = self.cache.lookup(payload, org_id="org_a")
+        status_a, entry_a, score_a, reason_a = self.cache.lookup(payload, org_id="org_a")
         self.assertEqual(status_a, "HIT_EXACT")
         self.assertEqual(entry_a.response_payload["choices"][0]["message"]["content"], "Company A target: $10M")
 
@@ -129,7 +129,7 @@ class TestOmniCacheCore(unittest.TestCase):
         self.cache.store(payload, response, org_id="tenant_x", tag="v1_policy")
 
         # Verify hit
-        status, entry, score = self.cache.lookup(payload, org_id="tenant_x")
+        status, entry, score, reason = self.cache.lookup(payload, org_id="tenant_x")
         self.assertEqual(status, "HIT_EXACT")
 
         # Invalidate tag 'v1_policy'
@@ -137,7 +137,7 @@ class TestOmniCacheCore(unittest.TestCase):
         self.assertGreaterEqual(removed, 1)
 
         # Lookup again should be MISS
-        status_after, entry_after, _ = self.cache.lookup(payload, org_id="tenant_x")
+        status_after, entry_after, _, _ = self.cache.lookup(payload, org_id="tenant_x")
         self.assertEqual(status_after, "MISS")
 
     def test_08_pii_redaction(self):

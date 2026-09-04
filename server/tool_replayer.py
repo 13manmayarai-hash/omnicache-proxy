@@ -1,7 +1,7 @@
 """
 Deterministic Agent Tool-Call & Execution Replayer.
 Caches idempotent tool executions (file reads, grep, git status, inspection) for coding agents
-(Claude Code, Cursor, Devin) and synthesizes synchronized tool_call_ids.
+(Claude Code, Cursor, Devin) and synthesizes synchronized tool_call_ids with strict TTL validation.
 """
 
 import hashlib
@@ -36,7 +36,7 @@ class ToolExecutionCache:
 
     def lookup_tool_call(self, tool_name: str, arguments: Dict[str, Any], workspace_fingerprint: str = "default") -> Tuple[bool, Optional[str], Optional[str]]:
         """
-        Looks up if a tool execution is cached.
+        Looks up if a tool execution is cached and active (not expired).
         Returns (is_hit, cached_output, tool_key).
         """
         if not self.is_idempotent(tool_name):
@@ -45,6 +45,12 @@ class ToolExecutionCache:
         key = self.compute_tool_hash(tool_name, arguments, workspace_fingerprint)
         if key in self._cache:
             entry = self._cache[key]
+            # TTL Expiration Check: Evict if stale
+            if time.time() > entry.get("expires_at", float("inf")):
+                del self._cache[key]
+                self.tool_misses += 1
+                return False, None, key
+
             self.tool_hits += 1
             saved_tokens = entry.get("estimated_tokens", 50)
             self.tokens_saved += saved_tokens
@@ -54,7 +60,7 @@ class ToolExecutionCache:
         return False, None, key
 
     def store_tool_call(self, tool_name: str, arguments: Dict[str, Any], output: str, workspace_fingerprint: str = "default", ttl_seconds: int = 3600) -> str:
-        """Stores a deterministic tool execution output."""
+        """Stores a deterministic tool execution output with TTL."""
         key = self.compute_tool_hash(tool_name, arguments, workspace_fingerprint)
         est_tokens = int(len(output.split()) * 1.3) + 10
         self._cache[key] = {
@@ -65,6 +71,14 @@ class ToolExecutionCache:
             "expires_at": time.time() + ttl_seconds
         }
         return key
+
+    def evict_expired(self) -> int:
+        """Evicts all expired tool cache entries."""
+        now = time.time()
+        expired_keys = [k for k, v in self._cache.items() if now > v.get("expires_at", float("inf"))]
+        for k in expired_keys:
+            del self._cache[k]
+        return len(expired_keys)
 
     def synthesize_tool_call_delta(self, tool_name: str, arguments: Dict[str, Any], cached_output: str, call_id: Optional[str] = None) -> Dict[str, Any]:
         """

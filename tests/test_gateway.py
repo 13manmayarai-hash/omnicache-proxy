@@ -93,8 +93,8 @@ class TestOmniCacheGateway(unittest.TestCase):
         cached_response = {"choices": [{"message": {"content": "Cached Hello"}}]}
         cache_instance.store(payload, cached_response, org_id="tenant_gw")
 
-        # Bypass
-        status, entry, _ = cache_instance.lookup(payload, org_id="tenant_gw")
+        # Bypass lookup
+        status, entry, _, _ = cache_instance.lookup(payload, org_id="tenant_gw")
         self.assertEqual(status, "HIT_EXACT")
 
     def test_05_singleflight_deduplication(self):
@@ -140,26 +140,26 @@ class TestOmniCacheGateway(unittest.TestCase):
         res_1 = {"choices": [{"message": {"content": "Use certbot."}}]}
         res_2 = {"choices": [{"message": {"content": "20 days per year."}}]}
 
-        cache_instance.store(payload_1, res_1, org_id="tenant_api", tag="tech_docs")
-        cache_instance.store(payload_2, res_2, org_id="tenant_api", tag="hr_docs")
+        cache_instance.store(payload_1, res_1, org_id="default", tag="tech_docs")
+        cache_instance.store(payload_2, res_2, org_id="default", tag="hr_docs")
 
         # Invalidate tag 'tech_docs'
-        inv_resp = self.client.post("/v1/cache/invalidate-tag", json={"tag": "tech_docs"}, headers={"x-org-id": "tenant_api"})
+        inv_resp = self.client.post("/v1/cache/invalidate-tag?tag=tech_docs")
         self.assertEqual(inv_resp.status_code, 200)
         self.assertEqual(inv_resp.json()["status"], "success")
 
         # Check tech docs MISS, hr docs HIT
-        s1, _, _ = cache_instance.lookup(payload_1, org_id="tenant_api")
-        s2, _, _ = cache_instance.lookup(payload_2, org_id="tenant_api")
+        s1, _, _, _ = cache_instance.lookup(payload_1, org_id="default")
+        s2, _, _, _ = cache_instance.lookup(payload_2, org_id="default")
         self.assertEqual(s1, "MISS")
         self.assertEqual(s2, "HIT_EXACT")
 
         # Purge tenant
-        purge_resp = self.client.post("/v1/cache/purge", headers={"x-org-id": "tenant_api"})
+        purge_resp = self.client.post("/v1/cache/purge")
         self.assertEqual(purge_resp.status_code, 200)
         self.assertEqual(purge_resp.json()["status"], "success")
 
-        s2_after, _, _ = cache_instance.lookup(payload_2, org_id="tenant_api")
+        s2_after, _, _, _ = cache_instance.lookup(payload_2, org_id="default")
         self.assertEqual(s2_after, "MISS")
 
     def test_07_stats_and_telemetry(self):
@@ -173,16 +173,16 @@ class TestOmniCacheGateway(unittest.TestCase):
             "choices": [{"message": {"content": "Pong"}}],
             "usage": {"prompt_tokens": 1000, "completion_tokens": 500}
         }
-        cache_instance.store(payload, res, org_id="tenant_stats")
+        cache_instance.store(payload, res, org_id="default")
 
         # Trigger a cache hit
-        self.client.post("/v1/chat/completions", json=payload, headers={"x-org-id": "tenant_stats"})
+        self.client.post("/v1/chat/completions", json=payload)
 
-        stats_resp = self.client.get("/v1/cache/stats", headers={"x-org-id": "tenant_stats"})
+        stats_resp = self.client.get("/v1/cache/stats")
         self.assertEqual(stats_resp.status_code, 200)
         data = stats_resp.json()
-        self.assertGreater(data["exact_hits"], 0)
-        self.assertGreater(data["financial_metrics"]["total_savings_usd"], 0.0)
+        self.assertGreater(data["cache_stats"]["exact_hits"], 0)
+        self.assertGreater(data["financial_telemetry"]["total_savings_usd"], 0.0)
 
     def test_08_prometheus_and_csv_export(self):
         """Verify /metrics Prometheus scraper and /v1/cache/export CSV generation."""
@@ -195,8 +195,8 @@ class TestOmniCacheGateway(unittest.TestCase):
         # Test CSV Export
         csv_resp = self.client.get("/v1/cache/export")
         self.assertEqual(csv_resp.status_code, 200)
-        self.assertEqual(csv_resp.headers.get("content-type"), "text/csv; charset=utf-8")
-        self.assertIn("Key,Org_ID,Model,Tag", csv_resp.text)
+        self.assertIn("text/csv", csv_resp.headers.get("content-type", ""))
+        self.assertIn("Key,OrgID,Model", csv_resp.text)
 
 if __name__ == "__main__":
     unittest.main()

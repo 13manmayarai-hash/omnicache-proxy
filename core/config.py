@@ -3,7 +3,7 @@ Configuration and pricing registry for OmniCache AI Proxy.
 """
 
 import os
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 def load_dotenv():
     paths = [
@@ -49,8 +49,24 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
-    HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "0.0.0.0"))
+    # Safe default binding to localhost (127.0.0.1)
+    HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
     
+    # Master Admin Key and Authentication Controls
+    ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", os.getenv("OMNICACHE_ADMIN_KEY", ""))
+    REQUIRE_AUTH: bool = os.getenv("REQUIRE_AUTH", "false").lower() in ("true", "1")
+    
+    # Cryptographic Salt for PII Tokenization (prevents cross-user collisions)
+    PRIVACY_SALT: str = os.getenv("PRIVACY_SALT", os.getenv("OMNICACHE_PRIVACY_SALT", "omnicache_salt_v2"))
+    
+    # Restricted CORS Configuration
+    CORS_ALLOWED_ORIGINS: List[str] = [
+        origin.strip()
+        for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000").split(",")
+        if origin.strip()
+    ]
+    CORS_ALLOW_ALL: bool = os.getenv("CORS_ALLOW_ALL", "true").lower() in ("true", "1")
+
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")

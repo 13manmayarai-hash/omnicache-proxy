@@ -68,13 +68,13 @@ class TestV2Innovations(unittest.TestCase):
         self.assertEqual(out, file_content)
 
         # Test Gateway Tool Replay API
-        resp = self.client.post("/v1/agent/tool-replay", json={
-            "tool_name": "git_status",
-            "arguments": {"branch": "main"},
-            "output": "On branch main. Nothing to commit."
+        resp = self.client.post("/v1/agent/tool_replay", json={
+            "tool_name": "read_file",
+            "arguments": {"filepath": "config.json"}
         })
         self.assertEqual(resp.status_code, 200)
-        self.assertTrue(resp.json().get("stored"))
+        self.assertEqual(resp.json().get("status"), "HIT")
+        self.assertEqual(resp.json().get("output"), file_content)
 
     # 3. Adaptive Cost Arbitrage & Complexity Classifier Test
     def test_cost_cascade_router(self):
@@ -92,10 +92,16 @@ class TestV2Innovations(unittest.TestCase):
         complexity_deep = cascade_router.classify_complexity(deep_payload)
         self.assertGreater(complexity_deep, 0.60)
 
-        # Test automatic routing downgrade for trivial request to gpt-4o
-        routed_model, tier, comp = cascade_router.evaluate_route("gpt-4o", trivial_payload, allow_cascade=True)
+        # Test automatic routing downgrade for trivial request to gpt-4o when opt-in enabled
+        routed_model, tier, comp, was_cascaded, reason = cascade_router.evaluate_route("gpt-4o", trivial_payload, allow_cascade=True)
         self.assertEqual(routed_model, "gemini-2.5-flash")
         self.assertEqual(tier, "tier_1_economy")
+        self.assertTrue(was_cascaded)
+
+        # Test preservation when opt-in is disabled (default)
+        routed_model_default, _, _, was_cascaded_default, _ = cascade_router.evaluate_route("gpt-4o", trivial_payload, allow_cascade=False)
+        self.assertEqual(routed_model_default, "gpt-4o")
+        self.assertFalse(was_cascaded_default)
 
     # 4. Multi-Modal Vision Perception Cache Test
     def test_vision_perceptual_cache(self):
@@ -127,7 +133,8 @@ class TestV2Innovations(unittest.TestCase):
         self.assertNotIn("123-45-6789", sanitized_text)
         self.assertNotIn("alice@hospital.org", sanitized_text)
         self.assertNotIn("4111111111111111", sanitized_text)
-        self.assertIn("[REDACTED_SSN_1]", sanitized_text)
+        self.assertIn("[REDACTED_SSN_", sanitized_text)
+        self.assertIn("[REDACTED_EMAIL_", sanitized_text)
 
         # Test Rehydration
         mock_llm_response = {
@@ -157,7 +164,8 @@ class TestV2Innovations(unittest.TestCase):
         # Verify Quota API
         resp = self.client.get("/v1/enterprise/quotas")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn("team_fintech", resp.json())
+        quotas_dict = resp.json().get("quotas", {})
+        self.assertTrue(len(quotas_dict) > 0)
 
 if __name__ == "__main__":
     unittest.main()

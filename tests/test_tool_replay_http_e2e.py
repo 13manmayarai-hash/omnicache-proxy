@@ -116,3 +116,61 @@ class TestToolReplayAndVersionE2E:
         assert res_mcp_rep.status_code == 200
         assert "HIT" in res_mcp_rep.json()["result"]["content"][0]["text"]
         assert "nothing to commit" in res_mcp_rep.json()["result"]["content"][0]["text"]
+
+    def test_04_git_status_no_args_workspace_invalidation(self, client):
+        """
+        Critical Regression Test:
+        Verify git_status with NO path arguments (arguments: {}) accurately detects
+        changes in the client's workspace directory (via workspace_fingerprint/workspace_dir)
+        without being fooled by the proxy server's own working directory.
+        """
+        import tempfile
+        import subprocess
+        import os
+
+        with tempfile.TemporaryDirectory() as temp_repo:
+            # 1. Initialize real git repo in temp folder
+            subprocess.run(["git", "init", temp_repo], check=True, capture_output=True)
+            subprocess.run(["git", "-C", temp_repo, "config", "user.email", "test@omnicache.ai"], check=True)
+            subprocess.run(["git", "-C", temp_repo, "config", "user.name", "OmniCache Test"], check=True)
+            
+            sample_file = os.path.join(temp_repo, "file.txt")
+            with open(sample_file, "w") as f:
+                f.write("initial content")
+            subprocess.run(["git", "-C", temp_repo, "add", "file.txt"], check=True)
+            subprocess.run(["git", "-C", temp_repo, "commit", "-m", "Initial commit"], check=True)
+
+            payload = {
+                "tool_name": "git_status",
+                "arguments": {},
+                "workspace_fingerprint": temp_repo
+            }
+
+            # 2. Initial lookup -> MISS
+            res_miss = client.post("/v1/agent/tool_replay", json=payload)
+            assert res_miss.status_code == 200
+            assert res_miss.json().get("status") == "MISS"
+
+            # 3. Store clean status
+            store_payload = {
+                **payload,
+                "output": "On branch main\nnothing to commit, working tree clean"
+            }
+            res_store = client.post("/v1/agent/tool_record", json=store_payload)
+            assert res_store.status_code == 200
+            assert res_store.json().get("status") == "STORED"
+
+            # 4. Immediate lookup -> HIT
+            res_hit = client.post("/v1/agent/tool_replay", json=payload)
+            assert res_hit.status_code == 200
+            assert res_hit.json().get("status") == "HIT"
+            assert "nothing to commit" in res_hit.json().get("output", "")
+
+            # 5. Modify file in the workspace (dirty state!)
+            with open(sample_file, "w") as f:
+                f.write("modified dirty content")
+
+            # 6. Lookup must MISS (NOT return stale clean HIT!)
+            res_after_mod = client.post("/v1/agent/tool_replay", json=payload)
+            assert res_after_mod.status_code == 200
+            assert res_after_mod.json().get("status") == "MISS", "Failed: Stale git_status HIT returned after workspace file modification!"

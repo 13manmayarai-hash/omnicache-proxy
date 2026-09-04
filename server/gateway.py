@@ -902,6 +902,7 @@ async def handle_tool_replay(request: Request) -> Response:
             return JSONResponse({"error": "Missing required field 'tool_name'"}, status_code=400, headers=cors_headers)
         arguments = body.get("arguments", {})
         raw_fp = body.get("workspace_fingerprint", "default")
+        ws_dir = body.get("workspace_dir") or body.get("cwd") or body.get("repo_path") or None
         ws_state = body.get("workspace_state", None)
         action = body.get("action", "").strip().lower()
         ttl_seconds = body.get("ttl_seconds", None)
@@ -918,7 +919,8 @@ async def handle_tool_replay(request: Request) -> Response:
             output=output_content,
             workspace_fingerprint=env_fp,
             workspace_state=ws_state,
-            ttl_seconds=ttl_seconds
+            ttl_seconds=ttl_seconds,
+            workspace_dir=ws_dir
         )
         return JSONResponse({
             "status": "STORED",
@@ -929,9 +931,13 @@ async def handle_tool_replay(request: Request) -> Response:
         }, headers=cors_headers)
 
     # 2. Lookup Path
-    is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=env_fp, workspace_state=ws_state)
+    is_hit, output, tool_key = tool_cache.lookup_tool_call(
+        tool_name, arguments, workspace_fingerprint=env_fp, workspace_state=ws_state, workspace_dir=ws_dir
+    )
     if not is_hit and (org_id == "default" or raw_fp == "default"):
-        is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=raw_fp, workspace_state=ws_state)
+        is_hit, output, tool_key = tool_cache.lookup_tool_call(
+            tool_name, arguments, workspace_fingerprint=raw_fp, workspace_state=ws_state, workspace_dir=ws_dir
+        )
 
     if is_hit:
         METRICS_LEDGER["agent_tool_hits"] += 1

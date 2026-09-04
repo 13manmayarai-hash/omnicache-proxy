@@ -214,12 +214,17 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         tool_name = arguments.get("tool_name", "")
         tool_args = arguments.get("arguments", {})
         raw_fp = arguments.get("workspace_fingerprint", "default")
+        ws_dir = arguments.get("workspace_dir") or arguments.get("cwd") or arguments.get("repo_path") or None
         ws_state = arguments.get("workspace_state", None)
         env_fp = f"{org_id}:{raw_fp}"
 
-        is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, tool_args, workspace_fingerprint=env_fp, workspace_state=ws_state)
+        is_hit, output, tool_key = tool_cache.lookup_tool_call(
+            tool_name, tool_args, workspace_fingerprint=env_fp, workspace_state=ws_state, workspace_dir=ws_dir
+        )
         if not is_hit and (org_id == "default" or raw_fp == "default"):
-            is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, tool_args, workspace_fingerprint=raw_fp, workspace_state=ws_state)
+            is_hit, output, tool_key = tool_cache.lookup_tool_call(
+                tool_name, tool_args, workspace_fingerprint=raw_fp, workspace_state=ws_state, workspace_dir=ws_dir
+            )
 
         if is_hit:
             return {
@@ -251,6 +256,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         tool_args = arguments.get("arguments", {})
         output = str(arguments.get("output", ""))
         raw_fp = arguments.get("workspace_fingerprint", "default")
+        ws_dir = arguments.get("workspace_dir") or arguments.get("cwd") or arguments.get("repo_path") or None
         ws_state = arguments.get("workspace_state", None)
         ttl = arguments.get("ttl_seconds", None)
         env_fp = f"{org_id}:{raw_fp}"
@@ -261,7 +267,8 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             output=output,
             workspace_fingerprint=env_fp,
             workspace_state=ws_state,
-            ttl_seconds=ttl
+            ttl_seconds=ttl,
+            workspace_dir=ws_dir
         )
         return {
             "content": [{

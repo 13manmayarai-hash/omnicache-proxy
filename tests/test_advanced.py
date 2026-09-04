@@ -131,5 +131,21 @@ class TestAdvancedOmniCache(unittest.TestCase):
         self.assertIn("v2.6.0 ACTIVE", resp.text)
         self.assertNotIn("v2.1 ACTIVE", resp.text)
 
+    def test_06_root_endpoint_html_and_json(self):
+        """Verify root '/' endpoint serves JSON by default and HTML dashboard for browser requests."""
+        # JSON API request
+        resp_json = self.client.get("/")
+        self.assertEqual(resp_json.status_code, 200)
+        data = resp_json.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["service"], "OmniCache AI Proxy")
+        self.assertIn("endpoints", data)
+
+        # HTML browser request
+        resp_html = self.client.get("/", headers={"accept": "text/html,application/xhtml+xml"})
+        self.assertEqual(resp_html.status_code, 200)
+        self.assertIn("OmniCache AI Proxy", resp_html.text)
+        self.assertIn("version-badge", resp_html.text)
+
 if __name__ == "__main__":
     unittest.main()

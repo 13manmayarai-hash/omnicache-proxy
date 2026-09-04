@@ -1195,9 +1195,39 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.5.4"),
+        "version": getattr(config, "VERSION", "2.6.0"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
+    }, headers=cors_headers)
+
+
+async def handle_root(request: Request) -> Response:
+    """Root endpoint handler. Serves Dashboard for web browsers, or service JSON for API clients."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    accept = request.headers.get("accept", "").lower()
+    # If accessed via web browser requesting HTML, serve dashboard directly
+    if "text/html" in accept:
+        dashboard_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
+        if os.path.exists(dashboard_path):
+            return await handle_dashboard(request)
+
+    return JSONResponse({
+        "status": "ok",
+        "service": "OmniCache AI Proxy",
+        "version": getattr(config, "VERSION", "2.6.0"),
+        "dashboard": "/dashboard",
+        "endpoints": {
+            "dashboard": "/dashboard",
+            "health": "/healthz",
+            "stats": "/v1/cache/stats",
+            "openai_chat": "/v1/chat/completions",
+            "anthropic_messages": "/v1/messages",
+            "mcp": "/mcp",
+            "metrics": "/metrics"
+        }
     }, headers=cors_headers)
 
 
@@ -1260,6 +1290,7 @@ async def handle_mcp(request: Request) -> Response:
 # =====================================================================
 
 routes = [
+    Route("/", handle_root, methods=["GET", "OPTIONS"]),
     Route("/healthz", handle_healthz, methods=["GET", "OPTIONS"]),
     Route("/models", handle_models, methods=["GET", "OPTIONS"]),
     Route("/v1/models", handle_models, methods=["GET", "OPTIONS"]),

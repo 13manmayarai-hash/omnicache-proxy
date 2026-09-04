@@ -184,6 +184,15 @@ class UpstreamClient:
 
         return last_status, None, last_err, []
 
+    @staticmethod
+    def get_anthropic_messages_url() -> str:
+        base = config.ANTHROPIC_BASE_URL.rstrip('/')
+        if base.endswith("/messages"):
+            return base
+        if base.endswith("/v1"):
+            return f"{base}/messages"
+        return f"{base}/v1/messages" if "api.anthropic.com" in base else f"{base}/messages"
+
     def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",
@@ -194,6 +203,9 @@ class UpstreamClient:
                 headers["x-api-key"] = config.ANTHROPIC_API_KEY
             return headers
 
+        has_auth = False
+        has_x_api_key = False
+
         for k, v in incoming_headers.items():
             k_lower = k.lower()
             if k_lower in (
@@ -202,18 +214,17 @@ class UpstreamClient:
                 "x-anthropic-client", "x-app"
             ) or k_lower.startswith("anthropic-") or k_lower.startswith("x-anthropic-") or k_lower.startswith("x-stainless-"):
                 headers[k_lower] = v
+                if k_lower == "x-api-key":
+                    has_x_api_key = True
             elif k_lower == "authorization":
-                if v.startswith("Bearer sk-ant-") and "x-api-key" not in headers:
+                headers["authorization"] = v
+                has_auth = True
+                if v.startswith("Bearer sk-ant-") and not has_x_api_key:
                     headers["x-api-key"] = v[7:].strip()
-                else:
-                    headers["authorization"] = v
+                    has_x_api_key = True
 
-        if "x-api-key" not in headers:
-            auth_val = headers.get("authorization", "")
-            if auth_val.startswith("Bearer "):
-                headers["x-api-key"] = auth_val[7:].strip()
-            elif config.ANTHROPIC_API_KEY:
-                headers["x-api-key"] = config.ANTHROPIC_API_KEY
+        if not has_x_api_key and not has_auth and config.ANTHROPIC_API_KEY:
+            headers["x-api-key"] = config.ANTHROPIC_API_KEY
 
         return headers
 
@@ -224,7 +235,7 @@ class UpstreamClient:
         params: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         client = self.get_client()
-        url = f"{config.ANTHROPIC_BASE_URL.rstrip('/')}/messages"
+        url = self.get_anthropic_messages_url()
         headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
@@ -255,7 +266,7 @@ class UpstreamClient:
         params: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any]]:
         client = self.get_client()
-        url = f"{config.ANTHROPIC_BASE_URL.rstrip('/')}/messages"
+        url = self.get_anthropic_messages_url()
         headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}

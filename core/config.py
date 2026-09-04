@@ -77,7 +77,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 }
 
 class ProxyConfig:
-    VERSION: str = "2.5.8"
+    VERSION: str = "2.5.9"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -102,9 +102,33 @@ class ProxyConfig:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
-    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    ANTHROPIC_BASE_URL: str = os.getenv("UPSTREAM_ANTHROPIC_BASE_URL", os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"))
-    GEMINI_BASE_URL: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
+    @staticmethod
+    def _sanitize_upstream_url(url: str, default: str) -> str:
+        url = (url or "").strip()
+        if not url:
+            return default
+        url_lower = url.lower()
+        if any(local in url_lower for local in ("127.0.0.1", "localhost", "0.0.0.0", "::1")):
+            return default
+        return url
+
+    UPSTREAM_OPENAI_BASE_URL: str = os.getenv("UPSTREAM_OPENAI_BASE_URL", "").strip()
+    OPENAI_BASE_URL: str = _sanitize_upstream_url.__func__(
+        os.getenv("UPSTREAM_OPENAI_BASE_URL", "").strip() or os.getenv("OPENAI_BASE_URL", ""),
+        "https://api.openai.com/v1"
+    )
+
+    UPSTREAM_ANTHROPIC_BASE_URL: str = os.getenv("UPSTREAM_ANTHROPIC_BASE_URL", "").strip()
+    ANTHROPIC_BASE_URL: str = _sanitize_upstream_url.__func__(
+        os.getenv("UPSTREAM_ANTHROPIC_BASE_URL", "").strip() or os.getenv("ANTHROPIC_BASE_URL", ""),
+        "https://api.anthropic.com/v1"
+    )
+
+    UPSTREAM_GEMINI_BASE_URL: str = os.getenv("UPSTREAM_GEMINI_BASE_URL", "").strip()
+    GEMINI_BASE_URL: str = _sanitize_upstream_url.__func__(
+        os.getenv("UPSTREAM_GEMINI_BASE_URL", "").strip() or os.getenv("GEMINI_BASE_URL", ""),
+        "https://generativelanguage.googleapis.com/v1beta/openai"
+    )
     
     DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.92"))
     EXACT_CACHE_TTL_SECONDS: int = int(os.getenv("EXACT_CACHE_TTL", "604800"))

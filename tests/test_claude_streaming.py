@@ -84,3 +84,32 @@ class TestClaudeStreamingAndAuth:
         assert resp.headers.get("x-cache-status") == "HIT_EXACT"
         assert resp.headers.get("x-accel-buffering") == "no"
         assert "no-cache" in resp.headers.get("cache-control", "")
+
+    def test_05_upstream_self_loop_sanitization(self):
+        """Verify that local proxy URLs in ANTHROPIC_BASE_URL / OPENAI_BASE_URL are sanitized against recursive loops."""
+        from core.config import ProxyConfig
+        assert ProxyConfig._sanitize_upstream_url("http://127.0.0.1:8000", "https://api.anthropic.com/v1") == "https://api.anthropic.com/v1"
+        assert ProxyConfig._sanitize_upstream_url("http://localhost:8000/v1", "https://api.openai.com/v1") == "https://api.openai.com/v1"
+        assert ProxyConfig._sanitize_upstream_url("https://custom-upstream.ai/v1", "https://api.openai.com/v1") == "https://custom-upstream.ai/v1"
+
+    def test_06_claude_oauth_bearer_preserved(self):
+        """Verify that Claude Code OAuth bearer tokens are preserved in authorization header without corrupting x-api-key."""
+        from server.upstream import upstream_client
+        incoming = {
+            "authorization": "Bearer oauth_claude_session_token_12345",
+            "anthropic-version": "2023-06-01"
+        }
+        headers = upstream_client._build_anthropic_headers(incoming)
+        assert headers.get("authorization") == "Bearer oauth_claude_session_token_12345"
+        assert "x-api-key" not in headers
+
+    def test_07_anthropic_endpoint_url_resolution(self):
+        """Verify get_anthropic_messages_url handles base URLs with or without /v1 and /messages."""
+        from server.upstream import upstream_client
+        with patch.object(config, "ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"):
+            assert upstream_client.get_anthropic_messages_url() == "https://api.anthropic.com/v1/messages"
+        with patch.object(config, "ANTHROPIC_BASE_URL", "https://api.anthropic.com"):
+            assert upstream_client.get_anthropic_messages_url() == "https://api.anthropic.com/v1/messages"
+        with patch.object(config, "ANTHROPIC_BASE_URL", "https://custom-provider.com/v1"):
+            assert upstream_client.get_anthropic_messages_url() == "https://custom-provider.com/v1/messages"
+

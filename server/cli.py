@@ -143,10 +143,17 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
     # 1. Ensure OmniCache proxy is running
     if not is_port_in_use(port, target_host):
         print(f"🚀 Starting OmniCache acceleration sidecar on http://{target_host}:{port}...")
+        server_env = os.environ.copy()
+        for env_k in ["ANTHROPIC_BASE_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE", "GEMINI_BASE_URL"]:
+            val = server_env.get(env_k, "").lower()
+            if any(local in val for local in ("127.0.0.1", "localhost", "0.0.0.0", "::1", f":{port}")):
+                server_env.pop(env_k, None)
+
         server_process = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "server.gateway:app", "--host", target_host, "--port", str(port), "--log-level", "warning"],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            env=server_env
         )
         started_local_server = True
         # Wait up to 5s for the server to be ready

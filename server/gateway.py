@@ -600,11 +600,22 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
     messages = []
     if "system" in anthropic_payload and anthropic_payload["system"]:
-        messages.append({"role": "system", "content": anthropic_payload["system"]})
+        sys_val = anthropic_payload["system"]
+        if isinstance(sys_val, list):
+            sys_text = " ".join([b.get("text", "") for b in sys_val if isinstance(b, dict) and b.get("type") == "text"])
+            messages.append({"role": "system", "content": sys_text})
+        else:
+            messages.append({"role": "system", "content": str(sys_val)})
     for m in anthropic_payload.get("messages", []):
         content = m.get("content", "")
         if isinstance(content, list):
-            text_blocks = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
+            text_blocks = []
+            for b in content:
+                if isinstance(b, dict):
+                    if b.get("type") == "text":
+                        text_blocks.append(b.get("text", ""))
+                    elif b.get("type") == "tool_result":
+                        text_blocks.append(str(b.get("content", "")))
             content_str = " ".join(text_blocks)
         else:
             content_str = str(content)

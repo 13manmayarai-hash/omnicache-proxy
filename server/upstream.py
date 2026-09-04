@@ -293,6 +293,6 @@ class UpstreamClient:
             return response.status_code, response, {}
         except Exception as exc:
             failover_engine.circuit_breaker.record_failure("anthropic")
-            return 503, None, {"type": "error", "error": {"message": str(exc)}}, {}
+            return 503, None, {"type": "error", "error": {"message": str(exc), "type": "upstream_error"}}
 
 upstream_client = UpstreamClient()

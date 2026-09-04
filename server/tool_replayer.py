@@ -51,6 +51,13 @@ def extract_candidate_path(
     """
     Extracts the most specific target directory and optional target file from all available inputs.
     Returns (target_dir, file_path_if_any).
+
+    Note on Workspace Resolution:
+    - If a real filesystem path is provided (via workspace_dir, arguments.cwd/dir, or workspace_fingerprint),
+      it resolves to that directory to probe live git/file staleness on disk.
+    - If an opaque string label is passed (e.g. "my-project-alpha"), no disk path exists to probe for
+      git state changes; the label partitions the cache key namespace, but live file modification invalidation
+      requires an actual resolvable directory path.
     """
     target_file = None
     target_dir = None

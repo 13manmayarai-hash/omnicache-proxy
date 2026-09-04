@@ -67,9 +67,39 @@ Downloads a `.csv` file containing the current cached prompt inventory, access c
 
 ---
 
+## Agent Tool-Call & Replay Endpoints
+
+### 7. Tool Replay / Record
+`POST /v1/agent/tool_replay` & `POST /v1/agent/tool_record`
+
+Caches and replays deterministic coding-agent tool executions (e.g., `git_status`, `git_diff`, `read_file`, `grep_search`, `list_dir`).
+
+#### Request Payload:
+```json
+{
+  "tool_name": "git_status",
+  "arguments": {},
+  "workspace_dir": "/path/to/repo",
+  "workspace_fingerprint": "/path/to/repo",
+  "output": "(Optional) Tool output string to record"
+}
+```
+
+* **Lookup Mode:** When `output` is omitted, performs a cache lookup. Returns `{"status": "HIT", "output": "..."}` or `{"status": "MISS"}`.
+* **Store Mode:** When `output` is provided (or via `/v1/agent/tool_record`), stores the output with policy-driven TTL.
+
+#### Workspace Path & Staleness Resolution Note:
+> [!IMPORTANT]
+> **Filesystem Path vs Opaque Label Resolution:**
+> Dynamic staleness detection inspects Git commit state (`HEAD`) and dirty status (`git status --porcelain`) or non-git file mtime/size on disk.
+> - **Resolvable Path:** If you provide an actual filesystem directory or file path in `workspace_dir`, `arguments.cwd`, `arguments.workspace_dir`, or `workspace_fingerprint` (e.g. `"/home/user/project"` or `"org_id:/home/user/project"`), OmniCache will dynamically probe the repository on disk and automatically invalidate stale cache hits when files change.
+> - **Opaque String Label:** If an opaque identifier is passed (e.g. `"my-project-alpha"`), OmniCache will isolate cache keys by that label, but because no valid filesystem path exists on disk, it cannot dynamically probe git/mtime changes on disk. For full automatic staleness invalidation on file changes, always pass the real workspace path.
+
+---
+
 ## Observability & Diagnostics
 
-### 7. Prometheus Metrics
+### 8. Prometheus Metrics
 `GET /metrics`
 
 Standard Prometheus text format metrics for Grafana or Datadog scrapers.
@@ -77,14 +107,15 @@ Exposes `omnicache_savings_usd`, `omnicache_tokens_saved_total`, `omnicache_exac
 
 ---
 
-### 8. Cache Statistics
+### 9. Cache Statistics
 `GET /v1/cache/stats`
 
 Returns runtime JSON metrics including total requests, exact hits, semantic hits, hit rate percentage, and active entry counts.
 
 ---
 
-### 9. Health Check
+### 10. Health Check
 `GET /healthz`
 
-Returns `{"status": "ok", "version": "2.1.3"}`.
+Returns `{"status": "ok", "version": "2.5.6"}`.
+

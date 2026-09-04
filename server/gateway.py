@@ -172,21 +172,23 @@ async def handle_chat_completions(request: Request) -> Response:
         recorded_chunks = []
         full_content_parts = []
         try:
-            async for raw_line in upstream_resp.aiter_lines():
-                if not raw_line:
+            async for chunk in upstream_resp.aiter_raw():
+                if not chunk:
                     continue
-                yield f"{raw_line}\n\n"
-                if raw_line.startswith("data: ") and raw_line != "data: [DONE]":
-                    try:
-                        chunk_json = json.loads(raw_line[6:])
-                        recorded_chunks.append(chunk_json)
-                        choices = chunk_json.get("choices", [])
-                        if choices:
-                            delta = choices[0].get("delta", {})
-                            if "content" in delta and delta["content"]:
-                                full_content_parts.append(delta["content"])
-                    except Exception:
-                        pass
+                yield chunk
+                try:
+                    chunk_str = chunk.decode("utf-8", errors="ignore")
+                    for raw_line in chunk_str.split("\n"):
+                        if raw_line.startswith("data: ") and raw_line.strip() != "data: [DONE]":
+                            chunk_json = json.loads(raw_line[6:])
+                            recorded_chunks.append(chunk_json)
+                            choices = chunk_json.get("choices", [])
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                if "content" in delta and delta["content"]:
+                                    full_content_parts.append(delta["content"])
+                except Exception:
+                    pass
         finally:
             await upstream_resp.aclose()
             if recorded_chunks:
@@ -327,19 +329,21 @@ async def handle_anthropic_messages(request: Request) -> Response:
         async def stream_and_record_anthropic():
             full_text_accum = []
             try:
-                async for raw_line in stream_resp.aiter_lines():
-                    if not raw_line:
+                async for chunk in stream_resp.aiter_raw():
+                    if not chunk:
                         continue
-                    yield f"{raw_line}\n\n"
-                    if raw_line.startswith("data: "):
-                        try:
-                            data_obj = json.loads(raw_line[6:])
-                            if data_obj.get("type") == "content_block_delta":
-                                delta_text = data_obj.get("delta", {}).get("text", "")
-                                if delta_text:
-                                    full_text_accum.append(delta_text)
-                        except Exception:
-                            pass
+                    yield chunk
+                    try:
+                        chunk_str = chunk.decode("utf-8", errors="ignore")
+                        for line in chunk_str.split("\n"):
+                            if line.startswith("data: "):
+                                data_obj = json.loads(line[6:])
+                                if data_obj.get("type") == "content_block_delta":
+                                    delta_text = data_obj.get("delta", {}).get("text", "")
+                                    if delta_text:
+                                        full_text_accum.append(delta_text)
+                    except Exception:
+                        pass
             finally:
                 await stream_resp.aclose()
                 if full_text_accum:

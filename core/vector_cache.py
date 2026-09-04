@@ -119,8 +119,8 @@ class DualTierCache:
             else:
                 del self.l1_exact_cache[exact_key]
 
-        # If multimodal (image/audio), skip semantic vector search to avoid false matches
-        if is_multimodal or not user_prompt.strip():
+        # If multimodal, multi-turn conversation, or tool-using agent request, require exact L1 match to prevent hallucinations
+        if is_multimodal or not user_prompt.strip() or len(messages) > 1 or tools:
             self.total_misses += 1
             return "MISS", None, 0.0
 

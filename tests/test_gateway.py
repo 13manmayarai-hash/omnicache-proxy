@@ -10,12 +10,15 @@ from starlette.testclient import TestClient
 from server.gateway import app, METRICS_LEDGER
 from core.vector_cache import cache_instance
 from server.singleflight import SingleFlightGroup
+from server.quotas import quota_manager
 
 class TestOmniCacheGateway(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         cache_instance.clear()
         METRICS_LEDGER["total_savings_usd"] = 0.0
+        quota_manager.register_key("tenant_gw_key", team_name="Tenant GW", org_id="tenant_gw")
+        quota_manager.register_key("admin_test_key", team_name="Admin Team", org_id="admin", role="admin")
 
     def test_01_health_and_models(self):
         """Verify health check and model registry endpoints."""
@@ -45,7 +48,7 @@ class TestOmniCacheGateway(unittest.TestCase):
         resp = self.client.post(
             "/v1/chat/completions",
             json=payload,
-            headers={"x-org-id": "tenant_gw"}
+            headers={"x-api-key": "tenant_gw_key"}
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.headers.get("x-cache-status"), "HIT_EXACT")
@@ -72,7 +75,7 @@ class TestOmniCacheGateway(unittest.TestCase):
         resp = self.client.post(
             "/v1/chat/completions",
             json=payload,
-            headers={"x-org-id": "tenant_gw"}
+            headers={"x-api-key": "tenant_gw_key"}
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.headers.get("x-cache-status"), "HIT_EXACT")
@@ -192,8 +195,8 @@ class TestOmniCacheGateway(unittest.TestCase):
         self.assertIn("omnicache_savings_usd", prom_resp.text)
         self.assertIn("omnicache_tokens_saved_total", prom_resp.text)
 
-        # Test CSV Export
-        csv_resp = self.client.get("/v1/cache/export")
+        # Test CSV Export (Admin auth required)
+        csv_resp = self.client.get("/v1/cache/export", headers={"x-api-key": "admin_test_key"})
         self.assertEqual(csv_resp.status_code, 200)
         self.assertIn("text/csv", csv_resp.headers.get("content-type", ""))
         self.assertIn("Key,OrgID,Model", csv_resp.text)

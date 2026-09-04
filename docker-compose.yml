@@ -8,10 +8,12 @@ services:
     container_name: omnicache-proxy
     restart: always
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - OMNICACHE_HOST=0.0.0.0
       - OMNICACHE_PORT=8000
+      - REQUIRE_AUTH=true
+      - ADMIN_API_KEY=change-this-to-a-secure-random-admin-key
       - SIMILARITY_THRESHOLD=0.92
       - EXACT_CACHE_TTL=604800
       - SEMANTIC_CACHE_TTL=604800

@@ -10,8 +10,9 @@ ExecStart=/usr/bin/python3 /root/omnicache_proxy/main.py
 Restart=always
 RestartSec=3
 Environment="OMNICACHE_PORT=8000"
-Environment="OMNICACHE_HOST=0.0.0.0"
+Environment="OMNICACHE_HOST=127.0.0.1"
 Environment="OMNICACHE_DB_PATH=/root/omnicache_proxy/omnicache.db"
+Environment="REQUIRE_AUTH=false"
 
 # Security sandboxing
 LimitNOFILE=65536

@@ -16,7 +16,7 @@ class VirtualKeyManager:
             "default": {
                 "team_name": "Default Workspace",
                 "org_id": "default",
-                "role": "admin",
+                "role": "tenant",
                 "monthly_budget_usd": 1000.0,
                 "current_spend_usd": 0.0,
                 "rate_limit_rpm": 300,
@@ -75,15 +75,13 @@ class VirtualKeyManager:
                 self.register_key(admin_key, team_name="System Administrator", org_id="admin", role="admin", monthly_budget_usd=1000000.0, rate_limit_rpm=10000)
             return True, "authorized", self._keys[admin_key]
 
-        # For development / single-user convenience when REQUIRE_AUTH is false and default key matches:
-        if not getattr(config, "REQUIRE_AUTH", False) and key_id in ("default", "dev", "test_key_123"):
-            if key_id not in self._keys:
-                self.register_key(key_id, team_name="Development Workspace", org_id="default", role="admin")
-            return True, "authorized", self._keys[key_id]
-
-        # Reject unrecognized keys - STRICTLY NO auto-registration
+        # In local developer mode (REQUIRE_AUTH=False), only "default" can be used without prior registration
         if key_id not in self._keys:
-            return False, "Unauthorized: Invalid or unrecognized virtual API key", None
+            if not getattr(config, "REQUIRE_AUTH", False) and key_id in ("default", ""):
+                self.register_key("default", team_name="Default Workspace", org_id="default", role="tenant")
+                key_id = "default"
+            else:
+                return False, "Unauthorized: Invalid or unrecognized virtual API key", None
 
         info = self._keys[key_id]
         now = time.time()
@@ -106,7 +104,11 @@ class VirtualKeyManager:
         return True, "authorized", info
 
     def is_admin(self, key_id: str) -> bool:
-        """Checks if a key has administrator privileges."""
+        """
+        Checks if a key has administrator privileges.
+        Requires explicit ADMIN_API_KEY match or an explicit key registered with role='admin'.
+        Zero hardcoded bypass strings.
+        """
         if not key_id:
             return False
         admin_key = getattr(config, "ADMIN_API_KEY", "").strip()
@@ -124,8 +126,7 @@ class VirtualKeyManager:
         """Returns summary of all virtual keys and current spend."""
         summary = {}
         for k, v in self._keys.items():
-            # Mask sensitive key string in quota dumps
-            masked_key = f"{k[:4]}...{k[-4:]}" if len(k) > 10 else k
+            masked_key = f"{k[:4]}...{k[-4:]}" if len(k) > 10 else (k if k == "default" else "key_***")
             summary[masked_key] = {
                 "team_name": v["team_name"],
                 "org_id": v.get("org_id", v["team_name"]),

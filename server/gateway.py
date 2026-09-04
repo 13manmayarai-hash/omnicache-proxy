@@ -28,6 +28,7 @@ from server.singleflight import flight_bus
 from server.stream_replayer import StreamReplayer
 from server.upstream import upstream_client
 from server.translator import ProtocolTranslator
+from server.failover import failover_engine
 from persistence.snapshot_store import snapshot_store
 
 METRICS_LEDGER = {
@@ -894,10 +895,11 @@ async def handle_stats(request: Request) -> Response:
             "privacy_redactions_total": METRICS_LEDGER["privacy_scrubbed_count"],
             "agent_tool_replays": METRICS_LEDGER["agent_tool_hits"],
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
-            "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"]
+            "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
+            "circuit_breaker": failover_engine.circuit_breaker.get_status()
         },
         "system_info": {
-            "version": "2.1.4",
+            "version": "2.2.1",
             "persistence": "sqlite3_wal",
             "host_binding": config.HOST,
             "port": config.PORT
@@ -1000,8 +1002,9 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": "2.1.4",
-        "service": "omnicache-proxy"
+        "version": "2.2.1",
+        "service": "omnicache-proxy",
+        "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
 
 

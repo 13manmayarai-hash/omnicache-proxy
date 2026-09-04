@@ -117,5 +117,42 @@ class TestSecurityRemediation(unittest.TestCase):
         self.assertIsNone(info)
         self.assertIn("Unauthorized", reason)
 
+    def test_06_circuit_breaker_telemetry_in_gateway(self):
+        """Verify /healthz and /v1/cache/stats report live circuit breaker status."""
+        client = TestClient(app)
+        res_health = client.get("/healthz")
+        self.assertEqual(res_health.status_code, 200)
+        data = res_health.json()
+        self.assertIn("circuit_breaker", data)
+        self.assertIn("openai", data["circuit_breaker"])
+        self.assertIn("anthropic", data["circuit_breaker"])
+        self.assertIn("google", data["circuit_breaker"])
+
+        # Check in /v1/cache/stats
+        res_stats = client.get("/v1/cache/stats")
+        self.assertEqual(res_stats.status_code, 200)
+        stats_data = res_stats.json()
+        self.assertIn("circuit_breaker", stats_data["enterprise_engine"])
+
+    def test_07_dynamic_salt_uniqueness(self):
+        """Verify privacy salt is dynamically generated and not a static public constant."""
+        from core.config import config
+        self.assertTrue(len(config.PRIVACY_SALT) >= 32)
+        self.assertNotEqual(config.PRIVACY_SALT, "OmniCache-Production-Salt-2025-V2")
+        self.assertNotEqual(config.PRIVACY_SALT, "default_salt")
+
+    def test_08_admin_endpoints_require_admin_privileges(self):
+        """Verify tenant keys cannot access /v1/enterprise/quotas or /v1/cache/export."""
+        client = TestClient(app)
+        quota_manager.register_key("standard_tenant_key", team_name="Tenant Team", org_id="tenant_x", role="tenant")
+        
+        # Accessing quotas as tenant should be rejected
+        res_quotas = client.get("/v1/enterprise/quotas", headers={"x-api-key": "standard_tenant_key"})
+        self.assertEqual(res_quotas.status_code, 403)
+
+        # Accessing export as tenant should be rejected
+        res_export = client.get("/v1/cache/export", headers={"x-api-key": "standard_tenant_key"})
+        self.assertEqual(res_export.status_code, 403)
+
 if __name__ == "__main__":
     unittest.main()

@@ -113,11 +113,14 @@ OmniCache can be configured via command-line flags or environment variables (in 
 
 | Environment Variable | Default | Description |
 | :--- | :--- | :--- |
+| `HOST` | `127.0.0.1` | Host interface to listen on (local-first by default). |
 | `PORT` | `8000` | Port to bind the proxy server to. |
-| `HOST` | `0.0.0.0` | Host interface to listen on. |
-| `SEMANTIC_CACHE_TTL_SECONDS` | `86400` | Default time-to-live for cache entries (24 hours). |
+| `REQUIRE_AUTH` | `false` | When `true`, enforces valid API key registration on all requests. |
+| `ADMIN_API_KEY` | `""` | Master admin secret for managing `/v1/enterprise/quotas` and data exports. |
+| `PRIVACY_SALT` | `(auto-generated)` | 256-bit cryptographic salt for anonymized PII tokenization. |
+| `SEMANTIC_CACHE_TTL_SECONDS` | `604800` | Default time-to-live for cache entries (7 days). |
 | `SEMANTIC_SIMILARITY_THRESHOLD` | `0.92` | Minimum cosine similarity required for an L2 semantic cache hit. |
-| `OMNICACHE_DB_PATH` | `~/.omnicache/omnicache.db` | Path to SQLite persistence database. |
+| `OMNICACHE_DB_PATH` | `~/.omnicache/omnicache.db` | Path to SQLite persistence database (WAL mode enabled). |
 | `ANTHROPIC_API_KEY` | *(Optional)* | Default upstream Anthropic API key (if not passed in client headers). |
 | `OPENAI_API_KEY` | *(Optional)* | Default upstream OpenAI API key (if not passed in client headers). |
 | `GEMINI_API_KEY` | *(Optional)* | Default upstream Google Gemini API key. |

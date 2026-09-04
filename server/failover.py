@@ -36,6 +36,26 @@ class CircuitBreaker:
         if self.consecutive_failures[provider] >= self.failure_threshold:
             self.opened_at[provider] = time.time()
 
+    def get_status(self) -> Dict[str, Any]:
+        """Returns the status of all tracked providers."""
+        now = time.time()
+        status = {}
+        for p in ("openai", "anthropic", "google"):
+            opened = p in self.opened_at
+            failures = self.consecutive_failures.get(p, 0)
+            if opened:
+                if now - self.opened_at[p] > self.recovery_timeout_seconds:
+                    state = "half-open"
+                else:
+                    state = "open"
+            else:
+                state = "closed"
+            status[p] = {
+                "state": state,
+                "consecutive_failures": failures
+            }
+        return status
+
 class FailoverOrchestrator:
     def __init__(self):
         self.circuit_breaker = CircuitBreaker()

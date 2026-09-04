@@ -122,42 +122,61 @@ class UpstreamClient:
         payload: Dict[str, Any],
         auth_header: Optional[str] = None
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Forwards streaming OpenAI-format request with automated CircuitBreaker checking and model failover.
+        """
         client = self.get_client()
-        model = payload.get("model", "")
-        provider = failover_engine.identify_provider(model)
+        original_model = payload.get("model", "gpt-4o")
+        candidate_models = [original_model] + failover_engine.get_fallback_chain(original_model)
 
-        url = self.get_endpoint_for_model(model)
-        headers = {"Content-Type": "application/json"}
-        if auth_header:
-            headers["Authorization"] = auth_header
-        elif "gemini" in model.lower() and config.GEMINI_API_KEY:
-            headers["Authorization"] = f"Bearer {config.GEMINI_API_KEY}"
-        elif config.OPENAI_API_KEY:
-            headers["Authorization"] = f"Bearer {config.OPENAI_API_KEY}"
+        last_status = 500
+        last_err: Dict[str, Any] = {"error": {"message": "All streaming upstream providers failed."}}
 
-        clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
-        clean_payload["stream"] = True
+        for model_candidate in candidate_models:
+            provider = failover_engine.identify_provider(model_candidate)
+            if not failover_engine.circuit_breaker.is_available(provider):
+                continue
 
-        try:
-            req = client.build_request("POST", url, json=clean_payload, headers=headers)
-            response = await client.send(req, stream=True)
+            current_payload = dict(payload)
+            current_payload["model"] = model_candidate
 
-            if response.status_code != 200:
-                content = await response.aread()
-                try:
-                    err_json = json.loads(content.decode("utf-8"))
-                except Exception:
-                    err_json = {"error": {"message": content.decode("utf-8"), "code": response.status_code}}
-                await response.aclose()
-                if response.status_code in (429, 500, 502, 503, 504):
-                    failover_engine.circuit_breaker.record_failure(provider)
-                return response.status_code, None, err_json, []
+            url = self.get_endpoint_for_model(model_candidate)
+            headers = {"Content-Type": "application/json"}
+            if auth_header:
+                headers["Authorization"] = auth_header
+            elif "gemini" in model_candidate.lower() and config.GEMINI_API_KEY:
+                headers["Authorization"] = f"Bearer {config.GEMINI_API_KEY}"
+            elif config.OPENAI_API_KEY:
+                headers["Authorization"] = f"Bearer {config.OPENAI_API_KEY}"
 
-            failover_engine.circuit_breaker.record_success(provider)
-            return response.status_code, response, {}, []
-        except Exception as exc:
-            failover_engine.circuit_breaker.record_failure(provider)
-            return 503, None, {"error": {"message": str(exc)}}, []
+            clean_payload = {k: v for k, v in current_payload.items() if not k.startswith("_")}
+            clean_payload["stream"] = True
+
+            try:
+                req = client.build_request("POST", url, json=clean_payload, headers=headers)
+                response = await client.send(req, stream=True)
+
+                if response.status_code != 200:
+                    content = await response.aread()
+                    try:
+                        err_json = json.loads(content.decode("utf-8"))
+                    except Exception:
+                        err_json = {"error": {"message": content.decode("utf-8"), "code": response.status_code}}
+                    await response.aclose()
+                    if response.status_code in (429, 500, 502, 503, 504):
+                        failover_engine.circuit_breaker.record_failure(provider)
+                        last_status, last_err = response.status_code, err_json
+                        continue
+                    return response.status_code, None, err_json, []
+
+                failover_engine.circuit_breaker.record_success(provider)
+                return response.status_code, response, {}, []
+            except Exception as exc:
+                failover_engine.circuit_breaker.record_failure(provider)
+                last_err = {"error": {"message": str(exc)}}
+                continue
+
+        return last_status, None, last_err, []
 
     def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         headers = {

@@ -3,6 +3,7 @@ Configuration and pricing registry for OmniCache AI Proxy.
 """
 
 import os
+import secrets
 from typing import Dict, Any, List
 
 def load_dotenv():
@@ -29,6 +30,34 @@ def load_dotenv():
 
 load_dotenv()
 
+def get_or_generate_privacy_salt() -> str:
+    """
+    Returns configured PRIVACY_SALT or generates a cryptographically strong random salt
+    unique to this deployment. Never uses a public hardcoded static string.
+    """
+    salt = os.getenv("PRIVACY_SALT", os.getenv("OMNICACHE_PRIVACY_SALT", "")).strip()
+    if salt:
+        return salt
+    salt_file = os.path.expanduser("~/.omnicache/.privacy_salt")
+    if os.path.exists(salt_file):
+        try:
+            with open(salt_file, "r", encoding="utf-8") as f:
+                saved = f.read().strip()
+                if saved:
+                    return saved
+        except Exception:
+            pass
+    # Generate unique 256-bit random salt
+    new_salt = secrets.token_hex(32)
+    try:
+        os.makedirs(os.path.dirname(salt_file), exist_ok=True)
+        with open(salt_file, "w", encoding="utf-8") as f:
+            f.write(new_salt)
+    except Exception:
+        pass
+    return new_salt
+
+
 MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached_input": 0.075},
@@ -49,15 +78,15 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
-    # Safe default binding to localhost (127.0.0.1)
+    # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
     
     # Master Admin Key and Authentication Controls
     ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", os.getenv("OMNICACHE_ADMIN_KEY", ""))
     REQUIRE_AUTH: bool = os.getenv("REQUIRE_AUTH", "false").lower() in ("true", "1")
     
-    # Cryptographic Salt for PII Tokenization (prevents cross-user collisions)
-    PRIVACY_SALT: str = os.getenv("PRIVACY_SALT", os.getenv("OMNICACHE_PRIVACY_SALT", "omnicache_salt_v2"))
+    # Cryptographically unique random PII salt (never static public string)
+    PRIVACY_SALT: str = get_or_generate_privacy_salt()
     
     # Restricted CORS Configuration
     CORS_ALLOWED_ORIGINS: List[str] = [

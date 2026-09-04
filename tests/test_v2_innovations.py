@@ -161,8 +161,9 @@ class TestV2Innovations(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("budget cap exceeded", reason)
 
-        # Verify Quota API
-        resp = self.client.get("/v1/enterprise/quotas")
+        # Verify Quota API with admin credentials
+        quota_manager.register_key("admin_quota_key", team_name="Admin Team", org_id="admin", role="admin")
+        resp = self.client.get("/v1/enterprise/quotas", headers={"x-api-key": "admin_quota_key"})
         self.assertEqual(resp.status_code, 200)
         quotas_dict = resp.json().get("quotas", {})
         self.assertTrue(len(quotas_dict) > 0)

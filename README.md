@@ -3,9 +3,34 @@
 [![PyPI version](https://img.shields.io/pypi/v/omnicache-proxy.svg)](https://pypi.org/project/omnicache-proxy/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE)
 
-OmniCache is a lightweight, local caching proxy for Anthropic (Claude), OpenAI (GPT), and Google (Gemini) APIs. 
+**OmniCache is a local acceleration sidecar for AI coding agents (Claude Code, Cursor, Aider, and custom LLM workflows).**
 
-When developing with AI agents (like Claude Code, Cursor, Aider, or custom LLM scripts), repeated prompts, test runs, and static file queries frequently make duplicate upstream API calls. OmniCache sits between your client and upstream providers to intercept matching requests locally in `<1ms`, saving API costs and eliminating remote network latency.
+It sits between your coding assistant and upstream LLM providers (Anthropic, OpenAI, Gemini) to eliminate redundant tool executions, stream terminal tokens smoothly, and share cached knowledge across developer sessions.
+
+---
+
+## Why OmniCache?
+
+### How OmniCache Complements Native Anthropic Prompt Caching
+
+Anthropic’s native prompt caching is great at discounting prefix tokens within a single active conversation. However, it structurally leaves two major gaps open in real-world coding agent loops:
+
+```text
+┌───────────────────────────────────────────────┬───────────────────────────────┬─────────────────────────────────┐
+│ Capability                                    │ Native Provider Caching       │ OmniCache Acceleration Sidecar  │
+├───────────────────────────────────────────────┼───────────────────────────────┼─────────────────────────────────┤
+│ In-Session Prefix Input Token Discount        │ ✅ 90% (Anthropic ephemeral)  │ ✅ Supported (Passthrough)      │
+│ Redundant Disk Tool Replay (git/grep/read)    │ ❌ No (Hits disk & LLM every turn) │ ✅ <0.3ms (Git-state hashed)    │
+│ Cross-Session Memory (New CLI sessions)       │ ❌ 0% (Expires in 5 minutes)   │ ✅ Persistent (SQLite / Redis)  │
+│ Cross-Teammate Knowledge Sharing              │ ❌ 0% (Isolated per session)  │ ✅ Shared Team Redis Store      │
+│ Terminal SSE Stream Jitter Replay             │ ❌ No                         │ ✅ ~65 tok/s (Glitch-free CLI)  │
+│ Multi-Modal Visual Deduplication (Screenshots) │ ❌ No (Re-uploads megabytes)   │ ✅ Perceptual dHash Match       │
+└───────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
+```
+
+1. **Tool-Call Acceleration:** When Claude Code repeatedly calls `git_status`, `grep_search`, or `read_file`, native caching still runs the tool on disk and pays for the network roundtrip. OmniCache cryptographically hashes your Git working tree state (`HEAD` commit + `git status --porcelain`). If files haven't changed, tool calls return in **`<0.3ms`** with **$0.00** spent. The moment you edit a file, the cache instantly invalidates.
+2. **Persistent Cross-Session & Team Memory:** Native prompt cache is ephemeral (5-minute TTL). OmniCache stores answers in an embedded SQLite WAL database or shared Redis, so opening a new session or having a teammate ask a similar architecture question reuses existing answers.
+3. **Smooth CLI Stream Replaying:** Returning a 4,000-token cached completion instantaneously in 0ms can cause buffer overflows and terminal glitches in interactive CLIs. OmniCache emulates natural token-streaming (~65 tokens/sec with subtle stochastic jitter).
 
 ---
 
@@ -17,133 +42,111 @@ pip install omnicache-proxy
 
 ---
 
-## Quickstart
+## Zero-Config Quickstart (`omnicache run`)
 
-### 1. Start the Proxy Server
+The easiest way to use OmniCache is the zero-config `run` wrapper. It automatically launches the background proxy, injects provider environment variables (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`), and displays a session savings ledger when finished:
 
+### 1. Launch Claude Code
+```bash
+omnicache run claude
+```
+
+### 2. Launch Cursor / VS Code / Other Agent Scripts
+```bash
+omnicache run cursor .
+# or custom Python agent scripts:
+omnicache run python my_coding_agent.py
+```
+
+When you exit your session, OmniCache outputs a clean summary:
+```text
+╭──────────────────────────────────────────────────╮
+│ ⚡ OmniCache Session Telemetry                   │
+│  - Tokens Saved:       1,840 tokens              │
+│  - Avoided Cost:    $ 0.0142 USD                 │
+│  - Tool Replays:          14 cached tool calls   │
+╰──────────────────────────────────────────────────╯
+```
+
+---
+
+## Manual Quickstart
+
+### 1. Start the Background Daemon
 ```bash
 omnicache
 ```
+By default, the proxy runs on `http://127.0.0.1:8000`.
 
-By default, the proxy runs on `http://localhost:8000`. You can change the port with `--port`:
-
-```bash
-omnicache --port 8080
-```
-
-### 2. Connect Your Client
+### 2. Configure Your Client Manually
 
 #### Claude Code (Terminal CLI)
-Set the Anthropic base URL environment variable before running `claude`:
-
 ```bash
-export ANTHROPIC_BASE_URL="http://localhost:8000"
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8000"
 claude
 ```
 
 #### Python (OpenAI SDK)
-Route the `base_url` parameter to the local proxy:
-
 ```python
 from openai import OpenAI
 
 client = OpenAI(
     api_key="your-api-key",
-    base_url="http://localhost:8000/v1"
+    base_url="http://127.0.0.1:8000/v1"
 )
 
 response = client.chat.completions.create(
     model="gpt-4o",
-    messages=[{"role": "user", "content": "How do I reverse a linked list in Python?"}]
+    messages=[{"role": "user", "content": "How do I configure CORS headers in FastAPI?"}]
 )
 print(response.choices[0].message.content)
 ```
-
-#### Cursor / VS Code / Other Tools
-In your tool's model settings, set the API Base URL to `http://localhost:8000/v1`.
 
 ---
 
 ## Key Features
 
-* **Two-Tier Cache Engine:**
-  * **L1 Exact Match (Trie Hash / Redis):** Sub-0.05ms lookup for identical payloads.
-  * **L2 Semantic Match (Multi-Table LSH & FAISS ANN Indexing):** Matches semantically equivalent prompts using high-speed multi-table hyperplane locality-sensitive hashing or memory-compacted FAISS HNSW.
-  * **Pluggable Embedders:** Instant zero-dependency 512-d FastHashEmbedder or dense 384-d ONNX embeddings (`all-MiniLM-L6-v2`).
-* **Deterministic Coding-Agent Tool Replay:**
-  * Caches idempotent agent tool outputs (`read_file`, `git_diff`, `grep_search`, `list_dir`) with cryptographic Git workspace state fingerprinting (`commit_sha:dirty_status_hash`).
-  * File modifications or git status changes instantly invalidate stale tool results with zero false positives.
-* **Client Explainability Headers:**
-  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS` | `BYPASS`), `X-OmniCache-Reason`, and `X-OmniCache-Similarity` response headers across all OpenAI and Anthropic routes without mutating JSON body structures.
-* **Horizontal Scaling & Redis Clustering:**
-  * Pluggable storage adapter architecture supporting both zero-dependency standalone mode and distributed multi-worker/multi-replica clusters.
-  * Secondary tenant index sets (`omnicache:tenant_l1:{org_id}`) and True LRU eviction using Redis Sorted Sets (ZSET).
-  * Atomic spend tracking (`INCRBYFLOAT`) and sliding-window Redis RPM rate limiting across all worker processes.
-  * Synchronized cluster-wide Circuit Breaker & upstream model failover state.
-* **Asynchronous Write-Behind Persistence:**
-  * Micro-batched non-blocking worker queue writing to embedded SQLite WAL store off the critical path with zero latency impact.
-  * Durable Virtual Key and spend budget ledger surviving process cold starts.
-* **Remote Authenticated MCP JSON-RPC 2.0 Transport:**
-  * Native `/mcp` and `/v1/mcp` endpoint enabling AI IDEs (Cursor, Claude Code, VS Code) to perform intent-gated caching, vector search, and cache invalidation over HTTP.
-* **Agent Stream Replayer:** Emulates natural token-streaming for cached responses so interactive CLIs (like Claude Code) stream smoothly without terminal glitches.
-* **Request Coalescing (SingleFlight):** Deduplicates concurrent in-flight requests for the same prompt, making only one upstream call.
-* **Built-in CLI Utilities:**
-  * `omnicache doctor`: Checks database state, port bindings, and embedder health.
-  * `omnicache benchmark`: Measures P50, P95, and P99 cache lookup latencies on your machine.
-  * `omnicache stats`: Prints total tokens and cost savings directly to the console.
-* **Observability:**
-  * Web Dashboard: `http://localhost:8000/dashboard`
-  * Prometheus Metrics: `http://localhost:8000/metrics`
-  * CSV Ledger Export: `http://localhost:8000/v1/cache/export`
+* **Deterministic Git-Aware Tool Replay:**
+  * Intercepts and caches idempotent agent tools (`git_status`, `git_diff`, `read_file`, `grep_search`, `list_dir`).
+  * Cryptographically fingerprinted against `git rev-parse HEAD` and `git status --porcelain`.
+  * Modifying files or changing branches instantly invalidates stale results with zero false positives.
+* **Dual-Tier Cache Engine:**
+  * **L1 Exact Match (Trie Hash / Redis):** Sub-0.05ms lookup for identical request payloads.
+  * **L2 FastHash Semantic Match:** In-memory 512-d hyperplane locality-sensitive hashing for syntactically varied queries without external vector DB dependencies.
+* **Stream Replayer with Terminal Jitter:**
+  * Delivers cached SSE streams with natural human-like cadence (~65 tok/s) and `<10ms` Time-To-First-Token (TTFT) for seamless CLI rendering.
+* **Model Context Protocol (MCP) Remote Server:**
+  * Native `/mcp` JSON-RPC 2.0 endpoint allowing Claude Code, Cursor, and IDEs to discover and invoke `omnicache_replay_tool` and `omnicache_record_tool`.
+* **SingleFlight Request Coalescing:**
+  * Deduplicates concurrent in-flight requests for identical prompts, forwarding only one upstream call.
+* **Horizontal Scaling with Redis:**
+  * Connect to Redis (`REDIS_URL="redis://127.0.0.1:6379/0"`) for shared team memory and multi-worker clusters.
+* **Explainability Headers:**
+  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
 ---
 
-## Horizontal Multi-Worker Deployment
-
-To run OmniCache with multiple worker processes or in a clustered container environment, simply provide `REDIS_URL`:
+## Built-in CLI Utilities
 
 ```bash
-# Multi-worker deployment with Redis distributed state
-REDIS_URL="redis://127.0.0.1:6379/0" uvicorn server.gateway:app --host 127.0.0.1 --port 8000 --workers 4
+# Check database, port bindings, and vector engine health
+omnicache doctor
+
+# Run high-speed micro-benchmarks on your machine
+omnicache benchmark
+
+# Print cumulative token and USD savings
+omnicache stats
 ```
 
 ---
 
-## Configuration
+## Observability & Diagnostics
 
-OmniCache can be configured via command-line flags or environment variables (in your shell or a local `.env` file):
-
-| Environment Variable | Default | Description |
-| :--- | :--- | :--- |
-| `HOST` | `127.0.0.1` | Host interface to listen on (local-first by default). |
-| `PORT` | `8000` | Port to bind the proxy server to. |
-| `REDIS_URL` | `""` | Redis connection URL (e.g. `redis://127.0.0.1:6379/0`) for multi-worker state clustering. |
-| `CACHE_STORAGE_BACKEND` | `auto` | Storage engine backend: `auto`, `redis`, or `memory`. |
-| `EMBEDDER_BACKEND` | `fast_hash` | Semantic embedder: `fast_hash`, `onnx`, or `auto`. |
-| `ANN_INDEX_ENABLED` | `true` | Enables sub-millisecond Approximate Nearest Neighbor vector search. |
-| `REQUIRE_AUTH` | `false` | When `true`, enforces valid API key registration on all requests. Non-localhost bindings require auth. |
-| `OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE` | `false` | Explicit bypass if binding to `0.0.0.0` without `REQUIRE_AUTH`. |
-| `ADMIN_API_KEY` | `""` | Master admin secret for managing `/v1/enterprise/quotas` and data exports. |
-| `PRIVACY_SALT` | `(auto-generated)` | 256-bit cryptographic salt for anonymized PII tokenization. |
-| `SEMANTIC_CACHE_TTL_SECONDS` | `604800` | Default time-to-live for cache entries (7 days). |
-| `SEMANTIC_SIMILARITY_THRESHOLD` | `0.92` | Minimum cosine similarity required for an L2 semantic cache hit. |
-| `OMNICACHE_DB_PATH` | `~/.omnicache/omnicache.db` | Path to SQLite persistence database (WAL mode enabled). |
-| `ANTHROPIC_API_KEY` | *(Optional)* | Default upstream Anthropic API key (if not passed in client headers). |
-| `OPENAI_API_KEY` | *(Optional)* | Default upstream OpenAI API key (if not passed in client headers). |
-| `GEMINI_API_KEY` | *(Optional)* | Default upstream Google Gemini API key. |
-
----
-
-## Running Tests
-
-Run the test suite using `pytest`:
-
-```bash
-git clone https://github.com/13manmayarai-hash/omnicache-proxy.git
-cd omnicache-proxy
-pip install -e ".[test]"
-pytest tests/ -v
-```
+* **Web Dashboard:** `http://localhost:8000/dashboard`
+* **Prometheus Metrics:** `http://localhost:8000/metrics`
+* **Cache Statistics:** `http://localhost:8000/v1/cache/stats`
+* **CSV Export:** `http://localhost:8000/v1/cache/export`
 
 ---
 
@@ -151,8 +154,8 @@ pytest tests/ -v
 
 * [API Reference](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/API_REFERENCE.md)
 * [Architecture Overview](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/ARCHITECTURE.md)
+* [Quickstart Guide](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md)
 * [Troubleshooting & FAQ](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/TROUBLESHOOTING_AND_FAQ.md)
-* [Contributing Guidelines](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/CONTRIBUTING.md)
 
 ---
 

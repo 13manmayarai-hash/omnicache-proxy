@@ -121,12 +121,122 @@ def run_stats():
     print(f"Cache Hit Rate:     {stats.get('hit_rate_percentage', 0.0)}%")
     print(f"Cached Prompts:     {stats.get('active_l1_exact_entries', 0)} L1 / {stats.get('active_l2_semantic_entries', 0)} L2\n")
 
+def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
+    """
+    Zero-config execution wrapper for AI coding agents (Claude Code, Cursor, Aider, custom scripts).
+    Automatically starts or attaches to OmniCache proxy and injects environment variables.
+    """
+    if not cmd_args:
+        print("❌ Error: No command specified.")
+        print("Usage: omnicache run <command> [args...]")
+        print("Example: omnicache run claude")
+        sys.exit(1)
+
+    import subprocess
+    import urllib.request
+    import json
+
+    server_process = None
+    started_local_server = False
+    target_host = "127.0.0.1" if host == "0.0.0.0" else host
+
+    # 1. Ensure OmniCache proxy is running
+    if not is_port_in_use(port, target_host):
+        print(f"🚀 Starting OmniCache acceleration sidecar on http://{target_host}:{port}...")
+        server_process = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "server.gateway:app", "--host", target_host, "--port", str(port), "--log-level", "warning"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        started_local_server = True
+        # Wait up to 5s for the server to be ready
+        ready = False
+        for _ in range(50):
+            if is_port_in_use(port, target_host):
+                ready = True
+                break
+            time.sleep(0.1)
+        if not ready:
+            print("⚠️ Warning: Failed to confirm background OmniCache proxy readiness.")
+    else:
+        print(f"⚡ Attached to active OmniCache proxy on http://{target_host}:{port}")
+
+    # 2. Snapshot initial telemetry
+    initial_tokens_saved = 0
+    initial_savings_usd = 0.0
+    try:
+        req = urllib.request.urlopen(f"http://{target_host}:{port}/v1/cache/stats", timeout=1.0)
+        data = json.loads(req.read().decode("utf-8"))
+        fin = data.get("financial_telemetry", {})
+        initial_tokens_saved = fin.get("total_tokens_saved", 0)
+        initial_savings_usd = fin.get("total_savings_usd", 0.0)
+    except Exception:
+        pass
+
+    # 3. Setup child environment
+    env = os.environ.copy()
+    proxy_url = f"http://{target_host}:{port}"
+    proxy_v1 = f"http://{target_host}:{port}/v1"
+    env["ANTHROPIC_BASE_URL"] = proxy_url
+    env["OPENAI_BASE_URL"] = proxy_v1
+    env["OPENAI_API_BASE"] = proxy_v1
+
+    print(f"🎯 Injected proxy environment:")
+    print(f"   ANTHROPIC_BASE_URL = {proxy_url}")
+    print(f"   OPENAI_BASE_URL    = {proxy_v1}")
+    print(f"\n▶ Executing agent command: {' '.join(cmd_args)}\n{'='*60}\n")
+
+    exit_code = 0
+    try:
+        child = subprocess.run(cmd_args, env=env)
+        exit_code = child.returncode
+    except KeyboardInterrupt:
+        exit_code = 130
+    except Exception as e:
+        print(f"\n❌ Execution error: {e}")
+        exit_code = 1
+    finally:
+        print(f"\n{'='*60}")
+        # 4. Display session delta telemetry
+        try:
+            req = urllib.request.urlopen(f"http://{target_host}:{port}/v1/cache/stats", timeout=1.0)
+            data = json.loads(req.read().decode("utf-8"))
+            fin = data.get("financial_telemetry", {})
+            eng = data.get("enterprise_engine", {})
+            
+            diff_tokens = max(0, fin.get("total_tokens_saved", 0) - initial_tokens_saved)
+            diff_savings = max(0.0, fin.get("total_savings_usd", 0.0) - initial_savings_usd)
+            tool_replays = eng.get("agent_tool_replays", 0)
+
+            print("\n╭──────────────────────────────────────────────────╮")
+            print("│ ⚡ OmniCache Session Telemetry                   │")
+            print(f"│  - Tokens Saved:    {diff_tokens:>8,} tokens                 │")
+            print(f"│  - Avoided Cost:    ${diff_savings:>8.4f} USD                    │")
+            print(f"│  - Tool Replays:    {tool_replays:>8} cached tool calls        │")
+            print("╰──────────────────────────────────────────────────╯\n")
+        except Exception:
+            pass
+
+        if server_process and started_local_server:
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=2.0)
+            except Exception:
+                server_process.kill()
+
+    sys.exit(exit_code)
+
 def main():
+    # Handle "omnicache run <command> [args...]"
+    if len(sys.argv) > 1 and sys.argv[1] == "run":
+        run_wrapper(sys.argv[2:], host=config.HOST, port=config.PORT)
+        return
+
     parser = argparse.ArgumentParser(
         prog="omnicache",
-        description="OmniCache - Lightweight semantic caching proxy for OpenAI and Anthropic APIs."
+        description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "doctor", "benchmark", "stats"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "doctor", "benchmark", "stats"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose HTTP request logging")

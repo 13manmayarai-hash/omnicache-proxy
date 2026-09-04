@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.5.6"
-description = "Lightweight AI efficiency gateway and caching proxy for Anthropic, OpenAI, and Gemini APIs."
+version = "2.5.7"
+description = "Local acceleration sidecar and Git-aware tool replayer for AI coding agents (Claude Code, Cursor, Aider)."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

@@ -56,25 +56,45 @@ class TestV2Innovations(unittest.TestCase):
         file_content = '{"env": "production", "debug": false}'
 
         # Lookup before store -> Miss
-        is_hit, out, _ = tool_cache.lookup_tool_call(tool_name, args)
+        is_hit, out, _ = tool_cache.lookup_tool_call(tool_name, args, workspace_state="head1:clean")
         self.assertFalse(is_hit)
 
-        # Store tool execution
-        tool_cache.store_tool_call(tool_name, args, file_content)
+        # Store tool execution with explicit workspace state
+        tool_cache.store_tool_call(tool_name, args, file_content, workspace_state="head1:clean")
 
-        # Lookup after store -> Instant Hit
-        is_hit, out, _ = tool_cache.lookup_tool_call(tool_name, args)
+        # Lookup after store with same workspace state -> Instant Hit
+        is_hit, out, _ = tool_cache.lookup_tool_call(tool_name, args, workspace_state="head1:clean")
         self.assertTrue(is_hit)
         self.assertEqual(out, file_content)
 
-        # Test Gateway Tool Replay API
+        # Lookup with altered workspace state (e.g. git commit changed or dirty status) -> Miss (invalidated!)
+        is_hit_dirty, out_dirty, _ = tool_cache.lookup_tool_call(tool_name, args, workspace_state="head1:dirty_abc")
+        self.assertFalse(is_hit_dirty)
+        self.assertIsNone(out_dirty)
+
+        # Non-whitelisted/unsafe tools are rejected
+        self.assertFalse(tool_cache.is_eligible("delete_database"))
+        is_hit_unsafe, _, _ = tool_cache.lookup_tool_call("delete_database", {"db": "prod"})
+        self.assertFalse(is_hit_unsafe)
+
+        # Test Gateway Tool Replay API with workspace_state
         resp = self.client.post("/v1/agent/tool_replay", json={
             "tool_name": "read_file",
-            "arguments": {"filepath": "config.json"}
+            "arguments": {"filepath": "config.json"},
+            "workspace_state": "head1:clean"
         })
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json().get("status"), "HIT")
         self.assertEqual(resp.json().get("output"), file_content)
+
+        # Gateway Tool Replay with mismatched workspace state -> MISS
+        resp_mismatch = self.client.post("/v1/agent/tool_replay", json={
+            "tool_name": "read_file",
+            "arguments": {"filepath": "config.json"},
+            "workspace_state": "head2:clean"
+        })
+        self.assertEqual(resp_mismatch.status_code, 200)
+        self.assertEqual(resp_mismatch.json().get("status"), "MISS")
 
     # 3. Adaptive Cost Arbitrage & Complexity Classifier Test
     def test_cost_cascade_router(self):

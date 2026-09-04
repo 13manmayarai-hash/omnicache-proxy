@@ -68,10 +68,16 @@ In your tool's model settings, set the API Base URL to `http://localhost:8000/v1
 
 * **Two-Tier Cache Engine:**
   * **L1 Exact Match (Trie Hash / Redis):** Sub-0.05ms lookup for identical payloads.
-  * **L2 Semantic Match (Multi-Table LSH & FAISS ANN Indexing):** Matches semantically equivalent prompts using high-speed multi-table hyperplane locality-sensitive hashing or FAISS HNSW.
+  * **L2 Semantic Match (Multi-Table LSH & FAISS ANN Indexing):** Matches semantically equivalent prompts using high-speed multi-table hyperplane locality-sensitive hashing or memory-compacted FAISS HNSW.
   * **Pluggable Embedders:** Instant zero-dependency 512-d FastHashEmbedder or dense 384-d ONNX embeddings (`all-MiniLM-L6-v2`).
+* **Deterministic Coding-Agent Tool Replay:**
+  * Caches idempotent agent tool outputs (`read_file`, `git_diff`, `grep_search`, `list_dir`) with cryptographic Git workspace state fingerprinting (`commit_sha:dirty_status_hash`).
+  * File modifications or git status changes instantly invalidate stale tool results with zero false positives.
+* **Client Explainability Headers:**
+  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS` | `BYPASS`), `X-OmniCache-Reason`, and `X-OmniCache-Similarity` response headers across all OpenAI and Anthropic routes without mutating JSON body structures.
 * **Horizontal Scaling & Redis Clustering:**
   * Pluggable storage adapter architecture supporting both zero-dependency standalone mode and distributed multi-worker/multi-replica clusters.
+  * Secondary tenant index sets (`omnicache:tenant_l1:{org_id}`) and True LRU eviction using Redis Sorted Sets (ZSET).
   * Atomic spend tracking (`INCRBYFLOAT`) and sliding-window Redis RPM rate limiting across all worker processes.
   * Synchronized cluster-wide Circuit Breaker & upstream model failover state.
 * **Asynchronous Write-Behind Persistence:**
@@ -115,7 +121,8 @@ OmniCache can be configured via command-line flags or environment variables (in 
 | `CACHE_STORAGE_BACKEND` | `auto` | Storage engine backend: `auto`, `redis`, or `memory`. |
 | `EMBEDDER_BACKEND` | `fast_hash` | Semantic embedder: `fast_hash`, `onnx`, or `auto`. |
 | `ANN_INDEX_ENABLED` | `true` | Enables sub-millisecond Approximate Nearest Neighbor vector search. |
-| `REQUIRE_AUTH` | `false` | When `true`, enforces valid API key registration on all requests. |
+| `REQUIRE_AUTH` | `false` | When `true`, enforces valid API key registration on all requests. Non-localhost bindings require auth. |
+| `OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE` | `false` | Explicit bypass if binding to `0.0.0.0` without `REQUIRE_AUTH`. |
 | `ADMIN_API_KEY` | `""` | Master admin secret for managing `/v1/enterprise/quotas` and data exports. |
 | `PRIVACY_SALT` | `(auto-generated)` | 256-bit cryptographic salt for anonymized PII tokenization. |
 | `SEMANTIC_CACHE_TTL_SECONDS` | `604800` | Default time-to-live for cache entries (7 days). |
@@ -134,7 +141,7 @@ Run the test suite using `pytest`:
 ```bash
 git clone https://github.com/13manmayarai-hash/omnicache-proxy.git
 cd omnicache-proxy
-pip install -e .
+pip install -e ".[test]"
 pytest tests/ -v
 ```
 

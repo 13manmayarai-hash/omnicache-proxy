@@ -8,7 +8,7 @@ import time
 import socket
 import argparse
 import uvicorn
-from core.config import config
+from core.config import config, validate_startup_security_invariants
 from server.gateway import app, cache_instance, METRICS_LEDGER
 from persistence.snapshot_store import snapshot_store
 
@@ -145,6 +145,7 @@ def main():
 
     port = args.port
     host = args.host
+    validate_startup_security_invariants(host)
     log_level = "info" if args.verbose else "warning"
     access_log = bool(args.verbose)
 

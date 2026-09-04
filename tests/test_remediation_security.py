@@ -284,6 +284,35 @@ class TestSecurityRemediation(unittest.TestCase):
         self.assertIn("error", data)
         self.assertEqual(data["error"]["code"], 404)
 
+    def test_15_startup_security_invariants_enforcement(self):
+        """Verify server refuses to bind to 0.0.0.0 without REQUIRE_AUTH unless explicitly bypassed."""
+        from core.config import config, validate_startup_security_invariants
+        
+        # Localhost is always allowed
+        validate_startup_security_invariants("127.0.0.1")
+        validate_startup_security_invariants("localhost")
+
+        # 0.0.0.0 without auth must raise RuntimeError
+        orig_req_auth = config.REQUIRE_AUTH
+        orig_allow_insecure = config.ALLOW_INSECURE_NETWORK_EXPOSURE
+        try:
+            config.REQUIRE_AUTH = False
+            config.ALLOW_INSECURE_NETWORK_EXPOSURE = False
+            with self.assertRaises(RuntimeError):
+                validate_startup_security_invariants("0.0.0.0")
+
+            # Allowed when REQUIRE_AUTH is True
+            config.REQUIRE_AUTH = True
+            validate_startup_security_invariants("0.0.0.0")
+
+            # Allowed when explicitly bypassed
+            config.REQUIRE_AUTH = False
+            config.ALLOW_INSECURE_NETWORK_EXPOSURE = True
+            validate_startup_security_invariants("0.0.0.0")
+        finally:
+            config.REQUIRE_AUTH = orig_req_auth
+            config.ALLOW_INSECURE_NETWORK_EXPOSURE = orig_allow_insecure
+
 
 if __name__ == "__main__":
     unittest.main()

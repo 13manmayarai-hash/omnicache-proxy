@@ -248,6 +248,9 @@ async def handle_chat_completions(request: Request) -> Response:
                 METRICS_LEDGER["total_tokens_saved"] += 400
 
                 resp_headers = {
+                    "X-OmniCache-Decision": "HIT",
+                    "X-OmniCache-Reason": f"HIT_VISION_DHASH: Perceptual visual match (Hamming distance {v_dist}/64)",
+                    "X-OmniCache-Similarity": f"{1.0 - (v_dist / 64.0):.4f}",
                     "X-Cache-Status": "HIT_VISION",
                     "X-Cache-Decision-Reason": f"HIT_VISION_DHASH: Perceptual visual match (Hamming distance {v_dist}/64)",
                     "X-Cache-Similarity": f"{1.0 - (v_dist / 64.0):.4f}",
@@ -293,6 +296,9 @@ async def handle_chat_completions(request: Request) -> Response:
             METRICS_LEDGER["estimated_tokens_saved"] += total_saved_tokens
 
         resp_headers = {
+            "X-OmniCache-Decision": "HIT",
+            "X-OmniCache-Reason": decision_reason,
+            "X-OmniCache-Similarity": f"{similarity:.4f}",
             "X-Cache-Status": status,
             "X-Cache-Decision-Reason": decision_reason,
             "X-Cache-Similarity": f"{similarity:.4f}",
@@ -393,9 +399,16 @@ async def handle_chat_completions(request: Request) -> Response:
 
             rehydrated = privacy_shield.rehydrate_response(res_data, pii_token_map)
             cache_status_header = "MISS" if is_leader else "HIT_SINGLEFLIGHT"
+            decision_header = "MISS" if is_leader else "HIT"
+            reason_header = decision_reason if is_leader else "HIT_SINGLEFLIGHT: Concurrent in-flight request coalesced with leader"
+            similarity_header = f"{similarity:.4f}" if is_leader else "1.0000"
             return JSONResponse(rehydrated, headers={
+                "X-OmniCache-Decision": decision_header,
+                "X-OmniCache-Reason": reason_header,
+                "X-OmniCache-Similarity": similarity_header,
                 "X-Cache-Status": cache_status_header,
-                "X-Cache-Decision-Reason": decision_reason if is_leader else "HIT_SINGLEFLIGHT: Concurrent in-flight request coalesced with leader",
+                "X-Cache-Decision-Reason": reason_header,
+                "X-Cache-Similarity": similarity_header,
                 "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
                 "X-Tokens-Used": str(tokens_used if is_leader else 0),
                 "X-Tokens-Saved": str(0 if is_leader else tokens_used),
@@ -474,8 +487,12 @@ async def handle_chat_completions(request: Request) -> Response:
 
     latency_ms = (time.perf_counter() - start_time) * 1000
     return StreamingResponse(stream_and_record(), media_type="text/event-stream", headers={
+        "X-OmniCache-Decision": "MISS",
+        "X-OmniCache-Reason": decision_reason,
+        "X-OmniCache-Similarity": f"{similarity:.4f}",
         "X-Cache-Status": status,
         "X-Cache-Decision-Reason": decision_reason,
+        "X-Cache-Similarity": f"{similarity:.4f}",
         "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
         "X-Tokens-Accounting": "estimated",
         "X-Requested-Model": requested_model,
@@ -528,6 +545,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
                 METRICS_LEDGER["total_savings_usd"] += savings
 
                 resp_headers = {
+                    "X-OmniCache-Decision": "HIT",
+                    "X-OmniCache-Reason": f"HIT_VISION_DHASH: Perceptual visual match (Hamming distance {v_dist}/64)",
+                    "X-OmniCache-Similarity": f"{1.0 - (v_dist / 64.0):.4f}",
                     "X-Cache-Status": "HIT_VISION",
                     "X-Cache-Decision-Reason": f"HIT_VISION_DHASH: Perceptual visual match (Hamming distance {v_dist}/64)",
                     "X-Cache-Similarity": f"{1.0 - (v_dist / 64.0):.4f}",
@@ -593,6 +613,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
             METRICS_LEDGER["estimated_tokens_saved"] += total_saved_tokens
 
         resp_headers = {
+            "X-OmniCache-Decision": "HIT",
+            "X-OmniCache-Reason": decision_reason,
+            "X-OmniCache-Similarity": f"{similarity:.4f}",
             "X-Cache-Status": status,
             "X-Cache-Decision-Reason": decision_reason,
             "X-Cache-Similarity": f"{similarity:.4f}",
@@ -705,8 +728,12 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
         latency_ms = (time.perf_counter() - start_time) * 1000
         return StreamingResponse(stream_and_record_anthropic(), media_type="text/event-stream", headers={
+            "X-OmniCache-Decision": "MISS",
+            "X-OmniCache-Reason": decision_reason,
+            "X-OmniCache-Similarity": f"{similarity:.4f}",
             "X-Cache-Status": "MISS",
             "X-Cache-Decision-Reason": decision_reason,
+            "X-Cache-Similarity": f"{similarity:.4f}",
             "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
             "X-Tokens-Accounting": "estimated",
             "X-Requested-Model": requested_model,
@@ -755,8 +782,12 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
         rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
         return JSONResponse(rehydrated, headers={
+            "X-OmniCache-Decision": "MISS",
+            "X-OmniCache-Reason": decision_reason,
+            "X-OmniCache-Similarity": f"{similarity:.4f}",
             "X-Cache-Status": "MISS",
             "X-Cache-Decision-Reason": decision_reason,
+            "X-Cache-Similarity": f"{similarity:.4f}",
             "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
             "X-Tokens-Used": str(tokens_used),
             "X-Tokens-Saved": "0",
@@ -821,13 +852,14 @@ async def handle_tool_replay(request: Request) -> Response:
         tool_name = body.get("tool_name")
         arguments = body.get("arguments", {})
         raw_fp = body.get("workspace_fingerprint", "default")
+        ws_state = body.get("workspace_state", None)
         env_fp = f"{org_id}:{raw_fp}"
     except Exception:
         return JSONResponse({"error": "Invalid JSON"}, status_code=400, headers=cors_headers)
 
-    is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=env_fp)
+    is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=env_fp, workspace_state=ws_state)
     if not is_hit and (org_id == "default" or raw_fp == "default"):
-        is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=raw_fp)
+        is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=raw_fp, workspace_state=ws_state)
 
     if is_hit:
         METRICS_LEDGER["agent_tool_hits"] += 1

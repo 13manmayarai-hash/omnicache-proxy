@@ -84,6 +84,7 @@ class ProxyConfig:
     # Master Admin Key and Authentication Controls
     ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", os.getenv("OMNICACHE_ADMIN_KEY", ""))
     REQUIRE_AUTH: bool = os.getenv("REQUIRE_AUTH", "false").lower() in ("true", "1")
+    ALLOW_INSECURE_NETWORK_EXPOSURE: bool = os.getenv("OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE", "false").lower() in ("true", "1")
     
     # Cryptographically unique random PII salt (never static public string)
     PRIVACY_SALT: str = get_or_generate_privacy_salt()
@@ -126,5 +127,22 @@ class ProxyConfig:
     HTTP_POOL_MAX_CONNECTIONS: int = 100
     HTTP_POOL_MAX_KEEPALIVE: int = 20
     HTTP_TIMEOUT_SECONDS: float = 60.0
+
+
+def validate_startup_security_invariants(host: str = None):
+    """
+    Validates critical security invariants before proxy boot.
+    Fails closed if bound to non-localhost (0.0.0.0 or public IP) without REQUIRE_AUTH=true,
+    unless explicitly bypassed with OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE=true.
+    """
+    target_host = (host or config.HOST).strip().lower()
+    is_localhost = target_host in ("127.0.0.1", "localhost", "::1")
+    if not is_localhost and not config.REQUIRE_AUTH and not config.ALLOW_INSECURE_NETWORK_EXPOSURE:
+        raise RuntimeError(
+            f"SECURITY ERROR: Refusing to bind OmniCache to non-localhost interface '{target_host}' "
+            f"with REQUIRE_AUTH=false. This would expose an unauthenticated proxy to the network. "
+            f"To fix: Set REQUIRE_AUTH=true (with ADMIN_API_KEY) or set OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE=true."
+        )
+
 
 config = ProxyConfig()

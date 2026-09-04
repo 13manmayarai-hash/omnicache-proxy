@@ -4,10 +4,11 @@ Runs the high-performance ASGI gateway on the configured host & port.
 """
 
 import uvicorn
-from core.config import config
+from core.config import config, validate_startup_security_invariants
 from server.gateway import app
 
 def start():
+    validate_startup_security_invariants(config.HOST)
     print(f"🚀 Starting OmniCache AI Proxy on http://{config.HOST}:{config.PORT}")
     print("⚡ Endpoints active:")
     print("   - POST /v1/chat/completions  (OpenAI Drop-In Gateway)")

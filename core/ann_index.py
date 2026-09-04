@@ -162,21 +162,48 @@ class ANNIndexFactory:
 
 
 class FaissHNSWIndex(BaseANNIndex):
-    """Optional FAISS-accelerated HNSW vector index."""
+    """Optional FAISS-accelerated HNSW vector index with leak-free churn compaction."""
 
     def __init__(self, dimensions: int = 512, m: int = 32):
         import faiss
         import numpy as np
         self.dimensions = dimensions
+        self.m = m
         self.index = faiss.IndexHNSWFlat(dimensions, m, faiss.METRIC_INNER_PRODUCT)
         self.key_to_id: Dict[str, int] = {}
         self.id_to_key: Dict[int, str] = {}
+        self.vectors: Dict[str, List[float]] = {}
         self.current_id = 0
+        self.removed_count = 0
+        self.rebuild_count = 0
         self.np = np
 
-    def add(self, key: str, vector: List[float]):
-        if key in self.key_to_id:
+    def _rebuild(self):
+        """Rebuilds the underlying FAISS HNSW graph to reclaim deleted vector memory."""
+        import faiss
+        self.index = faiss.IndexHNSWFlat(self.dimensions, self.m, faiss.METRIC_INNER_PRODUCT)
+        self.key_to_id.clear()
+        self.id_to_key.clear()
+        self.current_id = 0
+        self.removed_count = 0
+        self.rebuild_count += 1
+        if not self.vectors:
             return
+
+        keys = list(self.vectors.keys())
+        matrix = self.np.array([self.vectors[k] for k in keys], dtype=self.np.float32)
+        self.index.add(matrix)
+        for i, k in enumerate(keys):
+            self.key_to_id[k] = i
+            self.id_to_key[i] = k
+        self.current_id = len(keys)
+
+    def add(self, key: str, vector: List[float]):
+        if not vector or len(vector) != self.dimensions:
+            return
+        if key in self.key_to_id:
+            self.remove(key)
+        self.vectors[key] = vector
         arr = self.np.array([vector], dtype=self.np.float32)
         idx = self.current_id
         self.current_id += 1
@@ -185,13 +212,20 @@ class FaissHNSWIndex(BaseANNIndex):
         self.index.add(arr)
 
     def remove(self, key: str):
-        # Note: IndexHNSWFlat does not support arbitrary removal in-place; mark as removed
         if key in self.key_to_id:
             idx = self.key_to_id.pop(key)
             self.id_to_key.pop(idx, None)
+            self.vectors.pop(key, None)
+            self.removed_count += 1
+
+            # Trigger compaction if removals exceed 20% of total lifetime entries (and >= 20 removals)
+            total_active = len(self.vectors)
+            total_churn = total_active + self.removed_count
+            if self.removed_count >= 20 and self.removed_count > 0.20 * total_churn:
+                self._rebuild()
 
     def search(self, query_vector: List[float], top_k: int = 50, min_similarity: float = 0.0) -> List[Tuple[str, float]]:
-        if self.index.ntotal == 0:
+        if self.index.ntotal == 0 or not self.key_to_id:
             return []
         arr = self.np.array([query_vector], dtype=self.np.float32)
         distances, indices = self.index.search(arr, min(top_k, self.index.ntotal))
@@ -208,7 +242,9 @@ class FaissHNSWIndex(BaseANNIndex):
 
     def clear(self):
         import faiss
-        self.index = faiss.IndexHNSWFlat(self.dimensions, 32, faiss.METRIC_INNER_PRODUCT)
+        self.index = faiss.IndexHNSWFlat(self.dimensions, self.m, faiss.METRIC_INNER_PRODUCT)
         self.key_to_id.clear()
         self.id_to_key.clear()
+        self.vectors.clear()
         self.current_id = 0
+        self.removed_count = 0

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.5.2"
+version = "2.5.3"
 description = "Lightweight AI efficiency gateway and caching proxy for Anthropic, OpenAI, and Gemini APIs."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,6 +29,12 @@ dependencies = [
 test = [
     "pytest>=8.0.0",
     "fakeredis>=2.20.0"
+]
+dev = [
+    "pytest>=8.0.0",
+    "fakeredis>=2.20.0",
+    "build>=1.0.0",
+    "twine>=5.0.0"
 ]
 
 [project.urls]

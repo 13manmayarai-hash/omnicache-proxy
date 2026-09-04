@@ -109,5 +109,46 @@ class TestPhase2ANNAndEmbeddings(unittest.TestCase):
         self.assertIsNotNone(entry)
         self.assertGreaterEqual(score, 0.90)
 
+    def test_05_faiss_compaction_and_rebuild_lifecycle(self):
+        """Verify FaissHNSWIndex automatically triggers _rebuild upon 20% deletion churn."""
+        import sys
+        from unittest.mock import MagicMock, patch
+        
+        mock_faiss = MagicMock()
+        mock_hnsw = MagicMock()
+        mock_hnsw.ntotal = 100
+        mock_faiss.IndexHNSWFlat.return_value = mock_hnsw
+        mock_faiss.METRIC_INNER_PRODUCT = 1
+
+        mock_np = MagicMock()
+        mock_np.float32 = "float32"
+        mock_np.array.side_effect = lambda x, dtype=None: x
+        
+        with patch.dict(sys.modules, {"faiss": mock_faiss, "numpy": mock_np}):
+            from core.ann_index import FaissHNSWIndex
+            idx = FaissHNSWIndex(dimensions=512, m=32)
+            
+            # Add 100 items
+            for i in range(100):
+                vec = [0.01] * 512
+                idx.add(f"key_{i}", vec)
+            
+            self.assertEqual(idx.size(), 100)
+            self.assertEqual(idx.rebuild_count, 0)
+            
+            # Remove 10 items (not reaching 20 removals)
+            for i in range(10):
+                idx.remove(f"key_{i}")
+            self.assertEqual(idx.size(), 90)
+            self.assertEqual(idx.rebuild_count, 0)
+            
+            # Remove 15 more items (triggering compaction at key_20 when removed exceeds 20%)
+            for i in range(10, 25):
+                idx.remove(f"key_{i}")
+            
+            self.assertEqual(idx.size(), 75)
+            self.assertEqual(idx.rebuild_count, 1)
+            self.assertEqual(idx.removed_count, 4)
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,22 @@ def is_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex((host, port)) == 0
 
+def fetch_live_stats(host: str = "127.0.0.1", port: int = None) -> Optional[dict]:
+    import urllib.request
+    import json
+    port = port or config.PORT
+    target_host = "127.0.0.1" if host in ("0.0.0.0", "", "::1") else host
+    url = f"http://{target_host}:{port}/v1/cache/stats"
+    req = urllib.request.Request(url)
+    if config.ADMIN_API_KEY:
+        req.add_header("Authorization", f"Bearer {config.ADMIN_API_KEY}")
+    try:
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+
 def run_doctor():
     print("\n--- OmniCache System Diagnostics ---")
     
@@ -28,12 +44,19 @@ def run_doctor():
     db_exists = os.path.exists(db_path)
     print(f"SQLite Store:   {db_path} ({'ready' if db_exists else 'will create on first write'})")
 
-    # 3. Port Check
-    port_used = is_port_in_use(config.PORT, config.HOST if config.HOST != "0.0.0.0" else "127.0.0.1")
-    if port_used:
-        print(f"Port {config.PORT}:      In use (OmniCache server or other process active)")
+    # 3. Live Daemon Probe & Port Check
+    target_host = "127.0.0.1" if config.HOST in ("0.0.0.0", "", "::1") else config.HOST
+    live_data = fetch_live_stats(host=target_host, port=config.PORT)
+    port_used = is_port_in_use(config.PORT, target_host)
+
+    if live_data:
+        sys_info = live_data.get("system_info", {})
+        ver = sys_info.get("version", config.VERSION)
+        print(f"Live Daemon:    Operational on http://{target_host}:{config.PORT} (v{ver})")
+    elif port_used:
+        print(f"Port {config.PORT}:      In use (process active, unauthenticated or non-OmniCache service)")
     else:
-        print(f"Port {config.PORT}:      Available")
+        print(f"Port {config.PORT}:      Available (daemon not running)")
 
     # 4. In-Memory Vector Engine
     start = time.perf_counter()
@@ -42,7 +65,7 @@ def run_doctor():
     embed_ms = (time.perf_counter() - start) * 1000
     print(f"Vector Engine:  Operational ({embed_ms:.3f}ms lookup)")
 
-    # 5. Upstream Configured Keys
+    # 5. Upstream Configured Keys & Circuit Breakers
     keys_configured = []
     if config.ANTHROPIC_API_KEY: keys_configured.append("Anthropic")
     if config.OPENAI_API_KEY: keys_configured.append("OpenAI")
@@ -53,7 +76,30 @@ def run_doctor():
     else:
         print(f"Upstream Auth:  Client header passthrough active")
 
-    print("Status:         All subsystems operational.\n")
+    if live_data:
+        ee = live_data.get("enterprise_engine", {})
+        cb = ee.get("circuit_breaker", {})
+        if cb:
+            cb_summary = []
+            for p in ("openai", "anthropic", "google"):
+                pinfo = cb.get(p, {})
+                state = pinfo.get("state", "closed")
+                fails = pinfo.get("consecutive_failures", 0)
+                icon = "🟢" if state == "closed" else ("🟡" if state == "half-open" else "🔴")
+                cb_summary.append(f"{icon} {p.capitalize()}: {state.upper()} ({fails} fail)")
+            print(f"Circuits:       {' | '.join(cb_summary)}")
+
+        recent_fails = ee.get("recent_upstream_failures", [])
+        if recent_fails:
+            print(f"\n⚠️ Recent Upstream Errors ({len(recent_fails)} logged):")
+            for fail in recent_fails[:3]:
+                ts = fail.get("timestamp", "").split("T")[-1][:8]
+                prov = fail.get("provider", "").capitalize()
+                code = fail.get("status_code", 500)
+                msg = fail.get("error_message", "")
+                print(f"   [{ts}] {prov} {code}: {msg[:80]}")
+
+    print("\nStatus:         All subsystems operational.\n")
 
 def run_benchmark(iterations: int = 1000):
     print(f"\n--- Running Benchmark ({iterations} iterations) ---")
@@ -113,13 +159,87 @@ def run_benchmark(iterations: int = 1000):
     print(f"  Throughput: ~{int(1000 / max(0.001, p50_l2)):,} QPS / core\n")
 
 def run_stats():
-    print("\n--- OmniCache Telemetry & Savings ---")
-    stats = cache_instance.get_stats()
-    print(f"Total Cost Saved:   ${METRICS_LEDGER['total_savings_usd']:.4f} USD")
-    print(f"Tokens Saved:       {METRICS_LEDGER['total_tokens_saved']:,}")
-    print(f"Tokens Forwarded:   {METRICS_LEDGER['total_tokens_used']:,}")
-    print(f"Cache Hit Rate:     {stats.get('hit_rate_percentage', 0.0)}%")
-    print(f"Cached Prompts:     {stats.get('active_l1_exact_entries', 0)} L1 / {stats.get('active_l2_semantic_entries', 0)} L2\n")
+    target_host = "127.0.0.1" if config.HOST in ("0.0.0.0", "", "::1") else config.HOST
+    live_data = fetch_live_stats(host=target_host, port=config.PORT)
+    
+    if live_data:
+        cs = live_data.get("cache_stats", {})
+        fm = live_data.get("financial_telemetry", {})
+        ee = live_data.get("enterprise_engine", {})
+        sys_info = live_data.get("system_info", {})
+        cb = ee.get("circuit_breaker", {})
+        ver = sys_info.get("version", config.VERSION)
+
+        print("\n========================================================")
+        print(f"⚡ OmniCache AI Proxy Telemetry (Live Daemon v{ver})")
+        print(f"   Connected: http://{target_host}:{config.PORT}")
+        print("========================================================")
+        print(f"  Total Cost Avoided:      ${fm.get('total_savings_usd', 0.0):.4f} USD")
+        print(f"  Tokens Saved (100% Hit): {fm.get('total_tokens_saved', 0):,}")
+        print(f"  Tokens Forwarded:        {fm.get('total_tokens_used', 0):,}")
+        print(f"  Cache Hit Rate:          {cs.get('hit_rate_percentage', 0.0)}%")
+        print(f"  Exact / Semantic Hits:   {cs.get('exact_hits', 0)} exact / {cs.get('semantic_hits', 0)} semantic")
+        print(f"  Agent Tool Replays:      {ee.get('agent_tool_replays', 0):,}")
+        print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
+        print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
+        print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
+
+        if cb:
+            print("\n  Circuit Breakers:")
+            for p, pinfo in cb.items():
+                state = pinfo.get("state", "closed")
+                fails = pinfo.get("consecutive_failures", 0)
+                icon = "🟢" if state == "closed" else ("🟡" if state == "half-open" else "🔴")
+                print(f"    {icon} {p.capitalize():<10} State: {state.upper():<10} (Consecutive Failures: {fails})")
+
+        recent_fails = ee.get("recent_upstream_failures", [])
+        if recent_fails:
+            print("\n  Recent Upstream Errors:")
+            for fail in recent_fails[:3]:
+                ts = fail.get("timestamp", "").split("T")[-1][:8]
+                prov = fail.get("provider", "").capitalize()
+                code = fail.get("status_code", 500)
+                msg = fail.get("error_message", "")
+                print(f"    ⚠️ [{ts}] {prov} {code}: {msg[:75]}")
+
+        print("========================================================\n")
+    else:
+        stats = cache_instance.get_stats()
+        print("\n========================================================")
+        print("⚡ OmniCache Telemetry (Daemon Inactive / Local Store)")
+        print("========================================================")
+        print(f"  Total Cost Saved:        ${METRICS_LEDGER['total_savings_usd']:.4f} USD")
+        print(f"  Tokens Saved:            {METRICS_LEDGER['total_tokens_saved']:,}")
+        print(f"  Tokens Forwarded:        {METRICS_LEDGER['total_tokens_used']:,}")
+        print(f"  Cache Hit Rate:          {stats.get('hit_rate_percentage', 0.0)}%")
+        print(f"  Cached Prompts in RAM:   {stats.get('active_l1_exact_entries', 0)} L1 / {stats.get('active_l2_semantic_entries', 0)} L2")
+        print(f"  SQLite Store:            {snapshot_store.db_path}")
+        print("  (Start daemon with 'omnicache start' or 'omnicache run <agent>' for live telemetry)")
+        print("========================================================\n")
+
+def run_reset_circuit(provider: Optional[str] = None):
+    import urllib.request
+    import json
+    target_host = "127.0.0.1" if config.HOST in ("0.0.0.0", "", "::1") else config.HOST
+    url = f"http://{target_host}:{config.PORT}/v1/cache/circuit/reset"
+    payload = json.dumps({"provider": provider} if provider else {}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+    if config.ADMIN_API_KEY:
+        req.add_header("Authorization", f"Bearer {config.ADMIN_API_KEY}")
+    try:
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
+            if resp.status == 200:
+                res_data = json.loads(resp.read().decode("utf-8"))
+                print(f"✅ {res_data.get('message', 'Circuit breaker reset successfully.')}")
+                return
+    except Exception:
+        pass
+
+    # Fallback to local reset
+    from server.failover import failover_engine
+    failover_engine.reset(provider)
+    target = provider if provider else "all providers"
+    print(f"✅ Circuit breaker reset locally for {target}.")
 
 def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
     """
@@ -334,9 +454,10 @@ def main():
         prog="omnicache",
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats", "reset-circuit"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
+    parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose HTTP request logging")
 
     args = parser.parse_args()
@@ -352,6 +473,9 @@ def main():
         sys.exit(0)
     elif args.command == "stats":
         run_stats()
+        sys.exit(0)
+    elif args.command == "reset-circuit":
+        run_reset_circuit(provider=args.provider)
         sys.exit(0)
 
     port = args.port

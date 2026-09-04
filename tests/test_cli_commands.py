@@ -46,3 +46,43 @@ def test_run_doctor_and_stats():
     run_doctor()
     # Test stats runs without throwing
     run_stats()
+
+
+def test_circuit_reset_and_error_recording(capsys):
+    from server.failover import CircuitBreaker, failover_engine
+    from server.cli import run_reset_circuit
+    from starlette.testclient import TestClient
+    from server.gateway import app
+
+    cb = CircuitBreaker(failure_threshold=2, recovery_timeout_seconds=60.0)
+    cb.record_failure("anthropic", status_code=429, error_message="Rate limit exceeded", model="claude-3-7-sonnet", endpoint="/v1/messages")
+    cb.record_failure("anthropic", status_code=500, error_message="Overloaded", model="claude-3-7-sonnet", endpoint="/v1/messages")
+
+    # Verify circuit is open and error is logged
+    assert not cb.is_available("anthropic")
+    recent = cb.get_recent_failures(5)
+    assert len(recent) == 2
+    assert recent[0]["status_code"] in (429, 500)
+    assert recent[0]["provider"] == "anthropic"
+    assert "claude" in recent[0]["model"]
+
+    # Reset circuit
+    cb.reset("anthropic")
+    assert cb.is_available("anthropic")
+    status = cb.get_status()
+    assert status["anthropic"]["state"] == "closed"
+    assert status["anthropic"]["consecutive_failures"] == 0
+
+    # Test HTTP endpoint reset
+    client = TestClient(app)
+    resp = client.post("/v1/cache/circuit/reset", json={"provider": "anthropic"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "success"
+    assert data["circuit_breaker"]["anthropic"]["state"] == "closed"
+
+    # Test CLI reset
+    run_reset_circuit(provider="anthropic")
+    captured = capsys.readouterr()
+    assert "reset" in captured.out.lower()
+

@@ -82,7 +82,14 @@ class UpstreamClient:
                         translated_openai = ProtocolTranslator.anthropic_to_openai_response(res_data, original_model=model_candidate)
                         return status_code, translated_openai, headers
                     elif status_code in (429, 500, 502, 503, 504):
-                        failover_engine.circuit_breaker.record_failure(provider)
+                        err_msg = str(res_data.get("error", res_data))
+                        failover_engine.circuit_breaker.record_failure(
+                            provider=provider,
+                            status_code=status_code,
+                            error_message=err_msg,
+                            model=model_candidate,
+                            endpoint="/v1/messages"
+                        )
                         last_status, last_res_data, last_headers = status_code, res_data, headers
                         continue
                     else:
@@ -110,14 +117,27 @@ class UpstreamClient:
                     failover_engine.circuit_breaker.record_success(provider)
                     return response.status_code, res_data, dict(response.headers)
                 elif response.status_code in (429, 500, 502, 503, 504):
-                    failover_engine.circuit_breaker.record_failure(provider)
+                    err_msg = str(res_data.get("error", res_data))
+                    failover_engine.circuit_breaker.record_failure(
+                        provider=provider,
+                        status_code=response.status_code,
+                        error_message=err_msg,
+                        model=model_candidate,
+                        endpoint=url
+                    )
                     last_status, last_res_data, last_headers = response.status_code, res_data, dict(response.headers)
                     continue
                 else:
                     return response.status_code, res_data, dict(response.headers)
 
             except (httpx.RequestError, httpx.TimeoutException, Exception) as exc:
-                failover_engine.circuit_breaker.record_failure(provider)
+                failover_engine.circuit_breaker.record_failure(
+                    provider=provider,
+                    status_code=503,
+                    error_message=str(exc),
+                    model=model_candidate,
+                    endpoint="/v1/chat/completions"
+                )
                 last_res_data = {"error": {"message": str(exc), "type": "upstream_connection_error"}}
                 continue
 
@@ -170,7 +190,14 @@ class UpstreamClient:
                         err_json = {"error": {"message": content.decode("utf-8"), "code": response.status_code}}
                     await response.aclose()
                     if response.status_code in (429, 500, 502, 503, 504):
-                        failover_engine.circuit_breaker.record_failure(provider)
+                        err_msg = str(err_json.get("error", err_json))
+                        failover_engine.circuit_breaker.record_failure(
+                            provider=provider,
+                            status_code=response.status_code,
+                            error_message=err_msg,
+                            model=model_candidate,
+                            endpoint=url
+                        )
                         last_status, last_err = response.status_code, err_json
                         continue
                     return response.status_code, None, err_json, []
@@ -178,7 +205,13 @@ class UpstreamClient:
                 failover_engine.circuit_breaker.record_success(provider)
                 return response.status_code, response, {}, []
             except Exception as exc:
-                failover_engine.circuit_breaker.record_failure(provider)
+                failover_engine.circuit_breaker.record_failure(
+                    provider=provider,
+                    status_code=503,
+                    error_message=str(exc),
+                    model=model_candidate,
+                    endpoint="/v1/chat/completions"
+                )
                 last_err = {"error": {"message": str(exc)}}
                 continue
 
@@ -242,6 +275,8 @@ class UpstreamClient:
         if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
             clean_payload["max_tokens"] = 8192
 
+        model_name = clean_payload.get("model", "claude")
+
         try:
             response = await client.post(url, json=clean_payload, headers=headers, params=params)
             try:
@@ -252,11 +287,24 @@ class UpstreamClient:
             if response.status_code == 200:
                 failover_engine.circuit_breaker.record_success("anthropic")
             elif response.status_code in (429, 500, 502, 503, 504):
-                failover_engine.circuit_breaker.record_failure("anthropic")
+                err_msg = str(res_data.get("error", res_data))
+                failover_engine.circuit_breaker.record_failure(
+                    provider="anthropic",
+                    status_code=response.status_code,
+                    error_message=err_msg,
+                    model=model_name,
+                    endpoint="/v1/messages"
+                )
 
             return response.status_code, res_data, dict(response.headers)
         except Exception as exc:
-            failover_engine.circuit_breaker.record_failure("anthropic")
+            failover_engine.circuit_breaker.record_failure(
+                provider="anthropic",
+                status_code=503,
+                error_message=str(exc),
+                model=model_name,
+                endpoint="/v1/messages"
+            )
             return 503, {"type": "error", "error": {"message": str(exc), "type": "upstream_error"}}, {}
 
     async def forward_anthropic_stream(
@@ -274,6 +322,8 @@ class UpstreamClient:
         if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
             clean_payload["max_tokens"] = 8192
 
+        model_name = clean_payload.get("model", "claude")
+
         try:
             req = client.build_request("POST", url, json=clean_payload, headers=headers, params=params)
             response = await client.send(req, stream=True)
@@ -286,13 +336,26 @@ class UpstreamClient:
                     err_json = {"type": "error", "error": {"message": content.decode("utf-8"), "type": "upstream_error"}}
                 await response.aclose()
                 if response.status_code in (429, 500, 502, 503, 504):
-                    failover_engine.circuit_breaker.record_failure("anthropic")
+                    err_msg = str(err_json.get("error", err_json))
+                    failover_engine.circuit_breaker.record_failure(
+                        provider="anthropic",
+                        status_code=response.status_code,
+                        error_message=err_msg,
+                        model=model_name,
+                        endpoint="/v1/messages"
+                    )
                 return response.status_code, None, err_json
 
             failover_engine.circuit_breaker.record_success("anthropic")
             return response.status_code, response, {}
         except Exception as exc:
-            failover_engine.circuit_breaker.record_failure("anthropic")
+            failover_engine.circuit_breaker.record_failure(
+                provider="anthropic",
+                status_code=503,
+                error_message=str(exc),
+                model=model_name,
+                endpoint="/v1/messages"
+            )
             return 503, None, {"type": "error", "error": {"message": str(exc), "type": "upstream_error"}}
 
 upstream_client = UpstreamClient()

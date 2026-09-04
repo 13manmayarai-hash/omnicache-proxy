@@ -7,10 +7,44 @@ import time
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Tuple, Optional, List
+from collections import deque
+from datetime import datetime, timezone
 from core.config import config
 from server.translator import ProtocolTranslator
 
 logger = logging.getLogger("omnicache.failover")
+
+
+class UpstreamErrorRecorder:
+    """Ring-buffer recorder for tracking recent upstream failures with full context."""
+
+    def __init__(self, max_entries: int = 50):
+        self._history: deque = deque(maxlen=max_entries)
+
+    def record(
+        self,
+        provider: str,
+        status_code: int = 500,
+        error_message: str = "",
+        model: str = "",
+        endpoint: str = ""
+    ):
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "epoch": time.time(),
+            "provider": provider,
+            "status_code": status_code,
+            "error_message": str(error_message)[:500],
+            "model": model or "unknown",
+            "endpoint": endpoint or "unknown"
+        }
+        self._history.appendleft(entry)
+
+    def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
+        return list(self._history)[:limit]
+
+    def clear(self):
+        self._history.clear()
 
 
 class BaseCircuitBreakerStorage(ABC):
@@ -28,6 +62,10 @@ class BaseCircuitBreakerStorage(ABC):
 
     @abstractmethod
     def get_status(self, recovery_timeout: float) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def reset(self, provider: Optional[str] = None):
         pass
 
 
@@ -52,6 +90,14 @@ class InMemoryCircuitBreakerStorage(BaseCircuitBreakerStorage):
         self.consecutive_failures[provider] = self.consecutive_failures.get(provider, 0) + 1
         if self.consecutive_failures[provider] >= threshold:
             self.opened_at[provider] = time.time()
+
+    def reset(self, provider: Optional[str] = None):
+        if provider:
+            self.consecutive_failures[provider] = 0
+            self.opened_at.pop(provider, None)
+        else:
+            self.consecutive_failures.clear()
+            self.opened_at.clear()
 
     def get_status(self, recovery_timeout: float) -> Dict[str, Any]:
         now = time.time()
@@ -123,6 +169,17 @@ class RedisCircuitBreakerStorage(BaseCircuitBreakerStorage):
         except Exception as exc:
             logger.warning("Redis circuit record_failure failed: %s", exc)
 
+    def reset(self, provider: Optional[str] = None):
+        try:
+            providers = [provider] if provider else ["openai", "anthropic", "google"]
+            pipe = self.client.pipeline()
+            for p in providers:
+                pipe.delete(self._fail_key(p))
+                pipe.delete(self._open_key(p))
+            pipe.execute()
+        except Exception as exc:
+            logger.warning("Redis circuit reset failed: %s", exc)
+
     def get_status(self, recovery_timeout: float) -> Dict[str, Any]:
         now = time.time()
         status = {}
@@ -160,6 +217,7 @@ class CircuitBreaker:
     ):
         self.failure_threshold = failure_threshold
         self.recovery_timeout_seconds = recovery_timeout_seconds
+        self.error_recorder = UpstreamErrorRecorder(max_entries=50)
         if storage is not None:
             self.storage = storage
         else:
@@ -184,8 +242,34 @@ class CircuitBreaker:
     def record_success(self, provider: str):
         self.storage.record_success(provider)
 
-    def record_failure(self, provider: str):
+    def record_failure(
+        self,
+        provider: str,
+        status_code: int = 500,
+        error_message: str = "",
+        model: str = "",
+        endpoint: str = ""
+    ):
         self.storage.record_failure(provider, self.failure_threshold, self.recovery_timeout_seconds)
+        self.error_recorder.record(
+            provider=provider,
+            status_code=status_code,
+            error_message=error_message,
+            model=model,
+            endpoint=endpoint
+        )
+        logger.warning(
+            "⚠️ Upstream [%s] failure (status=%s, model=%s): %s",
+            provider, status_code, model, (error_message[:200] if error_message else "no message")
+        )
+
+    def get_recent_failures(self, limit: int = 10) -> List[Dict[str, Any]]:
+        return self.error_recorder.get_recent(limit=limit)
+
+    def reset(self, provider: Optional[str] = None):
+        self.storage.reset(provider)
+        if not provider:
+            self.error_recorder.clear()
 
     def get_status(self) -> Dict[str, Any]:
         """Returns the status of all tracked providers."""
@@ -209,4 +293,11 @@ class FailoverOrchestrator:
         """Returns list of fallback model names for the requested model."""
         return ProtocolTranslator.FALLBACK_MAP.get(model.lower(), ["gpt-4o-mini", "gemini-2.5-flash"])
 
+    def get_recent_failures(self, limit: int = 10) -> List[Dict[str, Any]]:
+        return self.circuit_breaker.get_recent_failures(limit=limit)
+
+    def reset(self, provider: Optional[str] = None):
+        self.circuit_breaker.reset(provider)
+
 failover_engine = FailoverOrchestrator()
+

@@ -152,6 +152,11 @@ def authenticate_admin(request: Request) -> Tuple[bool, Optional[Response], Dict
     """Guards administrative endpoints. Requires valid admin credentials."""
     cors_headers = get_cors_headers(request)
     key = extract_auth_key(request)
+
+    # In local developer mode without configured admin key, permit unauthenticated local admin operations
+    if not getattr(config, "REQUIRE_AUTH", False) and not getattr(config, "ADMIN_API_KEY", "").strip():
+        if not key or key == "default":
+            return True, None, {"team_name": "Local Admin", "org_id": "admin", "role": "admin"}
     
     if not key:
         return False, JSONResponse(
@@ -161,7 +166,7 @@ def authenticate_admin(request: Request) -> Tuple[bool, Optional[Response], Dict
         ), {}
 
     if not quota_manager.is_admin(key):
-        if key in quota_manager._keys:
+        if quota_manager.storage.get_key(key) is not None:
             return False, JSONResponse(
                 {"error": {"message": "Permission denied: Administrator privileges required", "type": "permission_denied"}},
                 status_code=403,
@@ -173,7 +178,7 @@ def authenticate_admin(request: Request) -> Tuple[bool, Optional[Response], Dict
             headers=cors_headers
         ), {}
 
-    key_info = quota_manager._keys.get(key, {"team_name": "Admin", "org_id": "admin", "role": "admin"})
+    key_info = quota_manager.storage.get_key(key) or {"team_name": "Admin", "org_id": "admin", "role": "admin"}
     return True, None, key_info
 
 
@@ -1050,15 +1055,44 @@ async def handle_stats(request: Request) -> Response:
             "agent_tool_replays": METRICS_LEDGER["agent_tool_hits"],
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
-            "circuit_breaker": failover_engine.circuit_breaker.get_status()
+            "circuit_breaker": failover_engine.circuit_breaker.get_status(),
+            "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.5.4"),
+            "version": getattr(config, "VERSION", "2.6.0"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
             "port": config.PORT
         }
+    }, headers=cors_headers)
+
+
+async def handle_circuit_reset(request: Request) -> Response:
+    """Protected Circuit Breaker Reset Endpoint (Admin Only)."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    admin_ok, admin_err, _ = authenticate_admin(request)
+    if not admin_ok:
+        return admin_err
+
+    provider = None
+    if request.method == "POST":
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                provider = body.get("provider")
+        except Exception:
+            pass
+
+    failover_engine.reset(provider)
+    target = provider if provider else "all providers"
+    return JSONResponse({
+        "status": "success",
+        "message": f"Circuit breaker successfully reset for {target}.",
+        "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
 
 
@@ -1239,6 +1273,8 @@ routes = [
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/invalidate-tag", handle_invalidate_tag, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/stats", handle_stats, methods=["GET", "OPTIONS"]),
+    Route("/v1/cache/circuit/reset", handle_circuit_reset, methods=["POST", "OPTIONS"]),
+    Route("/v1/system/circuit/reset", handle_circuit_reset, methods=["POST", "OPTIONS"]),
     Route("/v1/cache/export", handle_export_csv, methods=["GET", "OPTIONS"]),
     Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "POST", "OPTIONS"]),
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),

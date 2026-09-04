@@ -14,14 +14,22 @@ class VisionPerceptualHasher:
 
     @staticmethod
     def extract_image_bytes(image_data: str) -> Optional[bytes]:
-        """Extracts raw bytes from base64 data URI or raw string."""
+        """Extracts raw bytes from base64 data URI, raw base64, or string."""
+        if not image_data:
+            return None
         try:
             if image_data.startswith("data:image"):
                 # strip data:image/png;base64,
                 base64_part = image_data.split(",", 1)[1]
                 return base64.b64decode(base64_part)
-            elif len(image_data) > 100 and not image_data.startswith("http"):
-                return base64.b64decode(image_data)
+            if not image_data.startswith("http://") and not image_data.startswith("https://"):
+                try:
+                    # Attempt base64 decode
+                    decoded = base64.b64decode(image_data, validate=True)
+                    if len(decoded) > 0:
+                        return decoded
+                except Exception:
+                    pass
             return image_data.encode("utf-8")
         except Exception:
             return None

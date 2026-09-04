@@ -226,6 +226,97 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
 
     sys.exit(exit_code)
 
+def run_init():
+    """
+    One-click automated setup for Claude Code, Cursor, and IDE environments.
+    Configures ~/.claude.json, ~/.cursor/mcp.json, and environment exports.
+    """
+    print("\n\033[1;36m╭───────────────────────────────────────────────────╮")
+    print("│ ⚙️  OmniCache One-Click Auto-Setup & Integration   │")
+    print("╰───────────────────────────────────────────────────╯\033[0m\n")
+
+    import json
+    configured_items = []
+
+    # 1. Claude Code (~/.claude.json & ~/.claude/settings.json)
+    claude_paths = [
+        os.path.expanduser("~/.claude.json"),
+        os.path.expanduser("~/.claude/settings.json")
+    ]
+    for cp in claude_paths:
+        try:
+            os.makedirs(os.path.dirname(cp), exist_ok=True)
+            data = {}
+            if os.path.exists(cp):
+                try:
+                    with open(cp, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    data = {}
+            
+            if "mcpServers" not in data:
+                data["mcpServers"] = {}
+            
+            data["mcpServers"]["omnicache"] = {
+                "command": sys.executable,
+                "args": ["-m", "mcp.server"],
+                "env": {
+                    "OMNICACHE_PORT": str(config.PORT)
+                }
+            }
+            with open(cp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            configured_items.append(f"Claude Code MCP Config: {cp}")
+        except Exception:
+            pass
+
+    # 2. Cursor MCP (~/.cursor/mcp.json or project .cursor/mcp.json)
+    cursor_paths = [
+        os.path.expanduser("~/.cursor/mcp.json"),
+        os.path.join(os.getcwd(), ".cursor", "mcp.json")
+    ]
+    for curp in cursor_paths:
+        try:
+            os.makedirs(os.path.dirname(curp), exist_ok=True)
+            data = {}
+            if os.path.exists(curp):
+                try:
+                    with open(curp, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    data = {}
+            if "mcpServers" not in data:
+                data["mcpServers"] = {}
+            data["mcpServers"]["omnicache"] = {
+                "command": sys.executable,
+                "args": ["-m", "mcp.server"],
+                "env": {
+                    "OMNICACHE_PORT": str(config.PORT)
+                }
+            }
+            with open(curp, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            configured_items.append(f"Cursor MCP Config:      {curp}")
+        except Exception:
+            pass
+
+    # 3. Shell Profile Export Helper (~/.omnicache/env.sh)
+    env_sh_path = os.path.expanduser("~/.omnicache/env.sh")
+    try:
+        os.makedirs(os.path.dirname(env_sh_path), exist_ok=True)
+        with open(env_sh_path, "w", encoding="utf-8") as f:
+            f.write(f'# OmniCache Shell Environment Exports\nexport ANTHROPIC_BASE_URL="http://127.0.0.1:{config.PORT}"\nexport OPENAI_BASE_URL="http://127.0.0.1:{config.PORT}/v1"\nexport OPENAI_API_BASE="http://127.0.0.1:{config.PORT}/v1"\n')
+        configured_items.append(f"Shell Env Helper:       {env_sh_path}")
+    except Exception:
+        pass
+
+    for item in configured_items:
+        print(f"\033[1;32m  ✔ {item}\033[0m")
+
+    print(f"\n\033[1;37m🎉 Setup complete! You can now run:\033[0m")
+    print(f"   \033[1;36momnicache run claude\033[0m  (for Claude Code)")
+    print(f"   \033[1;36momnicache run cursor .\033[0m  (for Cursor IDE)\n")
+
 def main():
     # Handle "omnicache run <command> [args...]"
     if len(sys.argv) > 1 and sys.argv[1] == "run":
@@ -236,14 +327,17 @@ def main():
         prog="omnicache",
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "doctor", "benchmark", "stats"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose HTTP request logging")
 
     args = parser.parse_args()
 
-    if args.command == "doctor":
+    if args.command == "init":
+        run_init()
+        sys.exit(0)
+    elif args.command == "doctor":
         run_doctor()
         sys.exit(0)
     elif args.command == "benchmark":

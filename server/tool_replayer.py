@@ -13,20 +13,24 @@ from typing import Dict, Any, Optional, Tuple, List
 
 # Explicit tool staleness policy registry
 TOOL_POLICIES: Dict[str, Dict[str, Any]] = {
-    # Git & Workspace mutable tools: Output invalidates when files / git status change
+    # 1. Target File Specific Tools: Only invalidate when the specific target file is modified
+    "read_file": {"type": "target_file", "ttl_seconds": 3600},
+    "view_file": {"type": "target_file", "ttl_seconds": 3600},
+    "cat": {"type": "target_file", "ttl_seconds": 3600},
+
+    # 2. Scoped Directory Tools: Only invalidate when files within the target directory scope change
+    "grep_search": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
+    "find_by_name": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
+    "list_dir": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
+    "ls": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
+    "grep": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
+
+    # 3. Global Git Status Tools: Invalidate when any repo status changes
     "git_status": {"type": "git_workspace", "ttl_seconds": 1800},
     "git_diff": {"type": "git_workspace", "ttl_seconds": 1800},
     "git_log": {"type": "git_workspace", "ttl_seconds": 1800},
-    "read_file": {"type": "git_workspace", "ttl_seconds": 3600},
-    "view_file": {"type": "git_workspace", "ttl_seconds": 3600},
-    "cat": {"type": "git_workspace", "ttl_seconds": 3600},
-    "grep_search": {"type": "git_workspace", "ttl_seconds": 1800},
-    "find_by_name": {"type": "git_workspace", "ttl_seconds": 1800},
-    "list_dir": {"type": "git_workspace", "ttl_seconds": 1800},
-    "ls": {"type": "git_workspace", "ttl_seconds": 1800},
-    "grep": {"type": "git_workspace", "ttl_seconds": 1800},
     
-    # External Network tools: Short, tool-specific TTL (60s)
+    # 4. External Network tools: Short, tool-specific TTL (60s)
     "read_url_content": {"type": "external_network", "ttl_seconds": 60},
     "fetch_web": {"type": "external_network", "ttl_seconds": 60},
 }
@@ -129,19 +133,26 @@ def extract_candidate_path(
 def get_git_workspace_state(
     workspace_dir: Optional[str] = None,
     arguments: Optional[Dict[str, Any]] = None,
-    workspace_fingerprint: Optional[str] = None
+    workspace_fingerprint: Optional[str] = None,
+    policy_type: str = "git_workspace"
 ) -> str:
     """
-    Computes a cryptographic fingerprint of the workspace state.
-    - Resolves target directory from workspace_dir, arguments (cwd/filepath), or workspace_fingerprint.
-    - For git repos (running git status on the target directory), captures head SHA + dirty porcelain status.
-    - For target files, captures file mtime_ns + size.
-    - For non-git repos, captures directory stat mtime_ns + size.
+    Computes a fine-grained cryptographic fingerprint of the workspace state.
+    - target_file policy: Fingerprints ONLY the specific target file (editing docs won't invalidate code files!).
+    - scoped_git_workspace policy: Fingerprints Git status scoped only to the target subdirectory.
+    - git_workspace policy: Fingerprints full repository Git HEAD + porcelain dirty status.
+    - Non-git fallback: Fingerprints directory mtime/size.
     """
     target_dir, target_file = extract_candidate_path(workspace_dir, arguments, workspace_fingerprint)
     file_fp = get_file_fingerprint(target_file) if target_file else None
 
-    # Check git state for target_dir
+    # 1. Smart target_file policy: depend strictly on target file's own mtime/size
+    if policy_type == "target_file" and target_file:
+        if file_fp and file_fp != "missing":
+            return f"target_file:{target_file}:{file_fp}"
+        return f"target_file_missing:{target_file}"
+
+    # 2. Check git state for target_dir
     git_state = None
     try:
         is_git = subprocess.run(
@@ -155,10 +166,18 @@ def get_git_workspace_state(
             )
             head_sha = head_res.stdout.strip() if head_res.returncode == 0 else "unknown_head"
 
-            status_res = subprocess.run(
-                ["git", "-C", target_dir, "status", "--porcelain"],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
-            )
+            # Scoped status for directory-specific searches
+            if policy_type == "scoped_git_workspace":
+                status_res = subprocess.run(
+                    ["git", "-C", target_dir, "status", "--porcelain", "."],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
+                )
+            else:
+                status_res = subprocess.run(
+                    ["git", "-C", target_dir, "status", "--porcelain"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
+                )
+
             status_raw = status_res.stdout if status_res.returncode == 0 else ""
             status_hash = hashlib.sha256(status_raw.encode("utf-8")).hexdigest()[:16]
             git_state = f"{head_sha}:{status_hash}"
@@ -212,14 +231,15 @@ class ToolExecutionCache:
         policy = TOOL_POLICIES.get(clean_name, {})
         policy_type = policy.get("type", "static")
 
-        # Capture dynamic git workspace state for git_workspace tools
+        # Capture dynamic git workspace state with fine-grained policy
         state_str = workspace_state
         if state_str is None:
-            if policy_type == "git_workspace":
+            if policy_type in ("git_workspace", "target_file", "scoped_git_workspace"):
                 state_str = get_git_workspace_state(
                     workspace_dir=workspace_dir,
                     arguments=arguments,
-                    workspace_fingerprint=workspace_fingerprint
+                    workspace_fingerprint=workspace_fingerprint,
+                    policy_type=policy_type
                 )
             else:
                 state_str = "static"

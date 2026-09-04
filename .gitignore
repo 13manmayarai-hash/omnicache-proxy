@@ -15,4 +15,5 @@ dist/
 *.rdb
 .env
 .DS_Store
-
+.cursor/
+.pytest_cache/

@@ -10,6 +10,8 @@ Test Suite for OmniCache 2.0 Innovations:
 
 import unittest
 import base64
+import os
+import time
 from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache, VisionPerceptualHasher
 from core.privacy_shield import privacy_shield
@@ -95,6 +97,35 @@ class TestV2Innovations(unittest.TestCase):
         })
         self.assertEqual(resp_mismatch.status_code, 200)
         self.assertEqual(resp_mismatch.json().get("status"), "MISS")
+
+    def test_non_git_workspace_file_mtime_invalidation(self):
+        """Verify non-git workspace tools track file mtime/size changes dynamically."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_file = os.path.join(temp_dir, "sample.py")
+            with open(temp_file, "w") as f:
+                f.write("def foo(): return 1")
+
+            tool_name = "read_file"
+            args = {"file_path": temp_file}
+
+            # First execution store
+            tool_cache.store_tool_call(tool_name, args, "def foo(): return 1")
+
+            # Lookup should HIT
+            is_hit, output, _ = tool_cache.lookup_tool_call(tool_name, args)
+            self.assertTrue(is_hit)
+            self.assertEqual(output, "def foo(): return 1")
+
+            # Modify file content / mtime
+            time.sleep(0.01)
+            with open(temp_file, "w") as f:
+                f.write("def foo(): return 2 (modified)")
+
+            # Lookup must MISS because mtime/size changed
+            is_hit_mod, output_mod, _ = tool_cache.lookup_tool_call(tool_name, args)
+            self.assertFalse(is_hit_mod)
+            self.assertIsNone(output_mod)
 
     # 3. Adaptive Cost Arbitrage & Complexity Classifier Test
     def test_cost_cascade_router(self):

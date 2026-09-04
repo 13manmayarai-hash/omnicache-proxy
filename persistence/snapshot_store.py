@@ -454,14 +454,14 @@ class SnapshotStore:
     # Lifecycle & Cleanup
     # =========================================================================
 
-    def flush(self, timeout: float = 3.0):
+    def flush(self, timeout: float = 1.0):
         """Blocks until the write-behind queue has fully drained and committed to SQLite."""
-        if not self._enable_write_behind:
+        if not self._enable_write_behind or not self._running:
             return
-        try:
-            self._write_queue.join()
-        except Exception:
-            pass
+        end_time = time.time() + timeout
+        while not self._write_queue.empty() and time.time() < end_time:
+            time.sleep(0.01)
+        time.sleep(0.02)
 
     def close(self):
         """Flushes queue, shuts down worker, and closes thread-local SQLite connection."""

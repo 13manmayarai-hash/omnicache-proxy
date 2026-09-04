@@ -154,6 +154,7 @@ class DualTierCache:
     def __init__(self, storage: Optional[BaseCacheStorage] = None):
         self.storage = storage or self._init_storage()
         self.ann_indices: Dict[str, BaseANNIndex] = {}
+        self._tenant_l2_versions: Dict[str, int] = {}
 
         # Cumulative Telemetry
         self.total_exact_hits = 0
@@ -307,10 +308,14 @@ class DualTierCache:
         ann_enabled = getattr(config, "ANN_INDEX_ENABLED", True)
         if ann_enabled and len(active_entries) > 50:
             ann = self._get_ann_index(org_id)
-            if ann.size() < len(active_entries):
+            storage_ver = self.storage.get_l2_version(org_id)
+            if self._tenant_l2_versions.get(org_id) != storage_ver or ann.size() != len(active_entries):
+                ann.clear()
                 for e in active_entries:
                     if e.vector:
                         ann.add(e.key, e.vector)
+                self._tenant_l2_versions[org_id] = storage_ver
+
             top_matches = ann.search(query_vector, top_k=getattr(config, "ANN_TOP_K", 50), min_similarity=0.0)
             if top_matches:
                 candidate_keys = {k for k, _ in top_matches}
@@ -430,6 +435,12 @@ class DualTierCache:
         return self.storage.purge(org_id=org_id)
 
     def invalidate_tag(self, tag: str, org_id: Optional[str] = None) -> int:
+        if org_id and org_id in self.ann_indices:
+            self.ann_indices[org_id].clear()
+        elif org_id is None:
+            for idx in self.ann_indices.values():
+                idx.clear()
+            self.ann_indices.clear()
         return self.storage.invalidate_tag(tag, org_id=org_id)
 
     def get_stats(self, org_id: Optional[str] = None) -> Dict[str, Any]:

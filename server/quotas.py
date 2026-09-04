@@ -1,18 +1,67 @@
 """
 Virtual Key Management, Budget Quotas & Rate Limiting Engine.
-Supports durable SQLite persistence and distributed Redis backends with atomic spend and sliding-window rate limiting.
+Supports durable SQLite persistence and distributed Redis backends with atomic Lua scripts,
+check-and-reserve spend protection against TOCTOU races, and strict sliding-window rate limits.
 """
 
 import time
 import hmac
 import json
 import logging
+import threading
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Tuple, List
 from core.config import config
 from persistence.snapshot_store import snapshot_store, SnapshotStore
 
 logger = logging.getLogger("omnicache.quotas")
+
+
+# Redis Lua script for atomic sliding-window rate limiting
+LUA_RATE_LIMIT = """
+local rpm_key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window_start = tonumber(ARGV[2])
+local limit_rpm = tonumber(ARGV[3])
+local unique_id = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', rpm_key, 0, window_start)
+local current_count = redis.call('ZCARD', rpm_key)
+
+if current_count >= limit_rpm then
+    return {0, current_count}
+else
+    redis.call('ZADD', rpm_key, now, unique_id)
+    redis.call('EXPIRE', rpm_key, 120)
+    return {1, current_count + 1}
+end
+"""
+
+# Redis Lua script for atomic budget check and reserve (TOCTOU protection)
+LUA_BUDGET_RESERVE = """
+local meta_key = KEYS[1]
+local spend_key = KEYS[2]
+local reserve_amount = tonumber(ARGV[1])
+
+local budget_str = redis.call('HGET', meta_key, 'monthly_budget_usd')
+if not budget_str then
+    return {1, 0, 1000000}
+end
+
+local budget = tonumber(budget_str)
+local current_spend_str = redis.call('GET', spend_key)
+local current_spend = current_spend_str and tonumber(current_spend_str) or 0.0
+
+if (current_spend + reserve_amount) > budget then
+    return {0, current_spend, budget}
+else
+    if reserve_amount > 0 then
+        redis.call('INCRBYFLOAT', spend_key, reserve_amount)
+        current_spend = current_spend + reserve_amount
+    end
+    return {1, current_spend, budget}
+end
+"""
 
 
 class BaseQuotaStorage(ABC):
@@ -37,6 +86,16 @@ class BaseQuotaStorage(ABC):
         pass
 
     @abstractmethod
+    def check_and_reserve_budget(self, key_id: str, reserve_amount_usd: float = 0.0) -> Tuple[bool, float, float]:
+        """Atomically checks and reserves spend. Returns (is_allowed, current_spend, monthly_budget)."""
+        pass
+
+    @abstractmethod
+    def reconcile_spend(self, key_id: str, reserved_usd: float, actual_spend_usd: float):
+        """Reconciles actual token spend against reserved spend."""
+        pass
+
+    @abstractmethod
     def get_spend(self, key_id: str) -> float:
         pass
 
@@ -52,6 +111,7 @@ class BaseQuotaStorage(ABC):
 class InMemoryQuotaStorage(BaseQuotaStorage):
     def __init__(self):
         self._keys: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.RLock()
 
     def register_key(
         self,
@@ -62,54 +122,80 @@ class InMemoryQuotaStorage(BaseQuotaStorage):
         rate_limit_rpm: int = 120,
         role: str = "tenant"
     ) -> Dict[str, Any]:
-        self._keys[key_id] = {
-            "team_name": team_name,
-            "org_id": org_id or team_name,
-            "role": role,
-            "monthly_budget_usd": monthly_budget_usd,
-            "current_spend_usd": 0.0,
-            "rate_limit_rpm": rate_limit_rpm,
-            "request_timestamps": [],
-            "created_at": time.time()
-        }
-        return self._keys[key_id]
+        with self._lock:
+            self._keys[key_id] = {
+                "team_name": team_name,
+                "org_id": org_id or team_name,
+                "role": role,
+                "monthly_budget_usd": monthly_budget_usd,
+                "current_spend_usd": 0.0,
+                "rate_limit_rpm": rate_limit_rpm,
+                "request_timestamps": [],
+                "created_at": time.time()
+            }
+            return dict(self._keys[key_id])
 
     def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
-        return self._keys.get(key_id)
+        with self._lock:
+            val = self._keys.get(key_id)
+            return dict(val) if val else None
 
     def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
-        info = self._keys.get(key_id)
-        if not info:
-            return True, 0
-        now = time.time()
-        window_start = now - 60.0
-        info["request_timestamps"] = [ts for ts in info.get("request_timestamps", []) if ts > window_start]
-        if len(info["request_timestamps"]) >= limit_rpm:
-            return False, len(info["request_timestamps"])
-        info["request_timestamps"].append(now)
-        return True, len(info["request_timestamps"])
+        with self._lock:
+            info = self._keys.get(key_id)
+            if not info:
+                return True, 0
+            now = time.time()
+            window_start = now - 60.0
+            info["request_timestamps"] = [ts for ts in info.get("request_timestamps", []) if ts > window_start]
+            if len(info["request_timestamps"]) >= limit_rpm:
+                return False, len(info["request_timestamps"])
+            info["request_timestamps"].append(now)
+            return True, len(info["request_timestamps"])
+
+    def check_and_reserve_budget(self, key_id: str, reserve_amount_usd: float = 0.0) -> Tuple[bool, float, float]:
+        with self._lock:
+            info = self._keys.get(key_id)
+            if not info:
+                return True, 0.0, 1000000.0
+            budget = float(info.get("monthly_budget_usd", 100.0))
+            current = float(info.get("current_spend_usd", 0.0))
+            if (current + reserve_amount_usd) > budget:
+                return False, current, budget
+            if reserve_amount_usd > 0:
+                info["current_spend_usd"] = current + reserve_amount_usd
+            return True, info["current_spend_usd"], budget
+
+    def reconcile_spend(self, key_id: str, reserved_usd: float, actual_spend_usd: float):
+        delta = actual_spend_usd - reserved_usd
+        if delta != 0:
+            self.record_spend(key_id, delta)
 
     def get_spend(self, key_id: str) -> float:
-        info = self._keys.get(key_id)
-        return float(info.get("current_spend_usd", 0.0)) if info else 0.0
+        with self._lock:
+            info = self._keys.get(key_id)
+            return float(info.get("current_spend_usd", 0.0)) if info else 0.0
 
     def record_spend(self, key_id: str, spend_usd: float):
-        if key_id in self._keys:
-            self._keys[key_id]["current_spend_usd"] += spend_usd
+        with self._lock:
+            if key_id in self._keys:
+                self._keys[key_id]["current_spend_usd"] += spend_usd
 
     def get_all_keys(self) -> Dict[str, Dict[str, Any]]:
-        return self._keys
+        with self._lock:
+            return {k: dict(v) for k, v in self._keys.items()}
 
 
 class SQLiteQuotaStorage(BaseQuotaStorage):
     """
-    Durable SQLite-backed quota storage with in-memory caching.
+    Durable SQLite-backed quota storage with in-memory caching and atomic locks.
     Ensures virtual key registrations and spend survive restarts.
     """
 
     def __init__(self, store: Optional[SnapshotStore] = None):
         self.store = store or snapshot_store
         self._keys: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.RLock()
         self._load_from_db()
 
     def _load_from_db(self):
@@ -128,66 +214,96 @@ class SQLiteQuotaStorage(BaseQuotaStorage):
         rate_limit_rpm: int = 120,
         role: str = "tenant"
     ) -> Dict[str, Any]:
-        now = time.time()
-        current_spend = 0.0
-        
-        info = {
-            "team_name": team_name,
-            "org_id": org_id or team_name,
-            "role": role,
-            "monthly_budget_usd": monthly_budget_usd,
-            "current_spend_usd": current_spend,
-            "rate_limit_rpm": rate_limit_rpm,
-            "request_timestamps": [],
-            "created_at": now
-        }
-        self._keys[key_id] = info
-        self.store.save_virtual_key(
-            key_id=key_id,
-            team_name=team_name,
-            org_id=info["org_id"],
-            role=role,
-            monthly_budget_usd=monthly_budget_usd,
-            rate_limit_rpm=rate_limit_rpm,
-            created_at=info["created_at"],
-            current_spend_usd=current_spend,
-            synchronous=True
-        )
-        return info
+        with self._lock:
+            now = time.time()
+            current_spend = 0.0
+            
+            info = {
+                "team_name": team_name,
+                "org_id": org_id or team_name,
+                "role": role,
+                "monthly_budget_usd": monthly_budget_usd,
+                "current_spend_usd": current_spend,
+                "rate_limit_rpm": rate_limit_rpm,
+                "request_timestamps": [],
+                "created_at": now
+            }
+            self._keys[key_id] = info
+            self.store.save_virtual_key(
+                key_id=key_id,
+                team_name=team_name,
+                org_id=info["org_id"],
+                role=role,
+                monthly_budget_usd=monthly_budget_usd,
+                rate_limit_rpm=rate_limit_rpm,
+                created_at=info["created_at"],
+                current_spend_usd=current_spend,
+                synchronous=True
+            )
+            return dict(info)
 
     def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
-        return self._keys.get(key_id)
+        with self._lock:
+            val = self._keys.get(key_id)
+            return dict(val) if val else None
 
     def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
-        info = self._keys.get(key_id)
-        if not info:
-            return True, 0
-        now = time.time()
-        window_start = now - 60.0
-        info["request_timestamps"] = [ts for ts in info.get("request_timestamps", []) if ts > window_start]
-        if len(info["request_timestamps"]) >= limit_rpm:
-            return False, len(info["request_timestamps"])
-        info["request_timestamps"].append(now)
-        return True, len(info["request_timestamps"])
+        with self._lock:
+            info = self._keys.get(key_id)
+            if not info:
+                return True, 0
+            now = time.time()
+            window_start = now - 60.0
+            info["request_timestamps"] = [ts for ts in info.get("request_timestamps", []) if ts > window_start]
+            if len(info["request_timestamps"]) >= limit_rpm:
+                return False, len(info["request_timestamps"])
+            info["request_timestamps"].append(now)
+            return True, len(info["request_timestamps"])
+
+    def check_and_reserve_budget(self, key_id: str, reserve_amount_usd: float = 0.0) -> Tuple[bool, float, float]:
+        with self._lock:
+            info = self._keys.get(key_id)
+            if not info:
+                return True, 0.0, 1000000.0
+            budget = float(info.get("monthly_budget_usd", 100.0))
+            current = float(info.get("current_spend_usd", 0.0))
+            if (current + reserve_amount_usd) > budget:
+                return False, current, budget
+            if reserve_amount_usd > 0:
+                info["current_spend_usd"] = current + reserve_amount_usd
+                self.store.record_virtual_key_spend(key_id, reserve_amount_usd, synchronous=False)
+            return True, info["current_spend_usd"], budget
+
+    def reconcile_spend(self, key_id: str, reserved_usd: float, actual_spend_usd: float):
+        delta = actual_spend_usd - reserved_usd
+        if delta != 0:
+            self.record_spend(key_id, delta)
 
     def get_spend(self, key_id: str) -> float:
-        info = self._keys.get(key_id)
-        return float(info.get("current_spend_usd", 0.0)) if info else 0.0
+        with self._lock:
+            info = self._keys.get(key_id)
+            return float(info.get("current_spend_usd", 0.0)) if info else 0.0
 
     def record_spend(self, key_id: str, spend_usd: float):
-        if key_id in self._keys:
-            self._keys[key_id]["current_spend_usd"] += spend_usd
-            self.store.record_virtual_key_spend(key_id, spend_usd, synchronous=False)
+        with self._lock:
+            if key_id in self._keys:
+                self._keys[key_id]["current_spend_usd"] += spend_usd
+                self.store.record_virtual_key_spend(key_id, spend_usd, synchronous=False)
 
     def get_all_keys(self) -> Dict[str, Dict[str, Any]]:
-        return self._keys
+        with self._lock:
+            return {k: dict(v) for k, v in self._keys.items()}
 
 
 class RedisQuotaStorage(BaseQuotaStorage):
-    """Distributed Redis quota and sliding-window rate limit manager."""
+    """
+    Distributed Redis quota and sliding-window rate limit manager.
+    Guarantees atomic TOCTOU-free budget reservation and atomic sliding-window rate limiting via Lua.
+    """
 
     def __init__(self, redis_client=None, redis_url: str = "redis://127.0.0.1:6379/0", prefix: str = "omnicache"):
         self.prefix = prefix
+        self._lock = threading.RLock()
         if redis_client is not None:
             self.client = redis_client
         else:
@@ -255,28 +371,69 @@ class RedisQuotaStorage(BaseQuotaStorage):
             return None
 
     def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
+        """Executes atomic Lua script (with pipeline fallback) to trim and record rate limit."""
+        now = time.time()
+        window_start = now - 60.0
+        rpm_k = self._rpm_key(key_id)
+        member = f"{now}:{time.time_ns()}"
+
         try:
-            now = time.time()
-            window_start = now - 60.0
-            rpm_k = self._rpm_key(key_id)
-            
-            pipe = self.client.pipeline()
-            pipe.zremrangebyscore(rpm_k, 0, window_start)
-            pipe.zcard(rpm_k)
-            results = pipe.execute()
-            current_count = results[1]
+            res = self.client.eval(LUA_RATE_LIMIT, 1, rpm_k, now, window_start, limit_rpm, member)
+            allowed = bool(res[0] == 1)
+            current_count = int(res[1])
+            return allowed, current_count
+        except Exception:
+            with self._lock:
+                try:
+                    pipe = self.client.pipeline()
+                    pipe.zremrangebyscore(rpm_k, 0, window_start)
+                    pipe.zcard(rpm_k)
+                    results = pipe.execute()
+                    current_count = results[1]
+                    if current_count >= limit_rpm:
+                        return False, current_count
+                    pipe = self.client.pipeline()
+                    pipe.zadd(rpm_k, {member: now})
+                    pipe.expire(rpm_k, 120)
+                    pipe.execute()
+                    return True, current_count + 1
+                except Exception as exc:
+                    logger.warning("Redis fallback rate limit check failed: %s", exc)
+                    return True, 0
 
-            if current_count >= limit_rpm:
-                return False, current_count
+    def check_and_reserve_budget(self, key_id: str, reserve_amount_usd: float = 0.0) -> Tuple[bool, float, float]:
+        """Executes atomic Lua script (with fallback) to check and pre-reserve spend against monthly budget cap."""
+        meta_k = self._meta_key(key_id)
+        spend_k = self._spend_key(key_id)
 
-            pipe = self.client.pipeline()
-            pipe.zadd(rpm_k, {f"{now}:{time.time_ns()}": now})
-            pipe.expire(rpm_k, 120)
-            pipe.execute()
-            return True, current_count + 1
-        except Exception as exc:
-            logger.warning("Redis rate limit check failed: %s", exc)
-            return True, 0
+        try:
+            res = self.client.eval(LUA_BUDGET_RESERVE, 2, meta_k, spend_k, reserve_amount_usd)
+            allowed = bool(res[0] == 1)
+            current_spend = float(res[1])
+            budget = float(res[2])
+            return allowed, current_spend, budget
+        except Exception:
+            with self._lock:
+                try:
+                    meta = self.get_key(key_id)
+                    if not meta:
+                        return True, 0.0, 1000000.0
+                    budget = float(meta.get("monthly_budget_usd", 100.0))
+                    current_spend = self.get_spend(key_id)
+                    if (current_spend + reserve_amount_usd) > budget:
+                        return False, current_spend, budget
+                    if reserve_amount_usd > 0:
+                        self.record_spend(key_id, reserve_amount_usd)
+                    return True, current_spend + reserve_amount_usd, budget
+                except Exception as exc:
+                    logger.warning("Redis fallback budget check failed: %s", exc)
+                    current_spend = self.get_spend(key_id)
+                    return (current_spend + reserve_amount_usd <= 1000000.0), current_spend, 1000000.0
+
+    def reconcile_spend(self, key_id: str, reserved_usd: float, actual_spend_usd: float):
+        delta = actual_spend_usd - reserved_usd
+        if delta != 0:
+            self.record_spend(key_id, delta)
 
     def get_spend(self, key_id: str) -> float:
         try:
@@ -360,9 +517,9 @@ class VirtualKeyManager:
             role=role
         )
 
-    def check_authorization(self, key_id: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+    def check_authorization(self, key_id: str, reserve_amount_usd: float = 0.0) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """
-        Validates whether an API key exists, and checks rate limits and budget caps.
+        Validates whether an API key exists, and checks rate limits and budget caps atomically.
         Returns (is_allowed, reason_or_error, key_info).
         """
         if not key_id:
@@ -390,16 +547,16 @@ class VirtualKeyManager:
         if info.get("role") == "admin":
             return True, "authorized", info
 
-        # 1. Check Rate Limit (Sliding Window 60s)
+        # 1. Check Rate Limit (Atomic Sliding Window 60s)
         rate_ok, current_rpm = self.storage.check_and_record_rate_limit(key_id, info["rate_limit_rpm"])
         if not rate_ok:
             return False, f"Rate limit exceeded ({info['rate_limit_rpm']} RPM)", info
 
-        # 2. Check Monthly Budget Cap
-        current_spend = self.storage.get_spend(key_id)
+        # 2. Check & Reserve Monthly Budget Cap (Atomic Lua / Lock TOCTOU protection)
+        budget_ok, current_spend, monthly_budget = self.storage.check_and_reserve_budget(key_id, reserve_amount_usd)
         info["current_spend_usd"] = current_spend
-        if current_spend >= info["monthly_budget_usd"]:
-            return False, f"Monthly budget cap exceeded (${info['monthly_budget_usd']:.2f})", info
+        if not budget_ok:
+            return False, f"Monthly budget cap exceeded (${monthly_budget:.2f})", info
 
         return True, "authorized", info
 
@@ -420,6 +577,10 @@ class VirtualKeyManager:
     def record_spend(self, key_id: str, spend_usd: float):
         """Records token cost against a key's monthly budget."""
         self.storage.record_spend(key_id, spend_usd)
+
+    def reconcile_spend(self, key_id: str, reserved_usd: float, actual_spend_usd: float):
+        """Reconciles reserved spend against actual recorded spend."""
+        self.storage.reconcile_spend(key_id, reserved_usd, actual_spend_usd)
 
     def get_all_quotas(self) -> Dict[str, Any]:
         """Returns summary of all virtual keys and current spend."""

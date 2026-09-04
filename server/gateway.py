@@ -882,6 +882,11 @@ async def handle_catchall(request: Request) -> Response:
 
 
 async def handle_tool_replay(request: Request) -> Response:
+    """
+    Dual-Mode Tool Replay & Recording Endpoint.
+    - If 'output' is provided (or action == 'store'/'record'): Stores tool execution output into cache.
+    - If 'output' is omitted: Performs deterministic cache lookup.
+    """
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
@@ -892,14 +897,38 @@ async def handle_tool_replay(request: Request) -> Response:
 
     try:
         body = await request.json()
-        tool_name = body.get("tool_name")
+        tool_name = (body.get("tool_name") or "").strip()
+        if not tool_name:
+            return JSONResponse({"error": "Missing required field 'tool_name'"}, status_code=400, headers=cors_headers)
         arguments = body.get("arguments", {})
         raw_fp = body.get("workspace_fingerprint", "default")
         ws_state = body.get("workspace_state", None)
+        action = body.get("action", "").strip().lower()
+        ttl_seconds = body.get("ttl_seconds", None)
         env_fp = f"{org_id}:{raw_fp}"
     except Exception:
-        return JSONResponse({"error": "Invalid JSON"}, status_code=400, headers=cors_headers)
+        return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
 
+    # 1. Store / Record Path
+    if "output" in body or action in ("store", "record"):
+        output_content = str(body.get("output", ""))
+        tool_key = tool_cache.store_tool_call(
+            tool_name=tool_name,
+            arguments=arguments,
+            output=output_content,
+            workspace_fingerprint=env_fp,
+            workspace_state=ws_state,
+            ttl_seconds=ttl_seconds
+        )
+        return JSONResponse({
+            "status": "STORED",
+            "tool_name": tool_name,
+            "tool_key": tool_key,
+            "cached": True,
+            "workspace_state": ws_state
+        }, headers=cors_headers)
+
+    # 2. Lookup Path
     is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=env_fp, workspace_state=ws_state)
     if not is_hit and (org_id == "default" or raw_fp == "default"):
         is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=raw_fp, workspace_state=ws_state)
@@ -1007,7 +1036,7 @@ async def handle_stats(request: Request) -> Response:
             "circuit_breaker": failover_engine.circuit_breaker.get_status()
         },
         "system_info": {
-            "version": "2.5.2",
+            "version": getattr(config, "VERSION", "2.5.4"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1043,6 +1072,8 @@ async def handle_quotas(request: Request) -> Response:
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400, headers=cors_headers)
 
+    return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
+
 
 async def handle_export_csv(request: Request) -> Response:
     """Protected Cache CSV Export Endpoint (Admin Only)."""
@@ -1060,9 +1091,11 @@ async def handle_export_csv(request: Request) -> Response:
     writer = csv.writer(output)
     writer.writerow(["Key", "OrgID", "Model", "HitCount", "CreatedAt", "LastAccessedAt", "TTL_Remaining", "UserPromptPreview"])
 
-    for key, entry in cache_instance.l1_exact_cache.items():
-        preview = (entry.user_prompt[:80] + "...") if len(entry.user_prompt) > 80 else entry.user_prompt
-        writer.writerow([key, entry.org_id, entry.model, entry.hit_count, entry.created_at, entry.last_accessed_at, entry.ttl_remaining(), preview])
+    for org_id, entries in cache_instance.l1_exact_cache.items():
+        if isinstance(entries, dict):
+            for key, entry in entries.items():
+                preview = (entry.user_prompt[:80] + "...") if len(entry.user_prompt) > 80 else entry.user_prompt
+                writer.writerow([key, entry.org_id, entry.model, entry.hit_count, entry.created_at, entry.last_accessed_at, entry.ttl_remaining(), preview])
 
     csv_content = output.getvalue()
     return Response(
@@ -1087,13 +1120,13 @@ async def handle_prometheus_metrics(request: Request) -> Response:
     metrics = [
         "# HELP omnicache_requests_total Total requests processed",
         "# TYPE omnicache_requests_total counter",
-        f"omnicache_requests_total {stats['total_requests']}",
+        f"omnicache_requests_total {stats.get('total_requests', 0)}",
         "# HELP omnicache_cache_hits_exact_total Exact L1 hits",
         "# TYPE omnicache_cache_hits_exact_total counter",
-        f"omnicache_cache_hits_exact_total {stats['exact_hits']}",
+        f"omnicache_cache_hits_exact_total {stats.get('exact_hits', 0)}",
         "# HELP omnicache_cache_hits_semantic_total Semantic L2 hits",
         "# TYPE omnicache_cache_hits_semantic_total counter",
-        f"omnicache_cache_hits_semantic_total {stats['semantic_hits']}",
+        f"omnicache_cache_hits_semantic_total {stats.get('semantic_hits', 0)}",
         "# HELP omnicache_savings_usd_total Estimated dollars saved",
         "# TYPE omnicache_savings_usd_total gauge",
         f"omnicache_savings_usd_total {METRICS_LEDGER['total_savings_usd']:.6f}",
@@ -1111,7 +1144,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": "2.5.2",
+        "version": getattr(config, "VERSION", "2.5.4"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1183,6 +1216,7 @@ routes = [
     Route("/v1/messages", handle_anthropic_messages, methods=["POST", "GET", "OPTIONS"]),
     Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tool_replay", handle_tool_replay, methods=["POST", "OPTIONS"]),
+    Route("/v1/agent/tool_record", handle_tool_replay, methods=["POST", "OPTIONS"]),
     Route("/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),

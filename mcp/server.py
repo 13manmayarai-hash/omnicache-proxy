@@ -12,10 +12,12 @@ from typing import Dict, Any, Optional
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.config import config
 from core.embeddings import FastSemanticEmbedder
 from core.vector_cache import cache_instance
 from persistence.snapshot_store import snapshot_store
 from server.upstream import upstream_client
+from server.tool_replayer import tool_cache
 
 # Restore persistent entries into cache
 snapshot_store.load_into_cache(cache_instance)
@@ -61,6 +63,36 @@ TOOLS_METADATA = [
                 "top_k": {"type": "integer", "description": "Number of top results to return (default: 5).", "default": 5}
             },
             "required": ["query"]
+        }
+    },
+    {
+        "name": "omnicache_replay_tool",
+        "description": "Looks up cached execution outputs for deterministic agent tools (e.g. read_file, git_status, grep) with workspace state validation.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {"type": "string", "description": "Name of the tool (e.g. 'read_file', 'git_status')."},
+                "arguments": {"type": "object", "description": "Arguments passed to the tool."},
+                "workspace_fingerprint": {"type": "string", "description": "Workspace identifier (default: default).", "default": "default"},
+                "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."}
+            },
+            "required": ["tool_name"]
+        }
+    },
+    {
+        "name": "omnicache_record_tool",
+        "description": "Records and caches execution output of a deterministic tool run for fast subsequent replay.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {"type": "string", "description": "Name of the tool."},
+                "arguments": {"type": "object", "description": "Arguments passed to the tool."},
+                "output": {"type": "string", "description": "Execution output of the tool to cache."},
+                "workspace_fingerprint": {"type": "string", "description": "Workspace identifier (default: default).", "default": "default"},
+                "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."},
+                "ttl_seconds": {"type": "integer", "description": "Custom TTL in seconds."}
+            },
+            "required": ["tool_name", "output"]
         }
     },
     {
@@ -178,6 +210,71 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             "content": [{"type": "text", "text": json.dumps(scored[:top_k], indent=2)}]
         }
 
+    elif name == "omnicache_replay_tool":
+        tool_name = arguments.get("tool_name", "")
+        tool_args = arguments.get("arguments", {})
+        raw_fp = arguments.get("workspace_fingerprint", "default")
+        ws_state = arguments.get("workspace_state", None)
+        env_fp = f"{org_id}:{raw_fp}"
+
+        is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, tool_args, workspace_fingerprint=env_fp, workspace_state=ws_state)
+        if not is_hit and (org_id == "default" or raw_fp == "default"):
+            is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, tool_args, workspace_fingerprint=raw_fp, workspace_state=ws_state)
+
+        if is_hit:
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "status": "HIT",
+                        "tool_name": tool_name,
+                        "tool_key": tool_key,
+                        "output": output,
+                        "cached": True
+                    }, indent=2)
+                }]
+            }
+        else:
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "status": "MISS",
+                        "tool_name": tool_name,
+                        "cached": False
+                    }, indent=2)
+                }]
+            }
+
+    elif name == "omnicache_record_tool":
+        tool_name = arguments.get("tool_name", "")
+        tool_args = arguments.get("arguments", {})
+        output = str(arguments.get("output", ""))
+        raw_fp = arguments.get("workspace_fingerprint", "default")
+        ws_state = arguments.get("workspace_state", None)
+        ttl = arguments.get("ttl_seconds", None)
+        env_fp = f"{org_id}:{raw_fp}"
+
+        tool_key = tool_cache.store_tool_call(
+            tool_name=tool_name,
+            arguments=tool_args,
+            output=output,
+            workspace_fingerprint=env_fp,
+            workspace_state=ws_state,
+            ttl_seconds=ttl
+        )
+        return {
+            "content": [{
+                "type": "text",
+                "text": json.dumps({
+                    "status": "STORED",
+                    "tool_name": tool_name,
+                    "tool_key": tool_key,
+                    "cached": True
+                }, indent=2)
+            }]
+        }
+
     elif name == "omnicache_invalidate":
         tag = arguments.get("tag")
         if tag:
@@ -210,7 +307,7 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {
                     "name": "omnicache-mcp",
-                    "version": "2.4.0"
+                    "version": getattr(config, "VERSION", "2.5.4")
                 },
                 "capabilities": {
                     "tools": {"listChanged": False},

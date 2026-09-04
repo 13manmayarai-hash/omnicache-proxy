@@ -97,8 +97,8 @@ def extract_auth_key(request: Request) -> str:
     if x_admin_key:
         return x_admin_key
 
-    # Fallback to default key if registered and REQUIRE_AUTH is False
-    if "default" in quota_manager._keys and not getattr(config, "REQUIRE_AUTH", False):
+    # Fallback to default key if REQUIRE_AUTH is False
+    if not getattr(config, "REQUIRE_AUTH", False):
         return "default"
 
     return ""
@@ -112,6 +112,16 @@ def authenticate_tenant(request: Request) -> Tuple[bool, Optional[Response], Dic
     cors_headers = get_cors_headers(request)
     key = extract_auth_key(request)
     
+    # In local developer mode (REQUIRE_AUTH=False), permit unregistered keys (e.g. direct Anthropic/OpenAI keys)
+    if not getattr(config, "REQUIRE_AUTH", False):
+        if not key:
+            key = "default"
+        info = quota_manager.storage.get_key(key)
+        if not info:
+            client_org = request.headers.get("x-org-id", "default").strip() or "default"
+            key_info = {"team_name": "Local Developer", "org_id": client_org, "role": "tenant", "key_id": key}
+            return True, None, key_info, client_org
+
     allowed, auth_reason, key_info = quota_manager.check_authorization(key)
     if not allowed:
         if key_info is None:
@@ -269,7 +279,12 @@ async def handle_chat_completions(request: Request) -> Response:
                     return StreamingResponse(
                         StreamReplayer.replay_cached_stream(rehydrated, tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC),
                         media_type="text/event-stream",
-                        headers=resp_headers
+                        headers={
+                            **resp_headers,
+                            "Cache-Control": "no-cache, no-transform",
+                            "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no"
+                        }
                     )
                 return JSONResponse(rehydrated, headers=resp_headers)
 
@@ -325,7 +340,12 @@ async def handle_chat_completions(request: Request) -> Response:
             return StreamingResponse(
                 StreamReplayer.replay_cached_stream(rehydrated_response, stream_chunks=entry.stream_chunks, tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC),
                 media_type="text/event-stream",
-                headers=resp_headers
+                headers={
+                    **resp_headers,
+                    "Cache-Control": "no-cache, no-transform",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no"
+                }
             )
         else:
             return JSONResponse(rehydrated_response, headers=resp_headers)
@@ -430,6 +450,7 @@ async def handle_chat_completions(request: Request) -> Response:
     async def stream_and_record():
         recorded_chunks = []
         full_content_parts = []
+        buffer = ""
         try:
             async for chunk in upstream_resp.aiter_raw():
                 if not chunk:
@@ -437,8 +458,11 @@ async def handle_chat_completions(request: Request) -> Response:
                 yield chunk
                 try:
                     chunk_str = chunk.decode("utf-8", errors="ignore")
-                    for raw_line in chunk_str.split("\n"):
-                        if raw_line.startswith("data: ") and raw_line.strip() != "data: [DONE]":
+                    buffer += chunk_str
+                    while "\n" in buffer:
+                        raw_line, buffer = buffer.split("\n", 1)
+                        raw_line = raw_line.strip()
+                        if raw_line.startswith("data: ") and raw_line != "data: [DONE]":
                             chunk_json = json.loads(raw_line[6:])
                             recorded_chunks.append(chunk_json)
                             choices = chunk_json.get("choices", [])
@@ -499,6 +523,9 @@ async def handle_chat_completions(request: Request) -> Response:
         "X-Served-Model": routed_model,
         "X-Cascade-Applied": "true" if was_cascaded else "false",
         "X-Cascade-Reason": cascade_reason,
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
         **cors_headers
     })
 
@@ -652,7 +679,12 @@ async def handle_anthropic_messages(request: Request) -> Response:
                 yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'end_turn', 'stop_sequence': None}, 'usage': {'output_tokens': completion_tokens}})}\n\n"
                 yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n"
 
-            return StreamingResponse(stream_cached_anthropic(), media_type="text/event-stream", headers=resp_headers)
+            return StreamingResponse(stream_cached_anthropic(), media_type="text/event-stream", headers={
+                **resp_headers,
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            })
         else:
             anthropic_response = {
                 "id": f"msg_cached_{int(time.time()*1000)}",
@@ -679,6 +711,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
         async def stream_and_record_anthropic():
             full_text_accum = []
+            buffer = ""
             try:
                 async for chunk in stream_resp.aiter_raw():
                     if not chunk:
@@ -686,13 +719,20 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     yield chunk
                     try:
                         chunk_str = chunk.decode("utf-8", errors="ignore")
-                        for line in chunk_str.split("\n"):
+                        buffer += chunk_str
+                        while "\n" in buffer:
+                            line, buffer = buffer.split("\n", 1)
+                            line = line.strip()
                             if line.startswith("data: "):
-                                data_obj = json.loads(line[6:])
-                                if data_obj.get("type") == "content_block_delta":
-                                    delta_text = data_obj.get("delta", {}).get("text", "")
-                                    if delta_text:
-                                        full_text_accum.append(delta_text)
+                                data_str = line[6:].strip()
+                                if data_str and data_str != "[DONE]":
+                                    data_obj = json.loads(data_str)
+                                    if data_obj.get("type") == "content_block_delta":
+                                        delta = data_obj.get("delta", {})
+                                        if delta.get("type") == "text_delta":
+                                            delta_text = delta.get("text", "")
+                                            if delta_text:
+                                                full_text_accum.append(delta_text)
                     except Exception:
                         pass
             finally:
@@ -738,6 +778,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
             "X-Tokens-Accounting": "estimated",
             "X-Requested-Model": requested_model,
             "X-Served-Model": requested_model,
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
             **cors_headers
         })
 

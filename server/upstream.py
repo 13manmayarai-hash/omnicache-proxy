@@ -24,7 +24,13 @@ class UpstreamClient:
             )
             self._client = httpx.AsyncClient(
                 limits=limits,
-                timeout=httpx.Timeout(config.HTTP_TIMEOUT_SECONDS, connect=10.0)
+                timeout=httpx.Timeout(
+                    timeout=config.HTTP_TIMEOUT_SECONDS,
+                    connect=10.0,
+                    read=None,  # Prevent read timeouts during long streaming LLM completions
+                    write=30.0,
+                    pool=10.0
+                )
             )
         return self._client
 
@@ -190,11 +196,23 @@ class UpstreamClient:
 
         for k, v in incoming_headers.items():
             k_lower = k.lower()
-            if k_lower in ("authorization", "x-api-key", "cookie", "anthropic-version", "anthropic-beta", "user-agent", "x-anthropic-client"):
+            if k_lower in (
+                "x-api-key", "anthropic-version", "anthropic-beta",
+                "anthropic-dangerous-direct-browser-access", "user-agent",
+                "x-anthropic-client", "x-app"
+            ) or k_lower.startswith("anthropic-") or k_lower.startswith("x-anthropic-") or k_lower.startswith("x-stainless-"):
                 headers[k_lower] = v
+            elif k_lower == "authorization":
+                if v.startswith("Bearer sk-ant-") and "x-api-key" not in headers:
+                    headers["x-api-key"] = v[7:].strip()
+                else:
+                    headers["authorization"] = v
 
-        if "x-api-key" not in headers and "authorization" not in headers:
-            if config.ANTHROPIC_API_KEY:
+        if "x-api-key" not in headers:
+            auth_val = headers.get("authorization", "")
+            if auth_val.startswith("Bearer "):
+                headers["x-api-key"] = auth_val[7:].strip()
+            elif config.ANTHROPIC_API_KEY:
                 headers["x-api-key"] = config.ANTHROPIC_API_KEY
 
         return headers
@@ -206,12 +224,12 @@ class UpstreamClient:
         params: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         client = self.get_client()
-        url = "https://api.anthropic.com/v1/messages"
+        url = f"{config.ANTHROPIC_BASE_URL.rstrip('/')}/messages"
         headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
-        if "max_tokens" not in clean_payload:
-            clean_payload["max_tokens"] = 1024
+        if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
+            clean_payload["max_tokens"] = 8192
 
         try:
             response = await client.post(url, json=clean_payload, headers=headers, params=params)
@@ -237,13 +255,13 @@ class UpstreamClient:
         params: Optional[Dict[str, str]] = None
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any]]:
         client = self.get_client()
-        url = "https://api.anthropic.com/v1/messages"
+        url = f"{config.ANTHROPIC_BASE_URL.rstrip('/')}/messages"
         headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
         clean_payload["stream"] = True
-        if "max_tokens" not in clean_payload:
-            clean_payload["max_tokens"] = 1024
+        if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
+            clean_payload["max_tokens"] = 8192
 
         try:
             req = client.build_request("POST", url, json=clean_payload, headers=headers, params=params)

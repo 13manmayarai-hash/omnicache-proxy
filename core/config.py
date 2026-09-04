@@ -102,7 +102,7 @@ class ProxyConfig:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
+    ANTHROPIC_BASE_URL: str = os.getenv("UPSTREAM_ANTHROPIC_BASE_URL", os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1"))
     GEMINI_BASE_URL: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
     
     DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.92"))
@@ -126,7 +126,7 @@ class ProxyConfig:
     
     HTTP_POOL_MAX_CONNECTIONS: int = 100
     HTTP_POOL_MAX_KEEPALIVE: int = 20
-    HTTP_TIMEOUT_SECONDS: float = 60.0
+    HTTP_TIMEOUT_SECONDS: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "120.0"))
 
 
 def validate_startup_security_invariants(host: str = None):

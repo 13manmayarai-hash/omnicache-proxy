@@ -128,6 +128,7 @@ def authenticate_tenant(request: Request) -> Tuple[bool, Optional[Response], Dic
             ), key_info, ""
 
     role = key_info.get("role", "tenant")
+    key_info["key_id"] = key
     client_org_id = request.headers.get("x-org-id", "").strip()
     if role == "admin" and client_org_id:
         derived_org_id = client_org_id
@@ -368,6 +369,11 @@ async def handle_chat_completions(request: Request) -> Response:
 
             if is_leader:
                 METRICS_LEDGER["total_tokens_used"] += tokens_used
+                spend_usd = upstream_client.calculate_savings(routed_model, p_tok, c_tok)
+                key_id = key_info.get("key_id", "")
+                if key_id:
+                    quota_manager.record_spend(key_id, spend_usd)
+
                 saved_entry = cache_instance.store(
                     payload=payload,
                     response_payload=res_data,
@@ -437,6 +443,11 @@ async def handle_chat_completions(request: Request) -> Response:
                 tokens_used = p_tok + c_tok
                 METRICS_LEDGER["total_tokens_used"] += tokens_used
                 METRICS_LEDGER["estimated_tokens_used"] += tokens_used
+
+                spend_usd = upstream_client.calculate_savings(routed_model, p_tok, c_tok)
+                key_id = key_info.get("key_id", "")
+                if key_id:
+                    quota_manager.record_spend(key_id, spend_usd)
 
                 synthesized = {
                     "id": f"chatcmpl-{int(time.time()*1000)}",
@@ -667,8 +678,14 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     full_text = "".join(full_text_accum)
                     p_tok = len(str(messages).split())
                     c_tok = len(full_text.split())
-                    METRICS_LEDGER["total_tokens_used"] += (p_tok + c_tok)
-                    METRICS_LEDGER["estimated_tokens_used"] += (p_tok + c_tok)
+                    tokens_used = p_tok + c_tok
+                    METRICS_LEDGER["total_tokens_used"] += tokens_used
+                    METRICS_LEDGER["estimated_tokens_used"] += tokens_used
+
+                    spend_usd = upstream_client.calculate_savings(requested_model, p_tok, c_tok)
+                    key_id = key_info.get("key_id", "")
+                    if key_id:
+                        quota_manager.record_spend(key_id, spend_usd)
                     
                     cacheable_res_payload = {
                         "id": f"msg_{int(time.time()*1000)}",
@@ -711,6 +728,11 @@ async def handle_anthropic_messages(request: Request) -> Response:
         tokens_used = p_tok + c_tok
         METRICS_LEDGER["total_tokens_used"] += tokens_used
         METRICS_LEDGER["exact_tokens_used"] += tokens_used
+
+        spend_usd = upstream_client.calculate_savings(requested_model, p_tok, c_tok)
+        key_id = key_info.get("key_id", "")
+        if key_id:
+            quota_manager.record_spend(key_id, spend_usd)
 
         content_blocks = anthropic_res.get("content", [])
         full_content = "\n".join([b.get("text", "") for b in content_blocks if isinstance(b, dict) and b.get("type") == "text"])
@@ -777,26 +799,36 @@ async def handle_catchall(request: Request) -> Response:
         return await handle_anthropic_count_tokens(request)
     
     return JSONResponse({
-        "status": "ok",
-        "authenticated": True,
-        "path": path,
-        "message": "OmniCache Universal Gateway OK"
-    }, headers=cors_headers)
+        "error": {
+            "message": f"Endpoint '{path}' not found on OmniCache Proxy.",
+            "type": "not_found_error",
+            "code": 404
+        }
+    }, status_code=404, headers=cors_headers)
 
 
 async def handle_tool_replay(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
     try:
         body = await request.json()
         tool_name = body.get("tool_name")
         arguments = body.get("arguments", {})
-        env_fp = body.get("workspace_fingerprint", "default")
+        raw_fp = body.get("workspace_fingerprint", "default")
+        env_fp = f"{org_id}:{raw_fp}"
     except Exception:
         return JSONResponse({"error": "Invalid JSON"}, status_code=400, headers=cors_headers)
 
     is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=env_fp)
+    if not is_hit and (org_id == "default" or raw_fp == "default"):
+        is_hit, output, tool_key = tool_cache.lookup_tool_call(tool_name, arguments, workspace_fingerprint=raw_fp)
+
     if is_hit:
         METRICS_LEDGER["agent_tool_hits"] += 1
         return JSONResponse({
@@ -900,7 +932,7 @@ async def handle_stats(request: Request) -> Response:
             "circuit_breaker": failover_engine.circuit_breaker.get_status()
         },
         "system_info": {
-            "version": "2.5.1",
+            "version": "2.5.2",
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1004,19 +1036,32 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": "2.5.1",
+        "version": "2.5.2",
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
 
 
 async def handle_dashboard(request: Request) -> Response:
+    cors_headers = get_cors_headers(request)
+    if getattr(config, "REQUIRE_AUTH", False):
+        key = extract_auth_key(request)
+        if not key:
+            key = request.query_params.get("api_key") or request.query_params.get("key") or ""
+        allowed, auth_reason, key_info = quota_manager.check_authorization(key)
+        if not allowed:
+            return JSONResponse(
+                {"error": {"message": f"Dashboard authentication required: {auth_reason}", "type": "authentication_error"}},
+                status_code=401,
+                headers=cors_headers
+            )
+
     dashboard_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
     if os.path.exists(dashboard_path):
         with open(dashboard_path, "r", encoding="utf-8") as f:
             html = f.read()
-        return HTMLResponse(html)
-    return HTMLResponse("<h1>OmniCache Dashboard Not Found</h1>", status_code=404)
+        return HTMLResponse(html, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
 
 
 async def handle_mcp(request: Request) -> Response:

@@ -5,6 +5,7 @@ and seamlessly rehydrates original data on response delivery with cryptographic 
 """
 
 import re
+import copy
 import hashlib
 import hmac
 from typing import Dict, Tuple, List, Any, Optional
@@ -26,12 +27,12 @@ class PrivacyShield:
     def generate_token(cls, pii_type: str, raw_value: str, salt: Optional[str] = None) -> str:
         """
         Generates a collision-resistant deterministic token for a PII value.
-        Utilizes HMAC-SHA256 with the configured enterprise salt,
+        Utilizes HMAC-SHA256 with the configured enterprise salt (16 hex chars / 64-bit entropy),
         guaranteeing that differing user values generate distinct cache keys while
         preventing third-party rainbow-table reversibility.
         """
         active_salt = salt or getattr(config, "PRIVACY_SALT", "omnicache_salt_v2")
-        digest = hmac.new(active_salt.encode("utf-8"), raw_value.encode("utf-8"), hashlib.sha256).hexdigest()[:10].upper()
+        digest = hmac.new(active_salt.encode("utf-8"), raw_value.encode("utf-8"), hashlib.sha256).hexdigest()[:16].upper()
         return f"[REDACTED_{pii_type}_{digest}]"
 
     @classmethod
@@ -129,11 +130,12 @@ class PrivacyShield:
     def rehydrate_response(cls, response_payload: Dict[str, Any], token_map: Dict[str, str]) -> Dict[str, Any]:
         """
         Restores original sensitive values into the assistant response text.
+        Always operates on an isolated deep copy to prevent in-place mutation of cached entries.
         """
         if not token_map:
-            return response_payload
+            return copy.deepcopy(response_payload)
 
-        resp_copy = dict(response_payload)
+        resp_copy = copy.deepcopy(response_payload)
         
         # OpenAI response format
         choices = resp_copy.get("choices", [])

@@ -94,7 +94,7 @@ class ProxyConfig:
         for origin in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000").split(",")
         if origin.strip()
     ]
-    CORS_ALLOW_ALL: bool = os.getenv("CORS_ALLOW_ALL", "true").lower() in ("true", "1")
+    CORS_ALLOW_ALL: bool = os.getenv("CORS_ALLOW_ALL", "false").lower() in ("true", "1")
 
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")

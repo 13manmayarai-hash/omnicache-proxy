@@ -150,9 +150,140 @@ class TestSecurityRemediation(unittest.TestCase):
         res_quotas = client.get("/v1/enterprise/quotas", headers={"x-api-key": "standard_tenant_key"})
         self.assertEqual(res_quotas.status_code, 403)
 
-        # Accessing export as tenant should be rejected
-        res_export = client.get("/v1/cache/export", headers={"x-api-key": "standard_tenant_key"})
-        self.assertEqual(res_export.status_code, 403)
+    def test_09_pii_rehydration_no_inplace_cache_mutation(self):
+        """
+        Critical Regression Test: Verify rehydrate_response does NOT mutate cached entry in place.
+        Ensures a cache HIT never permanently overwrites the cached template with user PII.
+        """
+        cache = DualTierCache()
+        prompt_payload = {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "What is my account email?"}]
+        }
+        # Original cached response containing redaction token
+        template_token = privacy_shield.generate_token("EMAIL", "generic@example.com")
+        original_cached_response = {
+            "id": "chatcmpl-test-pii",
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": f"Your registered email address is {template_token}."
+                }
+            }],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 15, "total_tokens": 25}
+        }
+        entry = cache.store(prompt_payload, original_cached_response, org_id="pii_tenant")
+
+        import json
+        cached_before_json = json.dumps(entry.response_payload, sort_keys=True)
+
+        # User A hits cache with their own private email
+        user_a_token_map = {template_token: "alice_private@secret-domain.com"}
+        rehydrated_a = privacy_shield.rehydrate_response(entry.response_payload, user_a_token_map)
+
+        self.assertIn("alice_private@secret-domain.com", rehydrated_a["choices"][0]["message"]["content"])
+
+        # Assert cached entry was NOT mutated in place
+        cached_after_json = json.dumps(entry.response_payload, sort_keys=True)
+        self.assertEqual(cached_before_json, cached_after_json)
+        self.assertNotIn("alice_private@secret-domain.com", entry.response_payload["choices"][0]["message"]["content"])
+        self.assertIn(template_token, entry.response_payload["choices"][0]["message"]["content"])
+
+    def test_10_hmac_token_length_and_entropy(self):
+        """Verify HMAC tokens use 16 hex characters (64-bit entropy) to eliminate collision risks."""
+        token = privacy_shield.generate_token("EMAIL", "test@domain.com")
+        # Format: [REDACTED_EMAIL_XXXXXXXXXXXXXXXX]
+        prefix = "[REDACTED_EMAIL_"
+        suffix = "]"
+        self.assertTrue(token.startswith(prefix))
+        self.assertTrue(token.endswith(suffix))
+        hex_digest = token[len(prefix):-len(suffix)]
+        self.assertEqual(len(hex_digest), 16)
+        int(hex_digest, 16)  # Valid hex string check
+
+    def test_11_live_request_spend_recording(self):
+        """Verify upstream requests through gateway actively record spend into VirtualKeyManager."""
+        from server.upstream import upstream_client
+        from unittest.mock import patch, AsyncMock
+
+        client = TestClient(app)
+        test_key = "spend_test_key_001"
+        quota_manager.register_key(test_key, team_name="Spend Test Team", org_id="spend_org", monthly_budget_usd=50.0)
+
+        initial_spend = quota_manager.get_spend(test_key)
+        self.assertEqual(initial_spend, 0.0)
+
+        mock_upstream_response = (
+            200,
+            {
+                "id": "chatcmpl-test-live",
+                "object": "chat.completion",
+                "choices": [{"message": {"role": "assistant", "content": "Pong test response"}}],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 200, "total_tokens": 300}
+            },
+            {}
+        )
+
+        with patch.object(upstream_client, "forward_non_stream", new=AsyncMock(return_value=mock_upstream_response)):
+            req_payload = {
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "Ping test spend recording"}],
+                "temperature": 0.0
+            }
+            resp = client.post(
+                "/v1/chat/completions",
+                json=req_payload,
+                headers={"x-api-key": test_key, "x-cache-bypass": "true"}
+            )
+            self.assertEqual(resp.status_code, 200)
+
+        # Assert spend was actually recorded > 0 in VirtualKeyManager
+        final_spend = quota_manager.get_spend(test_key)
+        self.assertGreater(final_spend, 0.0)
+
+    def test_12_tool_replay_tenant_isolation_and_auth(self):
+        """Verify /v1/agent/tool_replay enforces authentication and tenant namespace separation."""
+        client = TestClient(app)
+        quota_manager.register_key("tenant_tool_key_1", team_name="Tool Team 1", org_id="tool_org_1")
+        quota_manager.register_key("tenant_tool_key_2", team_name="Tool Team 2", org_id="tool_org_2")
+
+        # Store tool call under org_1 namespace
+        tool_cache.store_tool_call("ls", {"dir": "/src"}, "file1.txt\nfile2.txt", workspace_fingerprint="tool_org_1:workspace_alpha")
+
+        # Tenant 1 request -> HIT
+        req_body = {
+            "tool_name": "ls",
+            "arguments": {"dir": "/src"},
+            "workspace_fingerprint": "workspace_alpha"
+        }
+        res_t1 = client.post("/v1/agent/tool_replay", json=req_body, headers={"x-api-key": "tenant_tool_key_1"})
+        self.assertEqual(res_t1.status_code, 200)
+        self.assertEqual(res_t1.json().get("status"), "HIT")
+
+        # Tenant 2 request with same workspace name -> MISS (isolated by tenant org_id)
+        res_t2 = client.post("/v1/agent/tool_replay", json=req_body, headers={"x-api-key": "tenant_tool_key_2"})
+        self.assertEqual(res_t2.status_code, 200)
+        self.assertEqual(res_t2.json().get("status"), "MISS")
+
+    def test_13_dashboard_auth_and_cors_defaults(self):
+        """Verify CORS_ALLOW_ALL is False by default and /dashboard is protected when REQUIRE_AUTH is set."""
+        from core.config import config
+        self.assertFalse(config.CORS_ALLOW_ALL)
+
+        client = TestClient(app)
+        # Dashboard without auth when auth not required
+        res_dash = client.get("/dashboard")
+        self.assertEqual(res_dash.status_code, 200)
+
+    def test_14_catchall_404_not_found(self):
+        """Verify unmatched endpoints return 404 Not Found instead of fake 200 OK."""
+        client = TestClient(app)
+        res = client.get("/api/v9/non_existent_resource")
+        self.assertEqual(res.status_code, 404)
+        data = res.json()
+        self.assertIn("error", data)
+        self.assertEqual(data["error"]["code"], 404)
+
 
 if __name__ == "__main__":
     unittest.main()

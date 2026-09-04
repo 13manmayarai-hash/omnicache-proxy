@@ -574,6 +574,14 @@ class VirtualKeyManager:
         key_info = self.storage.get_key(key_id)
         return key_info is not None and key_info.get("role") == "admin"
 
+    def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
+        """Returns metadata for a specific key."""
+        return self.storage.get_key(key_id)
+
+    def get_spend(self, key_id: str) -> float:
+        """Returns current monthly spend for a key in USD."""
+        return self.storage.get_spend(key_id)
+
     def record_spend(self, key_id: str, spend_usd: float):
         """Records token cost against a key's monthly budget."""
         self.storage.record_spend(key_id, spend_usd)

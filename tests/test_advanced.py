@@ -123,10 +123,13 @@ class TestAdvancedOmniCache(unittest.TestCase):
                 os.remove(tmp_db)
 
     def test_05_dashboard_html_endpoint(self):
-        """Verify dashboard UI endpoint returns 200 and HTML content."""
+        """Verify dashboard UI endpoint returns 200, HTML content, and dynamic version badge."""
         resp = self.client.get("/dashboard")
         self.assertEqual(resp.status_code, 200)
         self.assertIn("OmniCache AI Proxy", resp.text)
+        self.assertIn('id="version-badge"', resp.text)
+        self.assertIn("v2.6.0 ACTIVE", resp.text)
+        self.assertNotIn("v2.1 ACTIVE", resp.text)
 
 if __name__ == "__main__":
     unittest.main()

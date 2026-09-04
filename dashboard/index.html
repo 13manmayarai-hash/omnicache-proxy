@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OmniCache AI Proxy 2.0 - Enterprise AI Gateway & Intelligence</title>
+  <title>OmniCache AI Proxy - Enterprise AI Gateway & Intelligence</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,7 +47,7 @@
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge">v2.1 ACTIVE</span></h1>
+          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v2.6.0 ACTIVE</span></h1>
           <p style="font-size: 0.75rem; color: #94a3b8;">Radix Multi-Turn • Agent Tool Accelerator • Model Cascade • Prometheus Export</p>
         </div>
       </div>
@@ -286,17 +286,29 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         const res = await fetch('/v1/cache/stats');
         const data = await res.json();
 
-        const exact = data.exact_hits || 0;
-        const semantic = data.semantic_hits || 0;
-        const total = data.total_requests || 0;
-        const fm = data.financial_metrics || {};
+        // Dynamically update Version Badge from backend system_info
+        const sys = data.system_info || {};
+        if (sys.version) {
+          const versionBadge = document.getElementById('version-badge');
+          if (versionBadge) {
+            versionBadge.textContent = `v${sys.version} ACTIVE`;
+          }
+        }
+
+        const cs = data.cache_stats || data;
+        const fm = data.financial_telemetry || data.financial_metrics || {};
+        const ee = data.enterprise_engine || {};
+
+        const exact = cs.exact_hits || 0;
+        const semantic = cs.semantic_hits || 0;
+        const total = cs.total_requests || 0;
 
         document.getElementById('stat-savings').textContent = `$${(fm.total_savings_usd || 0).toFixed(4)}`;
         document.getElementById('stat-tok-saved').textContent = (fm.total_tokens_saved || 0).toLocaleString();
-        document.getElementById('stat-tool-hits').textContent = (fm.agent_tool_hits || 0).toLocaleString();
-        document.getElementById('stat-pii-scrubbed').textContent = (fm.privacy_scrubbed_count || 0).toLocaleString();
-        document.getElementById('stat-vision-hits').textContent = (fm.vision_cache_hits || 0).toLocaleString();
-        document.getElementById('stat-hitrate').textContent = `${data.hit_rate_percentage || 0}%`;
+        document.getElementById('stat-tool-hits').textContent = (ee.agent_tool_replays || fm.agent_tool_hits || 0).toLocaleString();
+        document.getElementById('stat-pii-scrubbed').textContent = (ee.privacy_redactions_total || fm.privacy_scrubbed_count || 0).toLocaleString();
+        document.getElementById('stat-vision-hits').textContent = (ee.vision_cache_hits || fm.vision_cache_hits || 0).toLocaleString();
+        document.getElementById('stat-hitrate').textContent = `${cs.hit_rate_percentage || data.hit_rate_percentage || 0}%`;
         document.getElementById('stat-total-hits').textContent = exact + semantic;
         document.getElementById('stat-total-reqs').textContent = total;
 
@@ -304,14 +316,16 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         const qRes = await fetch('/v1/enterprise/quotas');
         const qData = await qRes.json();
         const qContainer = document.getElementById('quotas-container');
-        qContainer.innerHTML = '';
-        for (const [k, v] of Object.entries(qData)) {
-          qContainer.innerHTML += `
-            <div style="display: flex; justify-content: space-between; padding: 0.4rem; background: #0f172a; border-radius: 0.4rem; margin-bottom: 0.25rem;">
-              <span><strong>${v.team_name}</strong></span>
-              <span class="text-emerald">$${v.current_spend_usd} / $${v.monthly_budget_usd} (${v.budget_used_pct}%)</span>
-            </div>
-          `;
+        if (qContainer && typeof qData === 'object' && !qData.error) {
+          qContainer.innerHTML = '';
+          for (const [k, v] of Object.entries(qData)) {
+            qContainer.innerHTML += `
+              <div style="display: flex; justify-content: space-between; padding: 0.4rem; background: #0f172a; border-radius: 0.4rem; margin-bottom: 0.25rem;">
+                <span><strong>${v.team_name || k}</strong></span>
+                <span class="text-emerald">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+              </div>
+            `;
+          }
         }
       } catch (err) {}
     }

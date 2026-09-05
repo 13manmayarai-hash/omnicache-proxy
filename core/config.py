@@ -78,7 +78,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "2.6.4"
+    VERSION: str = "2.6.5"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -153,7 +153,7 @@ class ProxyConfig:
     HTTP_POOL_MAX_CONNECTIONS: int = 100
     HTTP_POOL_MAX_KEEPALIVE: int = 20
     HTTP_TIMEOUT_SECONDS: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "120.0"))
-    HTTP_STREAM_READ_TIMEOUT_SECONDS: float = float(os.getenv("HTTP_STREAM_READ_TIMEOUT_SECONDS", "90.0"))
+    HTTP_STREAM_READ_TIMEOUT_SECONDS: float = float(os.getenv("HTTP_STREAM_READ_TIMEOUT_SECONDS", "300.0"))
 
 
 def validate_startup_security_invariants(host: str = None):

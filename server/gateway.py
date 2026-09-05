@@ -456,6 +456,7 @@ async def handle_chat_completions(request: Request) -> Response:
         recorded_chunks = []
         full_content_parts = []
         buffer = ""
+        stream_cleanly_completed = False
         try:
             async for chunk in upstream_resp.aiter_raw():
                 if not chunk:
@@ -475,11 +476,18 @@ async def handle_chat_completions(request: Request) -> Response:
                                 delta = choices[0].get("delta", {})
                                 if "content" in delta and delta["content"]:
                                     full_content_parts.append(delta["content"])
+                        elif raw_line == "data: [DONE]":
+                            stream_cleanly_completed = True
                 except Exception:
                     pass
+            stream_cleanly_completed = True
+        except Exception as stream_err:
+            stream_cleanly_completed = False
+            print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ OpenAI stream aborted mid-transfer: {type(stream_err).__name__}: {stream_err}", flush=True)
         finally:
             await upstream_resp.aclose()
-            if recorded_chunks:
+            # ONLY cache if stream cleanly finished without abort/error
+            if recorded_chunks and stream_cleanly_completed:
                 p_tok = len(str(payload.get("messages", "")).split())
                 c_tok = len("".join(full_content_parts).split())
                 tokens_used = p_tok + c_tok
@@ -513,6 +521,8 @@ async def handle_chat_completions(request: Request) -> Response:
                 if extracted_images:
                     for img_h, p_txt in extracted_images:
                         vision_cache.store_image(img_h, p_txt, synthesized)
+            elif recorded_chunks and not stream_cleanly_completed:
+                print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ OpenAI stream aborted ({len(recorded_chunks)} chunks received) - discarding partial response from cache.", flush=True)
 
     latency_ms = (time.perf_counter() - start_time) * 1000
     return StreamingResponse(stream_and_record(), media_type="text/event-stream", headers={
@@ -717,17 +727,20 @@ async def handle_anthropic_messages(request: Request) -> Response:
     # 3. Anthropic Cache MISS -> Forward Upstream
     req_params = dict(request.query_params) if request.query_params else None
     if is_stream:
+        print(f"[OmniCache {time.strftime('%H:%M:%S')}] Forwarding Anthropic stream upstream for model '{requested_model}'...", flush=True)
         status_code, stream_resp, err_data = await upstream_client.forward_anthropic_stream(
             anthropic_payload,
             incoming_headers=dict(request.headers),
             params=req_params
         )
         if status_code != 200 or stream_resp is None:
+            print(f"[OmniCache {time.strftime('%H:%M:%S')}] Anthropic upstream error: status={status_code} data={err_data}", flush=True)
             return JSONResponse(err_data or {"error": "Upstream error"}, status_code=status_code, headers=cors_headers)
 
         async def stream_and_record_anthropic():
             full_text_accum = []
             buffer = ""
+            stream_cleanly_completed = False
             try:
                 async for chunk in stream_resp.aiter_raw():
                     if not chunk:
@@ -743,17 +756,25 @@ async def handle_anthropic_messages(request: Request) -> Response:
                                 data_str = line[6:].strip()
                                 if data_str and data_str != "[DONE]":
                                     data_obj = json.loads(data_str)
-                                    if data_obj.get("type") == "content_block_delta":
+                                    msg_type = data_obj.get("type")
+                                    if msg_type == "content_block_delta":
                                         delta = data_obj.get("delta", {})
                                         if delta.get("type") == "text_delta":
                                             delta_text = delta.get("text", "")
                                             if delta_text:
                                                 full_text_accum.append(delta_text)
+                                    elif msg_type == "message_stop":
+                                        stream_cleanly_completed = True
                     except Exception:
                         pass
+                stream_cleanly_completed = True
+            except Exception as stream_err:
+                stream_cleanly_completed = False
+                print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ Anthropic stream aborted mid-transfer: {type(stream_err).__name__}: {stream_err}", flush=True)
             finally:
                 await stream_resp.aclose()
-                if full_text_accum:
+                # ONLY cache if stream cleanly finished without abort/error to prevent serving truncated replies
+                if full_text_accum and stream_cleanly_completed:
                     full_text = "".join(full_text_accum)
                     p_tok = len(str(messages).split())
                     c_tok = len(full_text.split())
@@ -781,6 +802,8 @@ async def handle_anthropic_messages(request: Request) -> Response:
                         completion_tokens=c_tok
                     )
                     asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
+                elif full_text_accum and not stream_cleanly_completed:
+                    print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ Stream aborted ({len(full_text_accum)} chunks received) - discarding partial response from cache.", flush=True)
 
         latency_ms = (time.perf_counter() - start_time) * 1000
         return StreamingResponse(stream_and_record_anthropic(), media_type="text/event-stream", headers={

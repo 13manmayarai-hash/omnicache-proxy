@@ -54,7 +54,8 @@ class FastHashEmbedder(BaseEmbedder):
         "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", 
         "under", "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", 
         "while", "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself", "yourselves",
-        "please", "tell", "explain", "help", "can", "could"
+        "please", "tell", "explain", "help", "can", "could",
+        "s", "t", "d", "m", "re", "ve", "ll"
     }
 
     SYNONYM_MAP = {

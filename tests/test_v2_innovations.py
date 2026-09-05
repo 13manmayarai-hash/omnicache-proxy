@@ -25,6 +25,7 @@ class TestV2Innovations(unittest.TestCase):
 
     def setUp(self):
         self.client = TestClient(app)
+        tool_cache.clear()
 
     # 1. Radix Prefix Tree Test
     def test_radix_prefix_tree(self):

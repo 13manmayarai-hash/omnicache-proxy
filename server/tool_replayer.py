@@ -8,6 +8,7 @@ import hashlib
 import json
 import time
 import os
+import sqlite3
 import subprocess
 from typing import Dict, Any, Optional, Tuple, List
 
@@ -200,8 +201,33 @@ def get_git_workspace_state(
         return "nogit"
 
 
+def _get_tool_db_conn() -> Optional[sqlite3.Connection]:
+    base_dir = os.getenv("OMNICACHE_DATA_DIR", os.path.expanduser("~/.omnicache"))
+    db_path = os.getenv("OMNICACHE_DB_PATH", os.path.join(base_dir, "omnicache.db"))
+    try:
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        conn = sqlite3.connect(db_path, timeout=5.0)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tool_call_records (
+                key TEXT PRIMARY KEY,
+                tool_name TEXT NOT NULL,
+                arguments_json TEXT NOT NULL,
+                output TEXT NOT NULL,
+                workspace_fingerprint TEXT,
+                workspace_state TEXT,
+                estimated_tokens INTEGER DEFAULT 50,
+                stored_at REAL NOT NULL,
+                expires_at REAL NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_expiry ON tool_call_records(expires_at)")
+        return conn
+    except Exception:
+        return None
+
+
 class ToolExecutionCache:
-    """In-memory cache for deterministic agent tool execution outputs with workspace state validation."""
+    """In-memory cache with durable SQLite backing for deterministic agent tool execution outputs."""
     def __init__(self):
         self._cache: Dict[str, Dict[str, Any]] = {}
         self.tool_hits = 0
@@ -210,8 +236,12 @@ class ToolExecutionCache:
 
     @staticmethod
     def is_eligible(tool_name: str) -> bool:
-        """Checks if a tool is in the explicit allowlist of replayable tools."""
-        return tool_name.strip().lower() in TOOL_POLICIES
+        """Checks if a tool is eligible for tool-call caching."""
+        clean = tool_name.strip().lower()
+        if clean in TOOL_POLICIES:
+            return True
+        safe_prefixes = ("read", "view", "get", "fetch", "list", "search", "find", "cat", "check", "inspect", "show")
+        return any(clean.startswith(p) for p in safe_prefixes)
 
     def is_idempotent(self, tool_name: str) -> bool:
         """Backward-compatible alias for is_eligible."""
@@ -259,12 +289,12 @@ class ToolExecutionCache:
         Looks up if a tool execution is cached and active (not expired, matching workspace state).
         Returns (is_hit, cached_output, tool_key).
         """
-        if not self.is_eligible(tool_name):
-            return False, None, None
-
+        clean_name = tool_name.strip().lower()
         key = self.compute_tool_hash(
             tool_name, arguments, workspace_fingerprint, workspace_state, workspace_dir=workspace_dir
         )
+
+        # 1. Check in-memory hot cache
         if key in self._cache:
             entry = self._cache[key]
             # TTL Expiration Check: Evict if stale
@@ -277,6 +307,37 @@ class ToolExecutionCache:
             saved_tokens = entry.get("estimated_tokens", 50)
             self.tokens_saved += saved_tokens
             return True, entry.get("output"), key
+
+        # 2. Check durable SQLite store (cross-process sharing between Gateway & MCP)
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                cur = conn.cursor()
+                row = cur.execute(
+                    "SELECT output, estimated_tokens, expires_at, workspace_state FROM tool_call_records WHERE key = ?",
+                    (key,)
+                ).fetchone()
+                if row:
+                    output_val, est_tokens, expires_at, ws_state = row
+                    if time.time() <= expires_at:
+                        self._cache[key] = {
+                            "tool_name": clean_name,
+                            "output": output_val,
+                            "estimated_tokens": est_tokens,
+                            "stored_at": time.time(),
+                            "expires_at": expires_at,
+                            "workspace_state": ws_state
+                        }
+                        self.tool_hits += 1
+                        self.tokens_saved += est_tokens
+                        return True, output_val, key
+                    else:
+                        with conn:
+                            conn.execute("DELETE FROM tool_call_records WHERE key = ?", (key,))
+            except Exception:
+                pass
+            finally:
+                conn.close()
 
         self.tool_misses += 1
         return False, None, key
@@ -300,23 +361,70 @@ class ToolExecutionCache:
             tool_name, arguments, workspace_fingerprint, workspace_state, workspace_dir=workspace_dir
         )
         est_tokens = int(len(output.split()) * 1.3) + 10
+        now = time.time()
+        expires_at = now + effective_ttl
+
         self._cache[key] = {
             "tool_name": clean_name,
             "output": output,
             "estimated_tokens": est_tokens,
-            "stored_at": time.time(),
-            "expires_at": time.time() + effective_ttl,
+            "stored_at": now,
+            "expires_at": expires_at,
             "workspace_state": workspace_state
         }
+
+        # Persist to SQLite for cross-process MCP / Gateway sharing
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                with conn:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO tool_call_records (
+                            key, tool_name, arguments_json, output,
+                            workspace_fingerprint, workspace_state,
+                            estimated_tokens, stored_at, expires_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        key, clean_name, json.dumps(arguments, sort_keys=True),
+                        output, workspace_fingerprint, workspace_state,
+                        est_tokens, now, expires_at
+                    ))
+            except Exception:
+                pass
+            finally:
+                conn.close()
+
         return key
 
     def evict_expired(self) -> int:
-        """Evicts all expired tool cache entries."""
+        """Evicts all expired tool cache entries from RAM and SQLite."""
         now = time.time()
         expired_keys = [k for k, v in self._cache.items() if now > v.get("expires_at", float("inf"))]
         for k in expired_keys:
             del self._cache[k]
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                with conn:
+                    conn.execute("DELETE FROM tool_call_records WHERE expires_at < ?", (now,))
+            except Exception:
+                pass
+            finally:
+                conn.close()
         return len(expired_keys)
+
+    def clear(self) -> None:
+        """Clears all in-memory and durable SQLite tool records."""
+        self._cache.clear()
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                with conn:
+                    conn.execute("DELETE FROM tool_call_records")
+            except Exception:
+                pass
+            finally:
+                conn.close()
 
     def synthesize_tool_call_delta(self, tool_name: str, arguments: Dict[str, Any], cached_output: str, call_id: Optional[str] = None) -> Dict[str, Any]:
         """

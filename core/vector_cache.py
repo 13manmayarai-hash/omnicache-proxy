@@ -212,6 +212,9 @@ class DualTierCache:
         if re.search(r"(\d+\s*[\+\-\*\/\^]\s*\d+|\bcalculate\b|\bsolve\b|\bevaluate\b)", prompt, re.IGNORECASE):
             return "math_calculation", 0.98, "INTENT_MATH_CALCULATION: Strict 0.98 threshold applied for arithmetic accuracy"
 
+        if re.search(r"\b\d+\b", prompt):
+            return "numeric_indexed_query", 0.90, "INTENT_NUMERIC_INDEXED_QUERY: Strict 0.90 threshold applied for numerical/index precision"
+
         return "conversational_qa", config.DEFAULT_SIMILARITY_THRESHOLD, f"INTENT_CONVERSATIONAL_QA: Standard threshold {config.DEFAULT_SIMILARITY_THRESHOLD:.2f} applied"
 
     def lookup(

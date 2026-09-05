@@ -128,7 +128,7 @@ class TestAdvancedOmniCache(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("OmniCache AI Proxy", resp.text)
         self.assertIn('id="version-badge"', resp.text)
-        self.assertIn("v2.6.2 ACTIVE", resp.text)
+        self.assertIn("v2.6.3 ACTIVE", resp.text)
         self.assertNotIn("v2.1 ACTIVE", resp.text)
         self.assertIn('id="savingsTimelineChart"', resp.text)
         self.assertIn('id="distributionDoughnutChart"', resp.text)

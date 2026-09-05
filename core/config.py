@@ -77,7 +77,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 }
 
 class ProxyConfig:
-    VERSION: str = "2.6.2"
+    VERSION: str = "2.6.3"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -130,7 +130,7 @@ class ProxyConfig:
         "https://generativelanguage.googleapis.com/v1beta/openai"
     )
     
-    DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.92"))
+    DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.68"))
     EXACT_CACHE_TTL_SECONDS: int = int(os.getenv("EXACT_CACHE_TTL", "604800"))
     SEMANTIC_CACHE_TTL_SECONDS: int = int(os.getenv("SEMANTIC_CACHE_TTL", "604800"))
     MAX_CACHE_ENTRIES_PER_TENANT: int = int(os.getenv("MAX_CACHE_ENTRIES", "10000"))

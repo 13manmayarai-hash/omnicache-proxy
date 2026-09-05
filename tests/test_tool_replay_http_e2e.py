@@ -2,6 +2,7 @@ import pytest
 from starlette.testclient import TestClient
 from server.gateway import app
 from core.config import config
+from server.tool_replayer import tool_cache
 
 @pytest.fixture
 def client():
@@ -36,6 +37,7 @@ class TestToolReplayAndVersionE2E:
 
     def test_02_tool_replay_http_store_and_hit_lifecycle(self, client):
         """Verify the complete HTTP tool replay lifecycle: Miss -> Record -> Hit -> Invalidate."""
+        tool_cache.clear()
         tool_payload = {
             "tool_name": "read_file",
             "arguments": {"filepath": "server/gateway.py"},

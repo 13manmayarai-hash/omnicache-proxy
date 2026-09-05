@@ -152,6 +152,7 @@ class ProxyConfig:
     HTTP_POOL_MAX_CONNECTIONS: int = 100
     HTTP_POOL_MAX_KEEPALIVE: int = 20
     HTTP_TIMEOUT_SECONDS: float = float(os.getenv("HTTP_TIMEOUT_SECONDS", "120.0"))
+    HTTP_STREAM_READ_TIMEOUT_SECONDS: float = float(os.getenv("HTTP_STREAM_READ_TIMEOUT_SECONDS", "90.0"))
 
 
 def validate_startup_security_invariants(host: str = None):

@@ -113,3 +113,35 @@ class TestClaudeStreamingAndAuth:
         with patch.object(config, "ANTHROPIC_BASE_URL", "https://custom-provider.com/v1"):
             assert upstream_client.get_anthropic_messages_url() == "https://custom-provider.com/v1/messages"
 
+    def test_08_bounded_stream_read_timeout(self):
+        """Verify that UpstreamClient uses a bounded read timeout rather than read=None."""
+        from server.upstream import upstream_client
+        # Reset cached client to ensure fresh initialization with current config
+        upstream_client._client = None
+        client = upstream_client.get_client()
+        assert client.timeout.read is not None
+        assert client.timeout.read == config.HTTP_STREAM_READ_TIMEOUT_SECONDS
+        assert client.timeout.read > 0
+
+    @pytest.mark.anyio
+    async def test_09_anthropic_read_timeout_handling(self):
+        """Verify that an upstream ReadTimeout returns 504 with descriptive diagnostic message."""
+        from server.upstream import upstream_client
+        import httpx
+        from unittest.mock import AsyncMock, MagicMock
+
+        with patch.object(upstream_client, "get_client") as mock_get:
+            mock_client = AsyncMock()
+            mock_client.build_request = MagicMock(return_value="dummy_req")
+            mock_client.send.side_effect = httpx.ReadTimeout("Socket read timeout")
+            mock_get.return_value = mock_client
+
+            status_code, resp, err_data = await upstream_client.forward_anthropic_stream(
+                {"model": "claude-3-5-sonnet-20241022", "messages": [{"role": "user", "content": "hi"}]}
+            )
+            assert status_code == 504
+            assert resp is None
+            assert err_data.get("type") == "error"
+            assert "timed out" in err_data.get("error", {}).get("message", "").lower()
+
+

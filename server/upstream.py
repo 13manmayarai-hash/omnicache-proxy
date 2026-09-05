@@ -27,7 +27,7 @@ class UpstreamClient:
                 timeout=httpx.Timeout(
                     timeout=config.HTTP_TIMEOUT_SECONDS,
                     connect=10.0,
-                    read=None,  # Prevent read timeouts during long streaming LLM completions
+                    read=config.HTTP_STREAM_READ_TIMEOUT_SECONDS,  # Generous per-chunk idle timeout (resets on every incoming byte)
                     write=30.0,
                     pool=10.0
                 )
@@ -130,7 +130,19 @@ class UpstreamClient:
                 else:
                     return response.status_code, res_data, dict(response.headers)
 
-            except (httpx.RequestError, httpx.TimeoutException, Exception) as exc:
+            except httpx.TimeoutException as exc:
+                err_msg = f"Upstream connection timed out waiting for response (idle for >{config.HTTP_STREAM_READ_TIMEOUT_SECONDS}s)"
+                failover_engine.circuit_breaker.record_failure(
+                    provider=provider,
+                    status_code=504,
+                    error_message=err_msg,
+                    model=model_candidate,
+                    endpoint="/v1/chat/completions"
+                )
+                last_status = 504
+                last_res_data = {"error": {"message": err_msg, "type": "timeout_error"}}
+                continue
+            except (httpx.RequestError, Exception) as exc:
                 failover_engine.circuit_breaker.record_failure(
                     provider=provider,
                     status_code=503,
@@ -138,6 +150,7 @@ class UpstreamClient:
                     model=model_candidate,
                     endpoint="/v1/chat/completions"
                 )
+                last_status = 503
                 last_res_data = {"error": {"message": str(exc), "type": "upstream_connection_error"}}
                 continue
 
@@ -204,6 +217,28 @@ class UpstreamClient:
 
                 failover_engine.circuit_breaker.record_success(provider)
                 return response.status_code, response, {}, []
+            except httpx.ReadTimeout as exc:
+                err_msg = f"Upstream connection timed out waiting for response/stream data (idle for >{config.HTTP_STREAM_READ_TIMEOUT_SECONDS}s)"
+                failover_engine.circuit_breaker.record_failure(
+                    provider=provider,
+                    status_code=504,
+                    error_message=err_msg,
+                    model=model_candidate,
+                    endpoint="/v1/chat/completions"
+                )
+                last_status, last_err = 504, {"error": {"message": err_msg, "code": "timeout_error"}}
+                continue
+            except httpx.ConnectTimeout as exc:
+                err_msg = "Upstream connection timed out during connect handshake"
+                failover_engine.circuit_breaker.record_failure(
+                    provider=provider,
+                    status_code=504,
+                    error_message=err_msg,
+                    model=model_candidate,
+                    endpoint="/v1/chat/completions"
+                )
+                last_status, last_err = 504, {"error": {"message": err_msg, "code": "timeout_error"}}
+                continue
             except Exception as exc:
                 failover_engine.circuit_breaker.record_failure(
                     provider=provider,
@@ -297,6 +332,26 @@ class UpstreamClient:
                 )
 
             return response.status_code, res_data, dict(response.headers)
+        except httpx.ReadTimeout as exc:
+            err_msg = f"Upstream Anthropic connection timed out waiting for response (idle for >{config.HTTP_STREAM_READ_TIMEOUT_SECONDS}s)"
+            failover_engine.circuit_breaker.record_failure(
+                provider="anthropic",
+                status_code=504,
+                error_message=err_msg,
+                model=model_name,
+                endpoint="/v1/messages"
+            )
+            return 504, {"type": "error", "error": {"message": err_msg, "type": "timeout_error"}}, {}
+        except httpx.ConnectTimeout as exc:
+            err_msg = "Upstream Anthropic connection timed out during connect handshake"
+            failover_engine.circuit_breaker.record_failure(
+                provider="anthropic",
+                status_code=504,
+                error_message=err_msg,
+                model=model_name,
+                endpoint="/v1/messages"
+            )
+            return 504, {"type": "error", "error": {"message": err_msg, "type": "timeout_error"}}, {}
         except Exception as exc:
             failover_engine.circuit_breaker.record_failure(
                 provider="anthropic",
@@ -348,6 +403,26 @@ class UpstreamClient:
 
             failover_engine.circuit_breaker.record_success("anthropic")
             return response.status_code, response, {}
+        except httpx.ReadTimeout as exc:
+            err_msg = f"Upstream Anthropic connection timed out waiting for response headers/stream data (idle for >{config.HTTP_STREAM_READ_TIMEOUT_SECONDS}s)"
+            failover_engine.circuit_breaker.record_failure(
+                provider="anthropic",
+                status_code=504,
+                error_message=err_msg,
+                model=model_name,
+                endpoint="/v1/messages"
+            )
+            return 504, None, {"type": "error", "error": {"message": err_msg, "type": "timeout_error"}}
+        except httpx.ConnectTimeout as exc:
+            err_msg = "Upstream Anthropic connection timed out during connect handshake"
+            failover_engine.circuit_breaker.record_failure(
+                provider="anthropic",
+                status_code=504,
+                error_message=err_msg,
+                model=model_name,
+                endpoint="/v1/messages"
+            )
+            return 504, None, {"type": "error", "error": {"message": err_msg, "type": "timeout_error"}}
         except Exception as exc:
             failover_engine.circuit_breaker.record_failure(
                 provider="anthropic",

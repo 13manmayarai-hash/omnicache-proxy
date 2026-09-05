@@ -77,7 +77,8 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 }
 
 class ProxyConfig:
-    VERSION: str = "2.6.3"
+    SERVICE_NAME: str = "OmniCache AI Proxy"
+    VERSION: str = "2.6.4"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))

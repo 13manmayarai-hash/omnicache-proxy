@@ -115,14 +115,45 @@ TOOLS_METADATA = [
                 "org_id": {"type": "string", "description": "Optional tenant ID filter."}
             }
         }
+    },
+    {
+        "name": "replay_tool",
+        "description": "Alias for omnicache_replay_tool. Looks up cached execution outputs for deterministic agent tools.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {"type": "string", "description": "Name of the tool (e.g. 'read_file', 'git_status')."},
+                "arguments": {"type": "object", "description": "Arguments passed to the tool."},
+                "workspace_fingerprint": {"type": "string", "description": "Workspace identifier (default: default).", "default": "default"},
+                "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."}
+            },
+            "required": ["tool_name"]
+        }
+    },
+    {
+        "name": "record_tool",
+        "description": "Alias for omnicache_record_tool. Records and caches execution output of a deterministic tool run.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {"type": "string", "description": "Name of the tool."},
+                "arguments": {"type": "object", "description": "Arguments passed to the tool."},
+                "output": {"type": "string", "description": "Execution output of the tool to cache."},
+                "workspace_fingerprint": {"type": "string", "description": "Workspace identifier (default: default).", "default": "default"},
+                "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."},
+                "ttl_seconds": {"type": "integer", "description": "Custom TTL in seconds."}
+            },
+            "required": ["tool_name", "output"]
+        }
     }
 ]
 
 
 def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default") -> dict:
     org_id = arguments.get("org_id") or default_org_id
+    clean_name = name[len("omnicache_"):] if name.startswith("omnicache_") else name
 
-    if name == "omnicache_query":
+    if clean_name == "query":
         prompt = arguments.get("prompt", "")
         model = arguments.get("model", "gpt-4o")
         threshold = arguments.get("threshold", None)
@@ -159,7 +190,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
                 }]
             }
 
-    elif name == "omnicache_store":
+    elif clean_name == "store":
         prompt = arguments.get("prompt", "")
         answer = arguments.get("answer", "")
         model = arguments.get("model", "gpt-4o")
@@ -188,7 +219,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             }]
         }
 
-    elif name == "omnicache_search":
+    elif clean_name == "search":
         query = arguments.get("query", "")
         top_k = arguments.get("top_k", 5)
         entries = cache_instance.l2_semantic_cache.get(org_id, [])
@@ -210,7 +241,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             "content": [{"type": "text", "text": json.dumps(scored[:top_k], indent=2)}]
         }
 
-    elif name == "omnicache_replay_tool":
+    elif clean_name == "replay_tool":
         tool_name = arguments.get("tool_name", "")
         tool_args = arguments.get("arguments", {})
         raw_fp = arguments.get("workspace_fingerprint", "default")
@@ -251,7 +282,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
                 }]
             }
 
-    elif name == "omnicache_record_tool":
+    elif clean_name == "record_tool":
         tool_name = arguments.get("tool_name", "")
         tool_args = arguments.get("arguments", {})
         output = str(arguments.get("output", ""))
@@ -282,7 +313,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             }]
         }
 
-    elif name == "omnicache_invalidate":
+    elif clean_name == "invalidate":
         tag = arguments.get("tag")
         if tag:
             removed = cache_instance.invalidate_tag(tag, org_id=org_id)
@@ -293,7 +324,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             snapshot_store.purge_all(org_id=org_id)
             return {"content": [{"type": "text", "text": f"Purged {removed} entries for tenant '{org_id}'."}]}
 
-    elif name == "omnicache_stats":
+    elif clean_name == "stats":
         stats = cache_instance.get_stats(org_id)
         return {"content": [{"type": "text", "text": json.dumps(stats, indent=2)}]}
 

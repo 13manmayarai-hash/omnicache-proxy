@@ -147,6 +147,45 @@ class TestV263AuditFixes(unittest.TestCase):
         self.assertTrue(rep_data.get("cached"))
         self.assertIn("Alice", rep_data.get("output"))
 
+    def test_05_mcp_record_and_replay_unprefixed_aliases(self):
+        """Verify MCP record_tool and replay_tool work without omnicache_ prefix."""
+        record_req = {
+            "jsonrpc": "2.0",
+            "id": 201,
+            "method": "tools/call",
+            "params": {
+                "name": "record_tool",
+                "arguments": {
+                    "tool_name": "alias_custom_tool",
+                    "arguments": {"key": "value", "step": 1},
+                    "output": "alias result output"
+                }
+            }
+        }
+        res_rec = process_mcp_jsonrpc(record_req)
+        self.assertEqual(res_rec.get("jsonrpc"), "2.0")
+        rec_data = json.loads(res_rec["result"]["content"][0]["text"])
+        self.assertEqual(rec_data.get("status"), "STORED")
+
+        replay_req = {
+            "jsonrpc": "2.0",
+            "id": 202,
+            "method": "tools/call",
+            "params": {
+                "name": "replay_tool",
+                "arguments": {
+                    "tool_name": "alias_custom_tool",
+                    "arguments": {"step": 1, "key": "value"}
+                }
+            }
+        }
+        res_rep = process_mcp_jsonrpc(replay_req)
+        self.assertEqual(res_rep.get("jsonrpc"), "2.0")
+        rep_data = json.loads(res_rep["result"]["content"][0]["text"])
+        self.assertEqual(rep_data.get("status"), "HIT")
+        self.assertEqual(rep_data.get("output"), "alias result output")
+
 
 if __name__ == "__main__":
     unittest.main()
+

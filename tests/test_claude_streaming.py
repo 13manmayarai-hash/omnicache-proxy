@@ -93,15 +93,27 @@ class TestClaudeStreamingAndAuth:
         assert ProxyConfig._sanitize_upstream_url("https://custom-upstream.ai/v1", "https://api.openai.com/v1") == "https://custom-upstream.ai/v1"
 
     def test_06_claude_oauth_bearer_preserved(self):
-        """Verify that Claude Code OAuth bearer tokens are preserved in authorization header without corrupting x-api-key."""
+        """Verify that Claude Code OAuth bearer tokens (sk-ant-oat01-...) are preserved in authorization header without corrupting x-api-key, while sk-ant-api03-... keys are converted."""
         from server.upstream import upstream_client
-        incoming = {
-            "authorization": "Bearer oauth_claude_session_token_12345",
+        # 1. Claude Code subscription OAuth session token
+        incoming_oauth = {
+            "authorization": "Bearer sk-ant-oat01-live-session-token-987654321",
+            "anthropic-beta": "oauth-2025-04-20",
             "anthropic-version": "2023-06-01"
         }
-        headers = upstream_client._build_anthropic_headers(incoming)
-        assert headers.get("authorization") == "Bearer oauth_claude_session_token_12345"
-        assert "x-api-key" not in headers
+        headers_oauth = upstream_client._build_anthropic_headers(incoming_oauth)
+        assert headers_oauth.get("authorization") == "Bearer sk-ant-oat01-live-session-token-987654321"
+        assert headers_oauth.get("anthropic-beta") == "oauth-2025-04-20"
+        assert "x-api-key" not in headers_oauth
+
+        # 2. Standard direct Anthropic API key in Authorization header
+        incoming_apikey = {
+            "authorization": "Bearer sk-ant-api03-live-secret-key-123456789",
+            "anthropic-version": "2023-06-01"
+        }
+        headers_apikey = upstream_client._build_anthropic_headers(incoming_apikey)
+        assert headers_apikey.get("authorization") == "Bearer sk-ant-api03-live-secret-key-123456789"
+        assert headers_apikey.get("x-api-key") == "sk-ant-api03-live-secret-key-123456789"
 
     def test_07_anthropic_endpoint_url_resolution(self):
         """Verify get_anthropic_messages_url handles base URLs with or without /v1 and /messages."""

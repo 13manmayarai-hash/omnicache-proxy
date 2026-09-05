@@ -287,7 +287,7 @@ class UpstreamClient:
             elif k_lower == "authorization":
                 headers["authorization"] = v
                 has_auth = True
-                if v.startswith("Bearer sk-ant-") and not has_x_api_key:
+                if v.startswith("Bearer sk-ant-api") and not has_x_api_key:
                     headers["x-api-key"] = v[7:].strip()
                     has_x_api_key = True
 

@@ -8,13 +8,23 @@ import os
 import time
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+import warnings
+try:
+    import starlette.exceptions
+    warnings.filterwarnings("ignore", category=starlette.exceptions.StarletteDeprecationWarning)
+except Exception:
+    pass
+
 from starlette.testclient import TestClient
 from server.gateway import app
 from core.vector_cache import cache_instance
+from server.quotas import quota_manager
 
 def run_code_tests():
     client = TestClient(app)
     cache_instance.clear()
+    quota_manager.register_key("dev_team_key", team_name="Dev Team", org_id="dev_team")
+    headers = {"x-api-key": "dev_team_key", "x-org-id": "dev_team"}
 
     print("\n" + "="*65)
     print("🚀 OMNICACHE CODE-GENERATION TESTING SUITE")
@@ -61,7 +71,7 @@ def run_code_tests():
     # Test 2: Exact Code Query (L1 Exact Cache Hit)
     # -------------------------------------------------------------
     t0 = time.perf_counter()
-    res_exact = client.post("/v1/chat/completions", json=code_prompt_1, headers={"x-org-id": "dev_team"})
+    res_exact = client.post("/v1/chat/completions", json=code_prompt_1, headers=headers)
     latency_exact = (time.perf_counter() - t0) * 1000
 
     print("\n--- [TEST 1: Exact Code Request] ---")
@@ -85,7 +95,7 @@ def run_code_tests():
     }
 
     t1 = time.perf_counter()
-    res_semantic = client.post("/v1/chat/completions", json=code_prompt_2, headers={"x-org-id": "dev_team"})
+    res_semantic = client.post("/v1/chat/completions", json=code_prompt_2, headers=headers)
     latency_semantic = (time.perf_counter() - t1) * 1000
 
     print("\n--- [TEST 2: Semantically Rephrased Code Request] ---")
@@ -102,7 +112,7 @@ def run_code_tests():
     stream_prompt["stream"] = True
 
     print("\n--- [TEST 3: Streaming Code Output Playback] ---")
-    res_stream = client.post("/v1/chat/completions", json=stream_prompt, headers={"x-org-id": "dev_team"})
+    res_stream = client.post("/v1/chat/completions", json=stream_prompt, headers=headers)
     print(f"Stream Cache Status: {res_stream.headers.get('x-cache-status')}")
     print("Stream chunks received:")
     for line in res_stream.text.split("\n\n")[:5]:
@@ -112,7 +122,7 @@ def run_code_tests():
     # -------------------------------------------------------------
     # Test 5: Check Financial Stats Endpoint
     # -------------------------------------------------------------
-    stats_res = client.get("/v1/cache/stats", headers={"x-org-id": "dev_team"})
+    stats_res = client.get("/v1/cache/stats", headers=headers)
     print("\n--- [TEST 4: Financial Ledger & Telemetry] ---")
     print(stats_res.json())
 

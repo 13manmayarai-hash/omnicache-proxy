@@ -51,3 +51,11 @@ include = ["core*", "server*", "persistence*", "mcp*", "dashboard*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.html", "*.json", "*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]
+
+

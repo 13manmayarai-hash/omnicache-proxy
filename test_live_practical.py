@@ -8,13 +8,23 @@ import os
 import time
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
+import warnings
+try:
+    import starlette.exceptions
+    warnings.filterwarnings("ignore", category=starlette.exceptions.StarletteDeprecationWarning)
+except Exception:
+    pass
+
 from starlette.testclient import TestClient
 from server.gateway import app
 from core.vector_cache import cache_instance
+from server.quotas import quota_manager
 
 def practical_test():
     client = TestClient(app)
     cache_instance.clear()
+    quota_manager.register_key("acme_key", team_name="Acme Corp", org_id="acme_corp")
+    headers = {"x-api-key": "acme_key", "x-org-id": "acme_corp"}
 
     print("\n" + "═"*70)
     print("⚡ OMNICACHE PRACTICAL PRODUCTION TEST BENCH")
@@ -48,7 +58,7 @@ def practical_test():
     }
 
     t0 = time.perf_counter()
-    res_2 = client.post("/v1/chat/completions", json=payload_2, headers={"x-org-id": "acme_corp"})
+    res_2 = client.post("/v1/chat/completions", json=payload_2, headers=headers)
     dt_2 = (time.perf_counter() - t0) * 1000
 
     print("\n▶ 2. Sending Rephrased Query: 'Please explain what is your refund policy.'")
@@ -68,7 +78,7 @@ def practical_test():
         "messages": [{"role": "user", "content": "Explain how database indexing works"}],
         "max_tokens": 500
     }
-    res_claude_1 = client.post("/v1/messages", json=claude_payload, headers={"x-org-id": "acme_corp"})
+    res_claude_1 = client.post("/v1/messages", json=claude_payload, headers=headers)
     print(f"   ├─ First Call (Cold): {res_claude_1.headers.get('x-cache-status')} (Tokens Used: {res_claude_1.headers.get('x-tokens-used')})")
 
     # Rephrased Claude call
@@ -78,7 +88,7 @@ def practical_test():
         "max_tokens": 500
     }
     t_c = time.perf_counter()
-    res_claude_2 = client.post("/v1/messages", json=claude_rephrased, headers={"x-org-id": "acme_corp"})
+    res_claude_2 = client.post("/v1/messages", json=claude_rephrased, headers=headers)
     dt_c = (time.perf_counter() - t_c) * 1000
     print(f"   ├─ Second Call (Rephrased): 🟢 {res_claude_2.headers.get('x-cache-status')}")
     print(f"   ├─ Similarity Score:        🎯 {res_claude_2.headers.get('x-cache-similarity')}")
@@ -89,7 +99,7 @@ def practical_test():
     # -------------------------------------------------------------
     # 4. Final Cumulative Metrics
     # -------------------------------------------------------------
-    stats = client.get("/v1/cache/stats", headers={"x-org-id": "acme_corp"}).json()
+    stats = client.get("/v1/cache/stats", headers=headers).json()
     fm = stats.get("financial_metrics", {})
     print("\n" + "═"*70)
     print("📊 CUMULATIVE LIVE TELEMETRY & SAVINGS")

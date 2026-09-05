@@ -130,6 +130,9 @@ class TestAdvancedOmniCache(unittest.TestCase):
         self.assertIn('id="version-badge"', resp.text)
         self.assertIn("v2.6.1 ACTIVE", resp.text)
         self.assertNotIn("v2.1 ACTIVE", resp.text)
+        self.assertIn('id="savingsTimelineChart"', resp.text)
+        self.assertIn('id="distributionDoughnutChart"', resp.text)
+        self.assertIn("chart.js", resp.text.lower())
 
     def test_06_root_endpoint_html_and_json(self):
         """Verify root '/' endpoint serves JSON by default and HTML dashboard for browser requests."""

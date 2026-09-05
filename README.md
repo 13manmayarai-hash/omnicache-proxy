@@ -36,8 +36,19 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 
 ## Installation
 
+### Standard (PyPI)
 ```bash
 pip install omnicache-proxy
+```
+
+### Android & Edge (Termux 1-Line Setup)
+```bash
+curl -fsSL https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/scripts/install_termux.sh | bash
+```
+
+### Docker & Redis Cluster
+```bash
+docker compose up -d
 ```
 
 ---
@@ -143,7 +154,7 @@ omnicache stats
 
 ## Observability & Diagnostics
 
-* **Web Dashboard:** `http://localhost:8000/dashboard`
+* **Web Dashboard & Visualizer:** `http://localhost:8000/dashboard` (features real-time savings velocity timeline and resolution distribution charts powered by Chart.js)
 * **Prometheus Metrics:** `http://localhost:8000/metrics`
 * **Cache Statistics:** `http://localhost:8000/v1/cache/stats`
 * **CSV Export:** `http://localhost:8000/v1/cache/export`

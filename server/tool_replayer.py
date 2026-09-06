@@ -444,3 +444,217 @@ class ToolExecutionCache:
 
 # Global Tool Execution Cache instance
 tool_cache = ToolExecutionCache()
+
+
+def compact_and_record_agent_tools(
+    payload: Dict[str, Any],
+    workspace_dir: Optional[str] = None
+) -> Tuple[Dict[str, Any], int, int]:
+    """
+    In-Line Agent Tool Interceptor & Context Window Compactor.
+    Works transparently on both Anthropic (/v1/messages) and OpenAI (/v1/chat/completions).
+    
+    1. Scans conversation messages for (tool_use, tool_result) execution pairs.
+    2. Auto-records valid tool executions into durable tool_cache with workspace/git state.
+    3. Identifies redundant/duplicate tool executions across historical turns (e.g. repeated
+       read_file on unchanged files, repeated clean git_status) and compacts older occurrences,
+       saving massive prompt tokens while keeping the latest execution intact.
+    
+    Returns (modified_payload, tokens_compacted, tools_recorded).
+    """
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or len(messages) < 2:
+        return payload, 0, 0
+
+    workspace_dir = workspace_dir or os.getcwd()
+
+    # Registry of tool calls: call_id -> { "name": tool_name, "input": tool_input, "format": "anthropic"|"openai" }
+    tool_use_registry: Dict[str, Dict[str, Any]] = {}
+
+    for msg_idx, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        content = msg.get("content")
+
+        # Anthropic format: role == "assistant", content is list with type == "tool_use"
+        if role == "assistant" and isinstance(content, list):
+            for block_idx, block in enumerate(content):
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    t_id = block.get("id")
+                    if t_id:
+                        tool_use_registry[t_id] = {
+                            "name": block.get("name", ""),
+                            "input": block.get("input", {}) or {},
+                            "msg_idx": msg_idx,
+                            "block_idx": block_idx,
+                            "format": "anthropic"
+                        }
+
+        # OpenAI format: role == "assistant", tool_calls list
+        tool_calls = msg.get("tool_calls")
+        if role == "assistant" and isinstance(tool_calls, list):
+            for tc_idx, tc in enumerate(tool_calls):
+                if isinstance(tc, dict) and tc.get("id"):
+                    fn = tc.get("function", {})
+                    fn_name = fn.get("name", "")
+                    fn_args_raw = fn.get("arguments", "{}")
+                    try:
+                        fn_args = json.loads(fn_args_raw) if isinstance(fn_args_raw, str) else fn_args_raw
+                    except Exception:
+                        fn_args = {"raw": fn_args_raw}
+                    tool_use_registry[tc["id"]] = {
+                        "name": fn_name,
+                        "input": fn_args,
+                        "msg_idx": msg_idx,
+                        "tc_idx": tc_idx,
+                        "format": "openai"
+                    }
+
+    if not tool_use_registry:
+        return payload, 0, 0
+
+    # Group executed results by canonical tool signature: f"{name}:{sorted_args_json}"
+    tool_executions_by_sig: Dict[str, List[Dict[str, Any]]] = {}
+    tools_recorded = 0
+
+    for msg_idx, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role")
+        content = msg.get("content")
+
+        # Anthropic format: role == "user", content has type == "tool_result"
+        if role == "user" and isinstance(content, list):
+            for block_idx, block in enumerate(content):
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    t_id = block.get("tool_use_id")
+                    if t_id and t_id in tool_use_registry:
+                        meta = tool_use_registry[t_id]
+                        t_name = meta["name"]
+                        t_input = meta["input"]
+                        is_error = bool(block.get("is_error", False))
+
+                        b_content = block.get("content", "")
+                        if isinstance(b_content, list):
+                            text_parts = [b.get("text", "") for b in b_content if isinstance(b, dict) and b.get("type") == "text"]
+                            output_str = "\n".join(text_parts)
+                        else:
+                            output_str = str(b_content or "")
+
+                        if not is_error and output_str.strip():
+                            try:
+                                tool_cache.store_tool_call(
+                                    tool_name=t_name,
+                                    arguments=t_input if isinstance(t_input, dict) else {},
+                                    output=output_str,
+                                    workspace_dir=workspace_dir
+                                )
+                                tools_recorded += 1
+                            except Exception:
+                                pass
+
+                        sig = f"{t_name.lower()}:{json.dumps(t_input, sort_keys=True)}"
+                        if sig not in tool_executions_by_sig:
+                            tool_executions_by_sig[sig] = []
+                        tool_executions_by_sig[sig].append({
+                            "tool_use_id": t_id,
+                            "msg_idx": msg_idx,
+                            "block_idx": block_idx,
+                            "output_text": output_str,
+                            "is_error": is_error,
+                            "tool_name": t_name,
+                            "format": "anthropic"
+                        })
+
+        # OpenAI format: role == "tool", tool_call_id
+        if role == "tool":
+            t_id = msg.get("tool_call_id")
+            if t_id and t_id in tool_use_registry:
+                meta = tool_use_registry[t_id]
+                t_name = meta["name"]
+                t_input = meta["input"]
+                output_str = str(content or "")
+
+                if output_str.strip():
+                    try:
+                        tool_cache.store_tool_call(
+                            tool_name=t_name,
+                            arguments=t_input if isinstance(t_input, dict) else {},
+                            output=output_str,
+                            workspace_dir=workspace_dir
+                        )
+                        tools_recorded += 1
+                    except Exception:
+                        pass
+
+                sig = f"{t_name.lower()}:{json.dumps(t_input, sort_keys=True)}"
+                if sig not in tool_executions_by_sig:
+                    tool_executions_by_sig[sig] = []
+                tool_executions_by_sig[sig].append({
+                    "tool_use_id": t_id,
+                    "msg_idx": msg_idx,
+                    "output_text": output_str,
+                    "is_error": False,
+                    "tool_name": t_name,
+                    "format": "openai"
+                })
+
+    # Identify duplicate tool runs to compact
+    tokens_compacted = 0
+    anthropic_compacted: Dict[Tuple[int, int], str] = {}
+    openai_compacted: Dict[int, str] = {}
+
+    for sig, runs in tool_executions_by_sig.items():
+        if len(runs) < 2:
+            continue
+        latest_run = runs[-1]
+        if latest_run["is_error"]:
+            continue
+
+        latest_output = latest_run["output_text"]
+        latest_id = latest_run["tool_use_id"]
+
+        for earlier_run in runs[:-1]:
+            if earlier_run["is_error"]:
+                continue
+            earlier_output = earlier_run["output_text"]
+            # Compact if output is identical or bulky (> 120 characters)
+            if earlier_output == latest_output and len(earlier_output) > 120:
+                orig_tokens = int(len(earlier_output.split()) * 1.3)
+                pruned_note = (
+                    f"[OmniCache: Output identical to subsequent execution ({latest_id}). "
+                    f"Historical content pruned for prompt acceleration.]"
+                )
+                new_tokens = int(len(pruned_note.split()) * 1.3)
+                saved = max(0, orig_tokens - new_tokens)
+                tokens_compacted += saved
+
+                if earlier_run["format"] == "anthropic":
+                    anthropic_compacted[(earlier_run["msg_idx"], earlier_run["block_idx"])] = pruned_note
+                else:
+                    openai_compacted[earlier_run["msg_idx"]] = pruned_note
+
+    if not anthropic_compacted and not openai_compacted:
+        return payload, 0, tools_recorded
+
+    # Build compacted messages
+    new_messages = []
+    for msg_idx, msg in enumerate(messages):
+        msg_copy = dict(msg)
+        if msg_idx in openai_compacted:
+            msg_copy["content"] = openai_compacted[msg_idx]
+        elif isinstance(msg.get("content"), list):
+            new_content = []
+            for block_idx, block in enumerate(msg["content"]):
+                block_copy = dict(block)
+                if (msg_idx, block_idx) in anthropic_compacted:
+                    block_copy["content"] = anthropic_compacted[(msg_idx, block_idx)]
+                new_content.append(block_copy)
+            msg_copy["content"] = new_content
+        new_messages.append(msg_copy)
+
+    new_payload = dict(payload)
+    new_payload["messages"] = new_messages
+    return new_payload, tokens_compacted, tools_recorded
+

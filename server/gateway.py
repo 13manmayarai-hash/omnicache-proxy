@@ -21,7 +21,7 @@ from core.vector_cache import cache_instance, get_model_family, CacheEntry
 from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache
 from core.privacy_shield import privacy_shield
-from server.tool_replayer import tool_cache
+from server.tool_replayer import tool_cache, compact_and_record_agent_tools
 from server.cascade_router import cascade_router
 from server.quotas import quota_manager
 from server.singleflight import flight_bus
@@ -43,6 +43,8 @@ METRICS_LEDGER = {
     "arbitrage_savings_usd": 0.0,
     "privacy_scrubbed_count": 0,
     "agent_tool_hits": 0,
+    "agent_tool_recorded_count": 0,
+    "agent_tool_compacted_tokens": 0,
     "vision_cache_hits": 0,
     "singleflight_coalesced_count": 0,
     "radix_tree_hits": 0
@@ -243,6 +245,17 @@ async def handle_chat_completions(request: Request) -> Response:
     payload, pii_token_map, scrubbed_count = privacy_shield.sanitize_payload(raw_payload)
     if scrubbed_count > 0:
         METRICS_LEDGER["privacy_scrubbed_count"] += scrubbed_count
+
+    # In-Line Agent Tool Interception & Context Compaction
+    payload, compacted_tokens, tools_recorded = compact_and_record_agent_tools(payload)
+    if compacted_tokens > 0:
+        METRICS_LEDGER["agent_tool_compacted_tokens"] += compacted_tokens
+        METRICS_LEDGER["total_tokens_saved"] += compacted_tokens
+        METRICS_LEDGER["estimated_tokens_saved"] += compacted_tokens
+        savings_usd = upstream_client.calculate_savings(payload.get("model", "default"), compacted_tokens, 0)
+        METRICS_LEDGER["total_savings_usd"] += savings_usd
+    if tools_recorded > 0:
+        METRICS_LEDGER["agent_tool_recorded_count"] += tools_recorded
 
     headers = request.headers
     bypass_cache = headers.get("x-cache-bypass", "false").lower() in ("true", "1")
@@ -605,6 +618,18 @@ async def handle_anthropic_messages(request: Request) -> Response:
     anthropic_payload, pii_token_map, scrubbed_count = privacy_shield.sanitize_payload(raw_payload)
     if scrubbed_count > 0:
         METRICS_LEDGER["privacy_scrubbed_count"] += scrubbed_count
+
+    # In-Line Agent Tool Interception & Context Compaction
+    anthropic_payload, compacted_tokens, tools_recorded = compact_and_record_agent_tools(anthropic_payload)
+    if compacted_tokens > 0:
+        METRICS_LEDGER["agent_tool_compacted_tokens"] += compacted_tokens
+        METRICS_LEDGER["total_tokens_saved"] += compacted_tokens
+        METRICS_LEDGER["estimated_tokens_saved"] += compacted_tokens
+        savings_usd = upstream_client.calculate_savings(anthropic_payload.get("model", "claude-3-5-sonnet-20241022"), compacted_tokens, 0)
+        METRICS_LEDGER["total_savings_usd"] += savings_usd
+        print(f"[OmniCache] 🛠️ In-line tool compaction: pruned {compacted_tokens} redundant tokens from context ({tools_recorded} tools indexed).", flush=True)
+    if tools_recorded > 0:
+        METRICS_LEDGER["agent_tool_recorded_count"] += tools_recorded
 
     headers = request.headers
     requested_model = anthropic_payload.get("model", "claude-3-5-sonnet-20241022")
@@ -1171,6 +1196,8 @@ async def handle_stats(request: Request) -> Response:
         "enterprise_engine": {
             "privacy_redactions_total": METRICS_LEDGER["privacy_scrubbed_count"],
             "agent_tool_replays": METRICS_LEDGER["agent_tool_hits"],
+            "agent_tools_recorded": METRICS_LEDGER.get("agent_tool_recorded_count", 0),
+            "agent_tokens_compacted": METRICS_LEDGER.get("agent_tool_compacted_tokens", 0),
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
             "radix_tree_hits": METRICS_LEDGER["radix_tree_hits"],
@@ -1178,7 +1205,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.6.0"),
+            "version": getattr(config, "VERSION", "2.7.0"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1308,7 +1335,13 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_singleflight_coalesced_total {METRICS_LEDGER['singleflight_coalesced_count']}",
         "# HELP omnicache_radix_tree_hits_total Multi-turn prefix tree conversation hits",
         "# TYPE omnicache_radix_tree_hits_total counter",
-        f"omnicache_radix_tree_hits_total {METRICS_LEDGER['radix_tree_hits']}"
+        f"omnicache_radix_tree_hits_total {METRICS_LEDGER['radix_tree_hits']}",
+        "# HELP omnicache_agent_tool_compacted_tokens Tokens saved by deduplicating historical tool outputs",
+        "# TYPE omnicache_agent_tool_compacted_tokens counter",
+        f"omnicache_agent_tool_compacted_tokens {METRICS_LEDGER.get('agent_tool_compacted_tokens', 0)}",
+        "# HELP omnicache_agent_tools_recorded_total Unique tool executions indexed",
+        "# TYPE omnicache_agent_tools_recorded_total counter",
+        f"omnicache_agent_tools_recorded_total {METRICS_LEDGER.get('agent_tool_recorded_count', 0)}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -1317,7 +1350,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.6.0"),
+        "version": getattr(config, "VERSION", "2.7.0"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1339,7 +1372,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.6.0"),
+        "version": getattr(config, "VERSION", "2.7.0"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",

@@ -267,6 +267,87 @@ class TestDistributedRedisArchitecture(unittest.TestCase):
         # Since prompt 0 had tag "finance", it was deleted and should now be a MISS
         self.assertEqual(status_b2, "MISS")
 
+    def test_10_distributed_singleflight_coalescing(self):
+        """Verify distributed SingleFlight across two replica nodes sharing the same Redis."""
+        import asyncio
+        from server.singleflight import SingleFlightGroup
+
+        redis_a = fakeredis.FakeRedis(server=self.fake_server, decode_responses=True)
+        redis_b = fakeredis.FakeRedis(server=self.fake_server, decode_responses=True)
+
+        bus_replica_a = SingleFlightGroup(redis_client=redis_a)
+        bus_replica_b = SingleFlightGroup(redis_client=redis_b)
+
+        call_count = 0
+
+        async def worker():
+            nonlocal call_count
+
+            async def expensive_upstream():
+                nonlocal call_count
+                call_count += 1
+                await asyncio.sleep(0.1)
+                return {"text": "coalesced_output"}, None
+
+            task_a = asyncio.create_task(bus_replica_a.execute("flight_shared_key", expensive_upstream))
+            task_b = asyncio.create_task(bus_replica_b.execute("flight_shared_key", expensive_upstream))
+
+            res_a, chunks_a, is_leader_a = await task_a
+            res_b, chunks_b, is_leader_b = await task_b
+            return (res_a, is_leader_a), (res_b, is_leader_b)
+
+        (res_a, leader_a), (res_b, leader_b) = asyncio.run(worker())
+
+        # Only ONE replica executes the expensive upstream function
+        self.assertEqual(call_count, 1)
+        # One replica was leader, the other was follower
+        self.assertEqual(leader_a != leader_b, True)
+        self.assertTrue(leader_a or leader_b)
+        # Both received the exact identical result
+        self.assertEqual(res_a["text"], "coalesced_output")
+        self.assertEqual(res_b["text"], "coalesced_output")
+
+    def test_11_distributed_singleflight_leader_failure(self):
+        """Verify distributed SingleFlight error propagation across Redis."""
+        import asyncio
+        from server.singleflight import SingleFlightGroup
+
+        redis_a = fakeredis.FakeRedis(server=self.fake_server, decode_responses=True)
+        redis_b = fakeredis.FakeRedis(server=self.fake_server, decode_responses=True)
+
+        bus_replica_a = SingleFlightGroup(redis_client=redis_a)
+        bus_replica_b = SingleFlightGroup(redis_client=redis_b)
+
+        async def worker():
+            async def failing_upstream():
+                await asyncio.sleep(0.05)
+                raise ValueError("Upstream 502 Bad Gateway")
+
+            async def follower_upstream():
+                return {"text": "should_not_run"}, None
+
+            task_a = asyncio.create_task(bus_replica_a.execute("fail_flight_key", failing_upstream))
+            task_b = asyncio.create_task(bus_replica_b.execute("fail_flight_key", follower_upstream))
+
+            err_a = None
+            err_b = None
+            try:
+                await task_a
+            except Exception as e:
+                err_a = e
+            try:
+                await task_b
+            except Exception as e:
+                err_b = e
+
+            return err_a, err_b
+
+        err_a, err_b = asyncio.run(worker())
+        self.assertIsNotNone(err_a)
+        self.assertIsNotNone(err_b)
+        self.assertIn("Upstream 502 Bad Gateway", str(err_a))
+        self.assertIn("Upstream 502 Bad Gateway", str(err_b))
+
 
 if __name__ == "__main__":
     unittest.main()

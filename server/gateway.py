@@ -17,7 +17,7 @@ from starlette.routing import Route
 
 from core.config import config, MODEL_PRICING
 from core.hasher import RequestHasher
-from core.vector_cache import cache_instance, get_model_family
+from core.vector_cache import cache_instance, get_model_family, CacheEntry
 from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache
 from core.privacy_shield import privacy_shield
@@ -44,12 +44,17 @@ METRICS_LEDGER = {
     "privacy_scrubbed_count": 0,
     "agent_tool_hits": 0,
     "vision_cache_hits": 0,
-    "singleflight_coalesced_count": 0
+    "singleflight_coalesced_count": 0,
+    "radix_tree_hits": 0
 }
 
 loaded_entries = snapshot_store.load_into_cache(cache_instance)
 if loaded_entries > 0:
     print(f"📦 [OmniCache] Restored {loaded_entries} cached entries from SQLite snapshot.")
+
+if hasattr(cache_instance.storage, "client") and cache_instance.storage.client is not None:
+    flight_bus.set_redis_client(cache_instance.storage.client)
+
 
 
 # =====================================================================
@@ -293,13 +298,44 @@ async def handle_chat_completions(request: Request) -> Response:
                     )
                 return JSONResponse(rehydrated, headers=resp_headers)
 
-    # 2. Text / Dual-Tier Cache Check (L1 Exact + L2 Semantic)
+    # 2. Text / Dual-Tier Cache Check (L1 Exact + L2 Semantic + Radix Prefix Tree)
     if not bypass_cache:
         status, entry, similarity, decision_reason = cache_instance.lookup(payload, org_id=org_id, custom_threshold=custom_threshold)
+        messages = payload.get("messages", [])
+        if entry is None and messages:
+            is_radix_hit, radix_completion, matched_turns, radix_node = radix_tree.lookup_conversation(
+                messages, model=requested_model, org_id=org_id
+            )
+            if is_radix_hit and radix_completion and radix_node:
+                usage = radix_completion.get("usage", {})
+                p_tok = usage.get("prompt_tokens", 50)
+                c_tok = usage.get("completion_tokens", 80)
+                entry = CacheEntry(
+                    key=f"radix_{radix_node.node_id}",
+                    org_id=org_id,
+                    model=radix_node.model or requested_model,
+                    user_prompt="",
+                    system_prompt="",
+                    schema_hash="",
+                    tools_hash="",
+                    vector=[],
+                    response_payload=radix_completion,
+                    tag="radix_tree",
+                    is_stream=is_stream,
+                    stream_chunks=radix_node.stream_chunks or [],
+                    ttl_seconds=604800,
+                    is_exact_tokens=True,
+                    prompt_tokens=p_tok,
+                    completion_tokens=c_tok
+                )
+                status = "HIT_RADIX_TREE"
+                decision_reason = f"HIT_RADIX_TREE: Multi-turn conversation matched {matched_turns} turns in Radix trie"
+                similarity = 1.0
+                METRICS_LEDGER["radix_tree_hits"] += 1
     else:
         status, entry, similarity, decision_reason = "BYPASS", None, 0.0, "BYPASS_EXPLICIT_HEADER: Bypassed via X-Cache-Bypass header"
 
-    if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC"):
+    if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC", "HIT_RADIX_TREE"):
         latency_ms = (time.perf_counter() - start_time) * 1000
         usage = entry.response_payload.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", entry.prompt_tokens or 50)
@@ -416,7 +452,7 @@ async def handle_chat_completions(request: Request) -> Response:
                     completion_tokens=c_tok
                 )
                 asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
-                radix_tree.insert_conversation(payload.get("messages", []), res_data)
+                radix_tree.insert_conversation(payload.get("messages", []), res_data, model=routed_model, org_id=org_id)
 
                 if extracted_images:
                     for img_h, p_txt in extracted_images:
@@ -518,6 +554,7 @@ async def handle_chat_completions(request: Request) -> Response:
                     completion_tokens=c_tok
                 )
                 asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
+                radix_tree.insert_conversation(payload.get("messages", []), synthesized, model=routed_model, org_id=org_id, stream_chunks=recorded_chunks)
                 if extracted_images:
                     for img_h, p_txt in extracted_images:
                         vision_cache.store_image(img_h, p_txt, synthesized)
@@ -645,11 +682,41 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
     if not bypass_cache:
         status, entry, similarity, decision_reason = cache_instance.lookup(normalized_payload, org_id=org_id)
+        if entry is None and messages:
+            is_radix_hit, radix_completion, matched_turns, radix_node = radix_tree.lookup_conversation(
+                messages, model=requested_model, org_id=org_id
+            )
+            if is_radix_hit and radix_completion and radix_node:
+                usage = radix_completion.get("usage", {})
+                p_tok = usage.get("prompt_tokens", 35)
+                c_tok = usage.get("completion_tokens", 65)
+                entry = CacheEntry(
+                    key=f"radix_{radix_node.node_id}",
+                    org_id=org_id,
+                    model=radix_node.model or requested_model,
+                    user_prompt="",
+                    system_prompt="",
+                    schema_hash="",
+                    tools_hash="",
+                    vector=[],
+                    response_payload=radix_completion,
+                    tag="radix_tree",
+                    is_stream=is_stream,
+                    stream_chunks=radix_node.stream_chunks or [],
+                    ttl_seconds=604800,
+                    is_exact_tokens=True,
+                    prompt_tokens=p_tok,
+                    completion_tokens=c_tok
+                )
+                status = "HIT_RADIX_TREE"
+                decision_reason = f"HIT_RADIX_TREE: Multi-turn conversation matched {matched_turns} turns in Radix trie"
+                similarity = 1.0
+                METRICS_LEDGER["radix_tree_hits"] += 1
     else:
         status, entry, similarity, decision_reason = "BYPASS", None, 0.0, "BYPASS_EXPLICIT_HEADER: Bypassed via X-Cache-Bypass header"
 
     # 2. Anthropic Cache HIT
-    if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC"):
+    if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC", "HIT_RADIX_TREE"):
         latency_ms = (time.perf_counter() - start_time) * 1000
         content = entry.response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")
         usage = entry.response_payload.get("usage", {})
@@ -726,6 +793,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
     # 3. Anthropic Cache MISS -> Forward Upstream
     req_params = dict(request.query_params) if request.query_params else None
+    if "messages" in anthropic_payload and isinstance(anthropic_payload["messages"], list):
+        anthropic_payload["messages"] = radix_tree.align_ephemeral_cache_blocks(anthropic_payload["messages"])
+
     if is_stream:
         print(f"[OmniCache {time.strftime('%H:%M:%S')}] Forwarding Anthropic stream upstream for model '{requested_model}'...", flush=True)
         status_code, stream_resp, err_data = await upstream_client.forward_anthropic_stream(
@@ -802,6 +872,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
                         completion_tokens=c_tok
                     )
                     asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
+                    radix_tree.insert_conversation(messages, cacheable_res_payload, model=requested_model, org_id=org_id)
                 elif full_text_accum and not stream_cleanly_completed:
                     print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ Stream aborted ({len(full_text_accum)} chunks received) - discarding partial response from cache.", flush=True)
 
@@ -823,56 +894,80 @@ async def handle_anthropic_messages(request: Request) -> Response:
             **cors_headers
         })
 
-    # Non-streaming forward
-    status_code, anthropic_res, _ = await upstream_client.forward_anthropic_messages(
-        anthropic_payload,
-        incoming_headers=dict(request.headers),
-        params=req_params
+    # Non-streaming forward with SingleFlight coalescing
+    exact_flight_key = RequestHasher.compute_exact_hash(normalized_payload, org_id=org_id)
+
+    async def _fetch_anthropic_non_stream():
+        code, data, hdrs = await upstream_client.forward_anthropic_messages(
+            anthropic_payload,
+            incoming_headers=dict(request.headers),
+            params=req_params
+        )
+        return {"status_code": code, "res_data": data, "headers": hdrs}, None
+
+    flight_result, _, is_leader = await flight_bus.execute(
+        exact_flight_key,
+        _fetch_anthropic_non_stream,
+        timeout_seconds=config.SINGLEFLIGHT_TIMEOUT_SECONDS
     )
+
+    status_code = flight_result["status_code"]
+    anthropic_res = flight_result["res_data"]
     latency_ms = (time.perf_counter() - start_time) * 1000
+
+    if not is_leader:
+        METRICS_LEDGER["singleflight_coalesced_count"] += 1
+
     if status_code == 200:
         usage = anthropic_res.get("usage", {})
         p_tok = usage.get("input_tokens", 35)
         c_tok = usage.get("output_tokens", 65)
         tokens_used = p_tok + c_tok
-        METRICS_LEDGER["total_tokens_used"] += tokens_used
-        METRICS_LEDGER["exact_tokens_used"] += tokens_used
+        if is_leader:
+            METRICS_LEDGER["total_tokens_used"] += tokens_used
+            METRICS_LEDGER["exact_tokens_used"] += tokens_used
 
-        spend_usd = upstream_client.calculate_savings(requested_model, p_tok, c_tok)
-        key_id = key_info.get("key_id", "")
-        if key_id:
-            quota_manager.record_spend(key_id, spend_usd)
+            spend_usd = upstream_client.calculate_savings(requested_model, p_tok, c_tok)
+            key_id = key_info.get("key_id", "")
+            if key_id:
+                quota_manager.record_spend(key_id, spend_usd)
 
-        content_blocks = anthropic_res.get("content", [])
-        full_content = "\n".join([b.get("text", "") for b in content_blocks if isinstance(b, dict) and b.get("type") == "text"])
+            content_blocks = anthropic_res.get("content", [])
+            full_content = "\n".join([b.get("text", "") for b in content_blocks if isinstance(b, dict) and b.get("type") == "text"])
 
-        cacheable_res_payload = {
-            "id": anthropic_res.get("id", f"msg_{int(time.time()*1000)}"),
-            "object": "chat.completion",
-            "choices": [{"message": {"role": "assistant", "content": full_content}}],
-            "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": tokens_used}
-        }
-        saved_entry = cache_instance.store(
-            payload=normalized_payload,
-            response_payload=cacheable_res_payload,
-            org_id=org_id,
-            is_exact_tokens=True,
-            prompt_tokens=p_tok,
-            completion_tokens=c_tok
-        )
-        asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
+            cacheable_res_payload = {
+                "id": anthropic_res.get("id", f"msg_{int(time.time()*1000)}"),
+                "object": "chat.completion",
+                "choices": [{"message": {"role": "assistant", "content": full_content}}],
+                "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": tokens_used}
+            }
+            saved_entry = cache_instance.store(
+                payload=normalized_payload,
+                response_payload=cacheable_res_payload,
+                org_id=org_id,
+                is_exact_tokens=True,
+                prompt_tokens=p_tok,
+                completion_tokens=c_tok
+            )
+            asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
+            radix_tree.insert_conversation(messages, cacheable_res_payload, model=requested_model, org_id=org_id)
 
         rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
+        cache_status_header = "MISS" if is_leader else "HIT_SINGLEFLIGHT"
+        decision_header = "MISS" if is_leader else "HIT"
+        reason_header = decision_reason if is_leader else "HIT_SINGLEFLIGHT: Concurrent in-flight request coalesced with leader"
+        similarity_header = f"{similarity:.4f}" if is_leader else "1.0000"
+
         return JSONResponse(rehydrated, headers={
-            "X-OmniCache-Decision": "MISS",
-            "X-OmniCache-Reason": decision_reason,
-            "X-OmniCache-Similarity": f"{similarity:.4f}",
-            "X-Cache-Status": "MISS",
-            "X-Cache-Decision-Reason": decision_reason,
-            "X-Cache-Similarity": f"{similarity:.4f}",
+            "X-OmniCache-Decision": decision_header,
+            "X-OmniCache-Reason": reason_header,
+            "X-OmniCache-Similarity": similarity_header,
+            "X-Cache-Status": cache_status_header,
+            "X-Cache-Decision-Reason": reason_header,
+            "X-Cache-Similarity": similarity_header,
             "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
-            "X-Tokens-Used": str(tokens_used),
-            "X-Tokens-Saved": "0",
+            "X-Tokens-Used": str(tokens_used if is_leader else 0),
+            "X-Tokens-Saved": str(0 if is_leader else tokens_used),
             "X-Tokens-Accounting": "exact",
             "X-Requested-Model": requested_model,
             "X-Served-Model": requested_model,
@@ -1078,6 +1173,7 @@ async def handle_stats(request: Request) -> Response:
             "agent_tool_replays": METRICS_LEDGER["agent_tool_hits"],
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
+            "radix_tree_hits": METRICS_LEDGER["radix_tree_hits"],
             "circuit_breaker": failover_engine.circuit_breaker.get_status(),
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
@@ -1209,7 +1305,10 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_tokens_saved_total {METRICS_LEDGER['total_tokens_saved']}",
         "# HELP omnicache_singleflight_coalesced_total Concurrent requests coalesced",
         "# TYPE omnicache_singleflight_coalesced_total counter",
-        f"omnicache_singleflight_coalesced_total {METRICS_LEDGER['singleflight_coalesced_count']}"
+        f"omnicache_singleflight_coalesced_total {METRICS_LEDGER['singleflight_coalesced_count']}",
+        "# HELP omnicache_radix_tree_hits_total Multi-turn prefix tree conversation hits",
+        "# TYPE omnicache_radix_tree_hits_total counter",
+        f"omnicache_radix_tree_hits_total {METRICS_LEDGER['radix_tree_hits']}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 

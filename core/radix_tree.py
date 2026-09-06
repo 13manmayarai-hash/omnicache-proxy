@@ -200,14 +200,17 @@ class RadixPrefixTree:
     def align_ephemeral_cache_blocks(self, messages: List[Dict[str, Any]], block_size_tokens: int = 1024) -> List[Dict[str, Any]]:
         """
         Aligns message turns to downstream provider (Anthropic/OpenAI) 1024-token prompt caching blocks.
-        Injects Anthropic cache_control metadata on the last turn that crosses the 1024-token boundary.
+        Injects Anthropic cache_control metadata on the last content block of turns that cross the 1024-token boundary.
+        Never sets cache_control at the top-level message object (Anthropic schema forbids extra inputs on MessageParam).
         """
         cumulative_tokens = 0
         aligned_messages = []
 
         for turn in messages:
             turn_copy = dict(turn)
-            # Estimate token count ~ words * 1.3
+            # Remove any top-level cache_control if present (Anthropic rejects with 400 Extra inputs are not permitted)
+            turn_copy.pop("cache_control", None)
+
             content_val = turn.get("content", "")
             if isinstance(content_val, list):
                 text_parts = [b.get("text", "") for b in content_val if isinstance(b, dict) and b.get("type") == "text"]
@@ -218,13 +221,24 @@ class RadixPrefixTree:
             est_tokens = int(len(content_str.split()) * 1.3) + 4
             cumulative_tokens += est_tokens
 
-            if cumulative_tokens >= block_size_tokens and "cache_control" not in turn_copy:
-                # Add ephemeral cache breakpoint
-                turn_copy["cache_control"] = {"type": "ephemeral"}
+            # Check if this turn already contains cache_control inside its content blocks
+            has_existing_cache_control = False
+            if isinstance(turn.get("content"), list):
+                has_existing_cache_control = any(
+                    isinstance(b, dict) and "cache_control" in b
+                    for b in turn["content"]
+                )
+
+            if cumulative_tokens >= block_size_tokens and not has_existing_cache_control:
+                # Add ephemeral cache breakpoint strictly on the content block per Anthropic specification
                 if isinstance(turn_copy.get("content"), list) and turn_copy["content"]:
                     last_b = dict(turn_copy["content"][-1])
                     last_b["cache_control"] = {"type": "ephemeral"}
                     turn_copy["content"] = list(turn_copy["content"][:-1]) + [last_b]
+                else:
+                    turn_copy["content"] = [
+                        {"type": "text", "text": str(content_val), "cache_control": {"type": "ephemeral"}}
+                    ]
                 cumulative_tokens = 0  # reset for next block
 
             aligned_messages.append(turn_copy)

@@ -93,3 +93,53 @@ def test_claude_code_session_agent_caching(client):
     # Real user PII must be detected and incremented
     stats_3 = client.get("/v1/cache/stats").json()
     assert stats_3["enterprise_engine"]["privacy_redactions_total"] == 2
+
+
+def test_claude_code_no_extra_inputs_cache_control(client):
+    """
+    Guarantees that when multi-turn or long messages crossing 1024 tokens are forwarded,
+    no top-level 'cache_control' key exists on any MessageParam (which caused 400 Extra inputs are not permitted).
+    """
+    mock_reply = {
+        "id": "msg_mock_turn_multi",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-3-5-sonnet-20241022",
+        "content": [{"type": "text", "text": "I am Claude Code."}],
+        "stop_reason": "end_turn",
+        "usage": {"input_tokens": 1200, "output_tokens": 10}
+    }
+
+    forwarded_payloads = []
+
+    async def mock_forward(payload, incoming_headers=None, params=None):
+        forwarded_payloads.append(payload)
+        return (200, mock_reply, {})
+
+    # Multi-turn with over 1024 tokens across turns
+    multi_turn_payload = {
+        "model": "claude-3-5-sonnet-20241022",
+        "system": "System instructions here",
+        "messages": [
+            {"role": "user", "content": "Tell me a story " * 400},
+            {"role": "assistant", "content": "Once upon a time " * 400},
+            {"role": "user", "content": "What happens next?"}
+        ]
+    }
+
+    with patch("server.upstream.upstream_client.forward_anthropic_messages", side_effect=mock_forward):
+        res = client.post("/v1/messages", json=multi_turn_payload, headers={"x-api-key": "test-key"})
+        assert res.status_code == 200
+
+    assert len(forwarded_payloads) == 1
+    sent_payload = forwarded_payloads[0]
+
+    # Verify that NONE of the messages have top-level 'cache_control'
+    for idx, turn in enumerate(sent_payload["messages"]):
+        assert "cache_control" not in turn, f"Message turn {idx} had illegal top-level 'cache_control'!"
+        # If cache_control was injected, it MUST be inside content block list
+        if isinstance(turn.get("content"), list):
+            for block in turn["content"]:
+                if isinstance(block, dict) and "cache_control" in block:
+                    assert block["cache_control"]["type"] == "ephemeral"
+

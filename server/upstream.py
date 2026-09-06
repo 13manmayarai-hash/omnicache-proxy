@@ -261,7 +261,33 @@ class UpstreamClient:
             return f"{base}/messages"
         return f"{base}/v1/messages" if "api.anthropic.com" in base else f"{base}/messages"
 
-    def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    @staticmethod
+    def _sanitize_anthropic_messages(messages: Any) -> Any:
+        if not isinstance(messages, list):
+            return messages
+        sanitized = []
+        for m in messages:
+            if not isinstance(m, dict):
+                sanitized.append(m)
+                continue
+            m_copy = dict(m)
+            # Anthropic MessageParam schema strictly forbids top-level cache_control
+            top_cc = m_copy.pop("cache_control", None)
+            if top_cc:
+                content = m_copy.get("content")
+                if isinstance(content, list) and content:
+                    last_b = dict(content[-1])
+                    if "cache_control" not in last_b:
+                        last_b["cache_control"] = top_cc
+                    m_copy["content"] = list(content[:-1]) + [last_b]
+                else:
+                    m_copy["content"] = [
+                        {"type": "text", "text": str(content or ""), "cache_control": top_cc}
+                    ]
+            sanitized.append(m_copy)
+        return sanitized
+
+    def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None, payload: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01"
@@ -294,6 +320,17 @@ class UpstreamClient:
         if not has_x_api_key and not has_auth and config.ANTHROPIC_API_KEY:
             headers["x-api-key"] = config.ANTHROPIC_API_KEY
 
+        # Ensure prompt-caching beta header is attached if cache_control is used in payload
+        if payload and any(
+            (isinstance(turn, dict) and isinstance(turn.get("content"), list) and any(isinstance(b, dict) and "cache_control" in b for b in turn["content"]))
+            for turn in payload.get("messages", []) if isinstance(turn, dict)
+        ):
+            if "anthropic-beta" in headers:
+                if "prompt-caching-2024-07-31" not in headers["anthropic-beta"]:
+                    headers["anthropic-beta"] = f"{headers['anthropic-beta']},prompt-caching-2024-07-31"
+            else:
+                headers["anthropic-beta"] = "prompt-caching-2024-07-31"
+
         return headers
 
     async def forward_anthropic_messages(
@@ -304,12 +341,14 @@ class UpstreamClient:
     ) -> Tuple[int, Dict[str, Any], Dict[str, str]]:
         client = self.get_client()
         url = self.get_anthropic_messages_url()
-        headers = self._build_anthropic_headers(incoming_headers)
 
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
+        if "messages" in clean_payload:
+            clean_payload["messages"] = self._sanitize_anthropic_messages(clean_payload["messages"])
         if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
             clean_payload["max_tokens"] = 8192
 
+        headers = self._build_anthropic_headers(incoming_headers, payload=clean_payload)
         model_name = clean_payload.get("model", "claude")
 
         try:
@@ -370,13 +409,14 @@ class UpstreamClient:
     ) -> Tuple[int, Optional[httpx.Response], Dict[str, Any]]:
         client = self.get_client()
         url = self.get_anthropic_messages_url()
-        headers = self._build_anthropic_headers(incoming_headers)
-
         clean_payload = {k: v for k, v in payload.items() if not k.startswith("_")}
         clean_payload["stream"] = True
+        if "messages" in clean_payload:
+            clean_payload["messages"] = self._sanitize_anthropic_messages(clean_payload["messages"])
         if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
             clean_payload["max_tokens"] = 8192
 
+        headers = self._build_anthropic_headers(incoming_headers, payload=clean_payload)
         model_name = clean_payload.get("model", "claude")
 
         try:

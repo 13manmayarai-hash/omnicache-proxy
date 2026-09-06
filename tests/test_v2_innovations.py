@@ -47,10 +47,11 @@ class TestV2Innovations(unittest.TestCase):
         self.assertGreaterEqual(matched_turns, 2)
         self.assertIsNotNone(matched_node)
 
-        # Ephemeral cache alignment test
+        # Ephemeral cache alignment test per Anthropic specification (must be on content block)
         long_msgs = [{"role": "user", "content": "word " * 1000}]
         aligned = radix_tree.align_ephemeral_cache_blocks(long_msgs, block_size_tokens=500)
-        self.assertIn("cache_control", aligned[0])
+        self.assertIn("cache_control", aligned[0]["content"][-1])
+        self.assertNotIn("cache_control", aligned[0])
 
     # 2. Agent Tool-Call Replay Test
     def test_agent_tool_replay(self):

@@ -454,7 +454,8 @@ def main():
         prog="omnicache",
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats", "reset-circuit"], help="Action to perform (default: start)")
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats", "reset-circuit", "version"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")
@@ -476,6 +477,9 @@ def main():
         sys.exit(0)
     elif args.command == "reset-circuit":
         run_reset_circuit(provider=args.provider)
+        sys.exit(0)
+    elif args.command == "version":
+        print(f"omnicache {config.VERSION}")
         sys.exit(0)
 
     port = args.port

@@ -67,7 +67,8 @@ class PrivacyShield:
         """
         sanitized_payload = dict(payload)
         master_token_map: Dict[str, str] = {}
-        total_scrubbed = 0
+        system_scrubbed = 0
+        user_scrubbed = 0
 
         # 1. Sanitize top-level system prompt (Anthropic format)
         if "system" in sanitized_payload:
@@ -76,7 +77,7 @@ class PrivacyShield:
                 s_text, t_map, count = cls.sanitize_text(system_val, salt=salt)
                 sanitized_payload["system"] = s_text
                 master_token_map.update(t_map)
-                total_scrubbed += count
+                system_scrubbed += count
             elif isinstance(system_val, list):
                 new_sys_list = []
                 for item in system_val:
@@ -85,29 +86,33 @@ class PrivacyShield:
                         s_text, t_map, count = cls.sanitize_text(item_copy["text"], salt=salt)
                         item_copy["text"] = s_text
                         master_token_map.update(t_map)
-                        total_scrubbed += count
+                        system_scrubbed += count
                         new_sys_list.append(item_copy)
                     elif isinstance(item, str):
                         s_text, t_map, count = cls.sanitize_text(item, salt=salt)
                         master_token_map.update(t_map)
-                        total_scrubbed += count
+                        system_scrubbed += count
                         new_sys_list.append(s_text)
                     else:
                         new_sys_list.append(item)
                 sanitized_payload["system"] = new_sys_list
 
-        # 2. Sanitize messages
+        # 2. Sanitize messages (attributing counts to user input vs system context)
         messages = sanitized_payload.get("messages", [])
         new_messages = []
 
         for m in messages:
             m_copy = dict(m)
+            role = m_copy.get("role", "user")
             content = m_copy.get("content", "")
             if isinstance(content, str):
                 s_text, t_map, count = cls.sanitize_text(content, salt=salt)
                 m_copy["content"] = s_text
                 master_token_map.update(t_map)
-                total_scrubbed += count
+                if role == "system":
+                    system_scrubbed += count
+                else:
+                    user_scrubbed += count
             elif isinstance(content, list):
                 new_content_blocks = []
                 for block in content:
@@ -116,7 +121,10 @@ class PrivacyShield:
                         s_text, t_map, count = cls.sanitize_text(b_copy["text"], salt=salt)
                         b_copy["text"] = s_text
                         master_token_map.update(t_map)
-                        total_scrubbed += count
+                        if role == "system":
+                            system_scrubbed += count
+                        else:
+                            user_scrubbed += count
                         new_content_blocks.append(b_copy)
                     else:
                         new_content_blocks.append(block)
@@ -124,7 +132,8 @@ class PrivacyShield:
             new_messages.append(m_copy)
 
         sanitized_payload["messages"] = new_messages
-        return sanitized_payload, master_token_map, total_scrubbed
+        # Return user_scrubbed to prevent static agent system prompt boilerplate (git email, paths) from inflating KPI telemetry
+        return sanitized_payload, master_token_map, user_scrubbed
 
     @classmethod
     def rehydrate_response(cls, response_payload: Dict[str, Any], token_map: Dict[str, str]) -> Dict[str, Any]:

@@ -265,9 +265,10 @@ class DualTierCache:
             self.total_bypasses += 1
             return "BYPASS", None, 0.0, "BYPASS_STRUCTURED_SCHEMA: Response format schema present; fuzzy semantic matching bypassed"
 
-        if len(messages) > 1:
+        non_system_messages = [m for m in messages if isinstance(m, dict) and m.get("role") != "system"]
+        if len(non_system_messages) > 1:
             self.total_bypasses += 1
-            return "BYPASS", None, 0.0, f"BYPASS_MULTITURN_CONVERSATION: Multi-turn context ({len(messages)} messages) restricted to L1 exact cache"
+            return "BYPASS", None, 0.0, f"BYPASS_MULTITURN_CONVERSATION: Multi-turn context ({len(non_system_messages)} turns) restricted to L1 exact cache"
 
         if not user_prompt.strip():
             self.total_misses += 1
@@ -389,7 +390,8 @@ class DualTierCache:
         tools_hash = RequestHasher.compute_tools_hash(tools)
         
         exact_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
-        is_single_turn_text = (len(messages) <= 1 and user_prompt and not is_multimodal and not tools and schema_hash == "no_schema")
+        non_system_messages = [m for m in messages if isinstance(m, dict) and m.get("role") != "system"]
+        is_single_turn_text = (len(non_system_messages) <= 1 and user_prompt and not is_multimodal and not tools and schema_hash == "no_schema")
         vector = FastSemanticEmbedder.embed(user_prompt) if is_single_turn_text else []
         ttl_seconds = custom_ttl if custom_ttl is not None else config.SEMANTIC_CACHE_TTL_SECONDS
 

@@ -27,8 +27,26 @@ class RequestHasher:
         text = re.sub(cls.EMAIL_PATTERN, "[REDACTED_EMAIL]", text)
         return text
 
-    @staticmethod
-    def extract_system_and_user_prompts(messages: List[Dict[str, Any]]) -> Tuple[str, str, bool]:
+    @classmethod
+    def normalize_system_prompt(cls, text: str) -> str:
+        """
+        Normalizes dynamic timestamps, dates, and session UUIDs from agent system prompts
+        so that deterministic cache hashing remains stable across turns and sessions.
+        """
+        if not text:
+            return ""
+        # 1. ISO 8601 & RFC 3339 timestamps (e.g. 2026-09-05T17:15:30Z or 2026-09-05 17:15:30)
+        norm = re.sub(r'\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\b', '<NORMALIZED_TIMESTAMP>', text)
+        # 2. Human-readable dates with day-of-week (e.g. "Current date: Saturday, September 5, 2026" or "Today is ...")
+        norm = re.sub(r'(?i)(?:current\s+(?:date|time)|today(?:\'s\s+date)?):\s*[A-Za-z]+,\s*[A-Za-z]+\s+\d{1,2},?\s+\d{4}(?:[^\n]*)?', '<NORMALIZED_DATE>', norm)
+        # 3. Formatted month-day-year dates (e.g. September 5, 2026)
+        norm = re.sub(r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}\b', '<NORMALIZED_DATE>', norm)
+        # 4. Standalone time strings (e.g. 05:17:30 PM UTC)
+        norm = re.sub(r'\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|UTC|GMT)\b', '<NORMALIZED_TIME>', norm)
+        return norm
+
+    @classmethod
+    def extract_system_and_user_prompts(cls, messages: List[Dict[str, Any]]) -> Tuple[str, str, bool]:
         """
         Extracts concatenated system prompt and last user prompt.
         Also returns a boolean indicating if multimodal/image content is detected.
@@ -59,7 +77,8 @@ class RequestHasher:
             elif role == "user":
                 user_parts.append(content_str)
                 
-        system_prompt = "\n".join(system_parts).strip()
+        raw_system_prompt = "\n".join(system_parts).strip()
+        system_prompt = cls.normalize_system_prompt(raw_system_prompt)
         last_user_prompt = user_parts[-1] if user_parts else ""
         return system_prompt, last_user_prompt, is_multimodal
 
@@ -68,11 +87,24 @@ class RequestHasher:
         """
         Computes a deterministic SHA-256 hash representing the exact request signature.
         Includes model, messages, temperature, response_format (schema), tools, and stop sequences.
+        System prompts are automatically normalized to remove volatile timestamps/dates.
         """
+        raw_messages = payload.get("messages", [])
+        normalized_messages = []
+        for msg in raw_messages:
+            if isinstance(msg, dict) and msg.get("role") == "system":
+                m_copy = dict(msg)
+                content = m_copy.get("content", "")
+                if isinstance(content, str):
+                    m_copy["content"] = cls.normalize_system_prompt(content)
+                normalized_messages.append(m_copy)
+            else:
+                normalized_messages.append(msg)
+
         normalized_data = {
             "org_id": org_id,
             "model": payload.get("model", "").strip().lower(),
-            "messages": payload.get("messages", []),
+            "messages": normalized_messages,
             "temperature": payload.get("temperature", 1.0),
             "response_format": payload.get("response_format", None),
             "tools": payload.get("tools", None),

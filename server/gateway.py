@@ -22,7 +22,7 @@ from core.vector_cache import cache_instance, get_model_family, CacheEntry
 from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache
 from core.privacy_shield import privacy_shield
-from server.tool_replayer import tool_cache, compact_and_record_agent_tools
+from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
 from server.cascade_router import cascade_router
 from server.quotas import quota_manager
 from server.singleflight import flight_bus
@@ -1082,12 +1082,22 @@ async def handle_tool_replay(request: Request) -> Response:
             ttl_seconds=ttl_seconds,
             workspace_dir=ws_dir
         )
+        if not tool_key:
+            return JSONResponse({
+                "status": "REJECTED",
+                "tool_name": tool_name,
+                "cached": False,
+                "reason": f"Tool '{tool_name}' is non-cacheable according to active policy."
+            }, status_code=200, headers=cors_headers)
+
+        effective_ttl = ttl_seconds if ttl_seconds is not None else tool_policy_manager.get_ttl(tool_name)
         return JSONResponse({
             "status": "STORED",
             "tool_name": tool_name,
             "tool_key": tool_key,
             "cached": True,
-            "workspace_state": ws_state
+            "workspace_state": ws_state,
+            "ttl_seconds": effective_ttl
         }, headers=cors_headers)
 
     # 2. Lookup Path
@@ -1114,6 +1124,98 @@ async def handle_tool_replay(request: Request) -> Response:
         "tool_name": tool_name,
         "cached": False
     }, headers=cors_headers)
+
+
+async def handle_tool_policies(request: Request) -> Response:
+    """
+    Enterprise Tool Caching & Staleness Policy Management Endpoint.
+    Supports:
+    - GET /v1/agent/tools/policies (list policies or query single tool via ?tool_name=...)
+    - POST /v1/agent/tools/policies (create or update custom policy overrides)
+    - DELETE /v1/agent/tools/policies (revert custom policy override to built-in/inferred default)
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    # 1. GET Path: Query all policies or specific tool policy
+    if request.method == "GET":
+        tool_name = request.query_params.get("tool_name")
+        if tool_name:
+            clean = tool_name.strip().lower()
+            pol = tool_policy_manager.get_policy(clean)
+            return JSONResponse({
+                "status": "OK",
+                "tool_name": clean,
+                "policy": pol
+            }, headers=cors_headers)
+
+        all_pols = tool_policy_manager.list_policies()
+        return JSONResponse({
+            "status": "OK",
+            "policies": all_pols,
+            "custom_policies": tool_policy_manager._custom_policies,
+            "total_count": len(all_pols),
+            "custom_count": len(tool_policy_manager._custom_policies)
+        }, headers=cors_headers)
+
+    # 2. POST Path: Create or update policy
+    elif request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
+
+        # Batch update: {"policies": {"tool_a": {...}, "tool_b": {...}}}
+        if "policies" in body and isinstance(body["policies"], dict):
+            updated = {}
+            for t_name, pol_data in body["policies"].items():
+                if isinstance(pol_data, dict):
+                    updated[t_name] = tool_policy_manager.set_policy(t_name, pol_data)
+            return JSONResponse({
+                "status": "UPDATED",
+                "count": len(updated),
+                "policies": updated
+            }, headers=cors_headers)
+
+        # Single update: {"tool_name": "lookup_customer", "ttl_seconds": 600, ...}
+        tool_name = (body.get("tool_name") or "").strip()
+        if not tool_name:
+            return JSONResponse({"error": "Missing required field 'tool_name'"}, status_code=400, headers=cors_headers)
+
+        updated_policy = tool_policy_manager.set_policy(tool_name, body)
+        return JSONResponse({
+            "status": "UPDATED",
+            "tool_name": tool_name.lower(),
+            "policy": updated_policy
+        }, headers=cors_headers)
+
+    # 3. DELETE Path: Remove custom policy override
+    elif request.method == "DELETE":
+        tool_name = request.query_params.get("tool_name")
+        if not tool_name:
+            try:
+                body = await request.json()
+                tool_name = body.get("tool_name")
+            except Exception:
+                pass
+
+        if not tool_name or not str(tool_name).strip():
+            return JSONResponse({"error": "Missing 'tool_name' parameter"}, status_code=400, headers=cors_headers)
+
+        clean = str(tool_name).strip().lower()
+        deleted = tool_policy_manager.delete_policy(clean)
+        return JSONResponse({
+            "status": "DELETED" if deleted else "NOT_FOUND",
+            "tool_name": clean,
+            "active_policy": tool_policy_manager.get_policy(clean)
+        }, headers=cors_headers)
+
+    return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
 
 
 async def handle_purge(request: Request) -> Response:
@@ -1206,7 +1308,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.7.2"),
+            "version": getattr(config, "VERSION", "2.8.0"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1351,7 +1453,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.7.2"),
+        "version": getattr(config, "VERSION", "2.8.0"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1373,7 +1475,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.7.2"),
+        "version": getattr(config, "VERSION", "2.8.0"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -1462,7 +1564,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.7.2"),
+            "version": getattr(config, "VERSION", "2.8.0"),
             "status": "connected"
         })
         while True:
@@ -1504,6 +1606,8 @@ routes = [
     Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tool_replay", handle_tool_replay, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tool_record", handle_tool_replay, methods=["POST", "OPTIONS"]),
+    Route("/v1/agent/tools/policies", handle_tool_policies, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+    Route("/v1/agent/tool_policies", handle_tool_policies, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),

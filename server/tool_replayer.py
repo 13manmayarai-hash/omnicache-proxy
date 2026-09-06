@@ -12,29 +12,51 @@ import sqlite3
 import subprocess
 from typing import Dict, Any, Optional, Tuple, List
 
-# Explicit tool staleness policy registry
-TOOL_POLICIES: Dict[str, Dict[str, Any]] = {
+# Explicit tool mutation & safety registries
+DEFAULT_MUTATION_PREFIXES = (
+    "create", "delete", "update", "insert", "post", "write", "charge",
+    "pay", "send", "execute", "modify", "remove", "drop", "cancel",
+    "refund", "edit", "patch", "put", "process", "submit", "trigger"
+)
+
+DEFAULT_SAFE_PREFIXES = (
+    "read", "view", "get", "fetch", "list", "search", "find",
+    "cat", "check", "inspect", "show", "lookup", "query", "scan", "describe"
+)
+
+# Built-in tool staleness and cacheability policy registry
+DEFAULT_BUILTIN_POLICIES: Dict[str, Dict[str, Any]] = {
     # 1. Target File Specific Tools: Only invalidate when the specific target file is modified
-    "read_file": {"type": "target_file", "ttl_seconds": 3600},
-    "view_file": {"type": "target_file", "ttl_seconds": 3600},
-    "cat": {"type": "target_file", "ttl_seconds": 3600},
+    "read_file": {"type": "target_file", "ttl_seconds": 3600, "cacheable": True, "deduplicate_history": True},
+    "view_file": {"type": "target_file", "ttl_seconds": 3600, "cacheable": True, "deduplicate_history": True},
+    "cat": {"type": "target_file", "ttl_seconds": 3600, "cacheable": True, "deduplicate_history": True},
 
     # 2. Scoped Directory Tools: Only invalidate when files within the target directory scope change
-    "grep_search": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
-    "find_by_name": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
-    "list_dir": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
-    "ls": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
-    "grep": {"type": "scoped_git_workspace", "ttl_seconds": 1800},
+    "grep_search": {"type": "scoped_git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+    "find_by_name": {"type": "scoped_git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+    "list_dir": {"type": "scoped_git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+    "ls": {"type": "scoped_git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+    "grep": {"type": "scoped_git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
 
     # 3. Global Git Status Tools: Invalidate when any repo status changes
-    "git_status": {"type": "git_workspace", "ttl_seconds": 1800},
-    "git_diff": {"type": "git_workspace", "ttl_seconds": 1800},
-    "git_log": {"type": "git_workspace", "ttl_seconds": 1800},
-    
-    # 4. External Network tools: Short, tool-specific TTL (60s)
-    "read_url_content": {"type": "external_network", "ttl_seconds": 60},
-    "fetch_web": {"type": "external_network", "ttl_seconds": 60},
+    "git_status": {"type": "git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+    "git_diff": {"type": "git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+    "git_log": {"type": "git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+
+    # 4. Command Execution Tool
+    "bash": {"type": "git_workspace", "ttl_seconds": 1800, "cacheable": True, "deduplicate_history": True},
+
+    # 5. External Network tools: Short, tool-specific TTL (60s)
+    "read_url_content": {"type": "external_network", "ttl_seconds": 60, "cacheable": True, "deduplicate_history": True},
+    "fetch_web": {"type": "external_network", "ttl_seconds": 60, "cacheable": True, "deduplicate_history": True},
+
+    # 6. Non-Cacheable Mutating Tools
+    "run_command": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
+    "write_file": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
+    "replace_file_content": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
 }
+
+TOOL_POLICIES: Dict[str, Dict[str, Any]] = dict(DEFAULT_BUILTIN_POLICIES)
 
 
 def get_file_fingerprint(file_path: str) -> Optional[str]:
@@ -221,9 +243,196 @@ def _get_tool_db_conn() -> Optional[sqlite3.Connection]:
             )
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_expiry ON tool_call_records(expires_at)")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS tool_policies_records (
+                tool_name TEXT PRIMARY KEY,
+                policy_json TEXT NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
         return conn
     except Exception:
         return None
+
+
+class ToolPolicyManager:
+    """
+    Enterprise Policy Manager for Tool Caching, Staleness TTLs, and Mutation Protection.
+    Supports in-memory caching backed by SQLite persistence (tool_policies_records).
+    """
+    def __init__(self):
+        self._custom_policies: Dict[str, Dict[str, Any]] = {}
+        self._load_from_db()
+
+    def _load_from_db(self) -> None:
+        conn = _get_tool_db_conn()
+        if not conn:
+            return
+        try:
+            cur = conn.cursor()
+            rows = cur.execute("SELECT tool_name, policy_json FROM tool_policies_records").fetchall()
+            for t_name, p_json in rows:
+                try:
+                    self._custom_policies[t_name.strip().lower()] = json.loads(p_json)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
+    def get_policy(self, tool_name: str) -> Dict[str, Any]:
+        """Returns effective policy for tool: custom override > built-in > prefix inference > custom fallback."""
+        clean = (tool_name or "").strip().lower()
+        if not clean:
+            return {"type": "unknown", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False}
+
+        # 1. Custom runtime override from SQLite/RAM
+        if clean in self._custom_policies:
+            return dict(self._custom_policies[clean])
+
+        # 2. Built-in registry policy
+        if clean in DEFAULT_BUILTIN_POLICIES:
+            return dict(DEFAULT_BUILTIN_POLICIES[clean])
+
+        # 3. Intelligent prefix inference
+        parts = clean.replace("-", "_").replace(".", "_").split("_")
+        first_word = parts[0] if parts else ""
+
+        # Mutation prefix checks (e.g. process_payment, charge_card, delete_user)
+        if first_word in DEFAULT_MUTATION_PREFIXES or any(clean.startswith(p) for p in DEFAULT_MUTATION_PREFIXES):
+            return {
+                "type": "mutation",
+                "ttl_seconds": 0,
+                "cacheable": False,
+                "deduplicate_history": False
+            }
+
+        # Safe prefix checks (e.g. lookup_customer, query_inventory, check_order_status)
+        if first_word in DEFAULT_SAFE_PREFIXES or any(clean.startswith(p) for p in DEFAULT_SAFE_PREFIXES):
+            return {
+                "type": "business_api",
+                "ttl_seconds": 300,
+                "cacheable": True,
+                "deduplicate_history": True
+            }
+
+        # Secondary parts matching
+        if any(p in parts for p in DEFAULT_MUTATION_PREFIXES):
+            return {
+                "type": "mutation",
+                "ttl_seconds": 0,
+                "cacheable": False,
+                "deduplicate_history": False
+            }
+        if any(p in parts for p in DEFAULT_SAFE_PREFIXES):
+            return {
+                "type": "business_api",
+                "ttl_seconds": 300,
+                "cacheable": True,
+                "deduplicate_history": True
+            }
+
+        # 4. Fallback for custom non-mutating tools
+        return {
+            "type": "custom",
+            "ttl_seconds": 1800,
+            "cacheable": True,
+            "deduplicate_history": True
+        }
+
+    def set_policy(self, tool_name: str, policy: Dict[str, Any]) -> Dict[str, Any]:
+        """Sets custom policy override, stores in RAM and SQLite."""
+        clean = (tool_name or "").strip().lower()
+        if not clean:
+            raise ValueError("Tool name cannot be empty")
+
+        cacheable = bool(policy.get("cacheable", True))
+        ttl_seconds = max(0, int(policy.get("ttl_seconds", 300 if cacheable else 0)))
+        dedup = bool(policy.get("deduplicate_history", cacheable))
+        pol_type = str(policy.get("type", "business_api" if cacheable else "mutation"))
+
+        normalized = {
+            "type": pol_type,
+            "ttl_seconds": ttl_seconds,
+            "cacheable": cacheable,
+            "deduplicate_history": dedup
+        }
+
+        self._custom_policies[clean] = normalized
+        TOOL_POLICIES[clean] = normalized
+
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                with conn:
+                    conn.execute("""
+                        INSERT OR REPLACE INTO tool_policies_records (tool_name, policy_json, updated_at)
+                        VALUES (?, ?, ?)
+                    """, (clean, json.dumps(normalized), time.time()))
+            except Exception:
+                pass
+            finally:
+                conn.close()
+
+        return normalized
+
+    def delete_policy(self, tool_name: str) -> bool:
+        """Deletes custom policy override, reverting to built-in or inferred policy."""
+        clean = (tool_name or "").strip().lower()
+        existed = clean in self._custom_policies
+        self._custom_policies.pop(clean, None)
+        if clean in DEFAULT_BUILTIN_POLICIES:
+            TOOL_POLICIES[clean] = dict(DEFAULT_BUILTIN_POLICIES[clean])
+        else:
+            TOOL_POLICIES.pop(clean, None)
+
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                with conn:
+                    conn.execute("DELETE FROM tool_policies_records WHERE tool_name = ?", (clean,))
+            except Exception:
+                pass
+            finally:
+                conn.close()
+
+        return existed
+
+    def list_policies(self) -> Dict[str, Dict[str, Any]]:
+        """Returns all effective policies (defaults + custom overrides)."""
+        self._load_from_db()
+        merged = dict(DEFAULT_BUILTIN_POLICIES)
+        merged.update(self._custom_policies)
+        return merged
+
+    def is_cacheable(self, tool_name: str) -> bool:
+        return bool(self.get_policy(tool_name).get("cacheable", False))
+
+    def should_deduplicate(self, tool_name: str) -> bool:
+        return bool(self.get_policy(tool_name).get("deduplicate_history", False))
+
+    def get_ttl(self, tool_name: str) -> int:
+        return int(self.get_policy(tool_name).get("ttl_seconds", 300))
+
+    def clear_custom_policies(self) -> None:
+        """Clears custom policies from memory and DB."""
+        self._custom_policies.clear()
+        conn = _get_tool_db_conn()
+        if conn:
+            try:
+                with conn:
+                    conn.execute("DELETE FROM tool_policies_records")
+            except Exception:
+                pass
+            finally:
+                conn.close()
+        TOOL_POLICIES.clear()
+        TOOL_POLICIES.update(DEFAULT_BUILTIN_POLICIES)
+
+
+# Global Tool Policy Manager singleton
+tool_policy_manager = ToolPolicyManager()
 
 
 class ToolExecutionCache:
@@ -236,12 +445,8 @@ class ToolExecutionCache:
 
     @staticmethod
     def is_eligible(tool_name: str) -> bool:
-        """Checks if a tool is eligible for tool-call caching."""
-        clean = tool_name.strip().lower()
-        if clean in TOOL_POLICIES:
-            return True
-        safe_prefixes = ("read", "view", "get", "fetch", "list", "search", "find", "cat", "check", "inspect", "show")
-        return any(clean.startswith(p) for p in safe_prefixes)
+        """Checks if a tool is eligible for tool-call caching based on active policy."""
+        return tool_policy_manager.is_cacheable(tool_name)
 
     def is_idempotent(self, tool_name: str) -> bool:
         """Backward-compatible alias for is_eligible."""
@@ -258,7 +463,7 @@ class ToolExecutionCache:
     ) -> str:
         """Computes a deterministic hash of tool invocation including workspace state."""
         clean_name = tool_name.strip().lower()
-        policy = TOOL_POLICIES.get(clean_name, {})
+        policy = tool_policy_manager.get_policy(clean_name)
         policy_type = policy.get("type", "static")
 
         # Capture dynamic git workspace state with fine-grained policy
@@ -290,6 +495,9 @@ class ToolExecutionCache:
         Returns (is_hit, cached_output, tool_key).
         """
         clean_name = tool_name.strip().lower()
+        if not tool_policy_manager.is_cacheable(clean_name):
+            return False, None, None
+
         key = self.compute_tool_hash(
             tool_name, arguments, workspace_fingerprint, workspace_state, workspace_dir=workspace_dir
         )
@@ -354,8 +562,13 @@ class ToolExecutionCache:
     ) -> str:
         """Stores a deterministic tool execution output with policy-driven TTL."""
         clean_name = tool_name.strip().lower()
-        policy = TOOL_POLICIES.get(clean_name, {})
+        policy = tool_policy_manager.get_policy(clean_name)
+        if not policy.get("cacheable", False) and ttl_seconds is None:
+            return ""
+
         effective_ttl = ttl_seconds if ttl_seconds is not None else policy.get("ttl_seconds", 1800)
+        if effective_ttl <= 0:
+            return ""
 
         key = self.compute_tool_hash(
             tool_name, arguments, workspace_fingerprint, workspace_state, workspace_dir=workspace_dir
@@ -542,15 +755,16 @@ def compact_and_record_agent_tools(
                         else:
                             output_str = str(b_content or "")
 
-                        if not is_error and output_str.strip():
+                        if not is_error and output_str.strip() and tool_policy_manager.is_cacheable(t_name):
                             try:
-                                tool_cache.store_tool_call(
+                                stored_key = tool_cache.store_tool_call(
                                     tool_name=t_name,
                                     arguments=t_input if isinstance(t_input, dict) else {},
                                     output=output_str,
                                     workspace_dir=workspace_dir
                                 )
-                                tools_recorded += 1
+                                if stored_key:
+                                    tools_recorded += 1
                             except Exception:
                                 pass
 
@@ -576,15 +790,16 @@ def compact_and_record_agent_tools(
                 t_input = meta["input"]
                 output_str = str(content or "")
 
-                if output_str.strip():
+                if output_str.strip() and tool_policy_manager.is_cacheable(t_name):
                     try:
-                        tool_cache.store_tool_call(
+                        stored_key = tool_cache.store_tool_call(
                             tool_name=t_name,
                             arguments=t_input if isinstance(t_input, dict) else {},
                             output=output_str,
                             workspace_dir=workspace_dir
                         )
-                        tools_recorded += 1
+                        if stored_key:
+                            tools_recorded += 1
                     except Exception:
                         pass
 
@@ -617,6 +832,8 @@ def compact_and_record_agent_tools(
 
         for earlier_run in runs[:-1]:
             if earlier_run["is_error"]:
+                continue
+            if not tool_policy_manager.should_deduplicate(earlier_run.get("tool_name", "")):
                 continue
             earlier_output = earlier_run["output_text"]
             # Compact if output is identical or bulky (> 120 characters)

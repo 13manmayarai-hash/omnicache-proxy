@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.7.2"
+version = "2.8.0"
 description = "Local acceleration sidecar and Git-aware tool replayer for AI coding agents (Claude Code, Cursor, Aider)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -55,6 +55,7 @@ include = ["core*", "server*", "persistence*", "mcp*", "dashboard*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 filterwarnings = [
     "ignore::starlette.exceptions.StarletteDeprecationWarning",
 ]

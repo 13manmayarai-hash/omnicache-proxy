@@ -444,21 +444,136 @@ def run_init():
     print(f"   \033[1;36momnicache run claude\033[0m  (for Claude Code)")
     print(f"   \033[1;36momnicache run cursor .\033[0m  (for Cursor IDE)\n")
 
+def run_warm(workspace_dir: Optional[str] = None, ref: str = "HEAD", max_files: int = 200):
+    from server.workspace_sync import workspace_warmer
+    target_dir = os.path.abspath(workspace_dir or os.getcwd())
+    print(f"\n\033[1;36m🔥 Warming OmniCache tool replay cache for workspace:\033[0m {target_dir}")
+    try:
+        report = workspace_warmer.warm_workspace(
+            workspace_dir=target_dir,
+            ref=ref,
+            max_files=max_files
+        )
+        if report.get("is_git_repo"):
+            commit_str = (report.get("git_commit") or "")[:8]
+            branch_str = report.get("git_branch", "")
+            print(f"  \033[1;32m✔\033[0m Git Commit:          {commit_str} (branch: {branch_str})")
+        print(f"  \033[1;32m✔\033[0m Files Pre-Recorded:  {report.get('files_warmed', 0)} files")
+        print(f"  \033[1;32m✔\033[0m Directories Indexed: {report.get('dirs_warmed', 0)} directories")
+        print(f"  \033[1;32m✔\033[0m Tools Auto-Recorded: {report.get('tools_recorded', 0)} execution signatures")
+        print(f"  \033[1;32m✔\033[0m Tokens Pre-Warmed:   {report.get('tokens_warmed', 0):,} tokens")
+        print(f"  \033[1;32m✔\033[0m Warm-up Duration:    {report.get('duration_ms', 0):.2f}ms")
+        print(f"\n\033[1;37m✨ Workspace is warm! AI agents (Claude Code, Cursor) will experience instant tool replays.\033[0m\n")
+    except Exception as e:
+        print(f"\033[1;31m❌ Error during workspace cache warming: {e}\033[0m")
+        sys.exit(1)
+
+
+def run_sync(
+    action: str = "status",
+    output_path: Optional[str] = None,
+    input_path: Optional[str] = None,
+    workspace_dir: Optional[str] = None,
+    workspace_fingerprint: Optional[str] = None
+):
+    from server.workspace_sync import workspace_sync_manager
+    clean_action = (action or "status").lower().strip()
+
+    if clean_action == "export":
+        out = output_path or "omnicache-workspace-cache.json"
+        print(f"\n\033[1;36m📦 Exporting OmniCache workspace tool cache...\033[0m")
+        try:
+            res = workspace_sync_manager.export_snapshot(
+                workspace_dir=workspace_dir,
+                workspace_fingerprint=workspace_fingerprint,
+                output_path=out
+            )
+            count = res.get("record_count", 0)
+            target = res.get("saved_to", out)
+            print(f"  \033[1;32m✔\033[0m Exported {count} tool cache records to: {target}")
+            print(f"  \033[1;37mTip: Commit or upload this file in CI/CD to warm teammate environments.\033[0m\n")
+        except Exception as e:
+            print(f"\033[1;31m❌ Export failed: {e}\033[0m")
+            sys.exit(1)
+
+    elif clean_action == "import":
+        if not input_path:
+            print("\033[1;31m❌ Error: Missing --input / -i file path to import.\033[0m")
+            sys.exit(1)
+        print(f"\n\033[1;36m📥 Importing OmniCache workspace tool cache from:\033[0m {input_path}")
+        try:
+            res = workspace_sync_manager.import_snapshot(input_path)
+            rec_count = res.get("records_imported", 0)
+            pol_count = res.get("policies_imported", 0)
+            print(f"  \033[1;32m✔\033[0m Successfully imported {rec_count} tool executions and {pol_count} policies into local SQLite store.")
+            print(f"\n\033[1;37m✨ Cache synchronized! Local agents can replay CI/CD tool executions immediately.\033[0m\n")
+        except Exception as e:
+            print(f"\033[1;31m❌ Import failed: {e}\033[0m")
+            sys.exit(1)
+
+    elif clean_action in ("push", "pull"):
+        fp = workspace_fingerprint or "default"
+        if clean_action == "push":
+            print(f"\n\033[1;36m🚀 Pushing workspace cache to Redis (key: omnicache:workspace:sync:{fp})...\033[0m")
+            res = workspace_sync_manager.sync_redis_push(workspace_fingerprint=fp)
+            if res.get("status") == "PUSHED_TO_REDIS":
+                print(f"  \033[1;32m✔\033[0m Pushed {res.get('records_pushed', 0)} tool records to Redis.")
+            else:
+                print(f"  \033[1;31m❌ Redis push error: {res.get('error')}\033[0m")
+        else:
+            print(f"\n\033[1;36m📥 Pulling workspace cache from Redis (key: omnicache:workspace:sync:{fp})...\033[0m")
+            res = workspace_sync_manager.sync_redis_pull(workspace_fingerprint=fp)
+            if res.get("status") == "IMPORTED":
+                print(f"  \033[1;32m✔\033[0m Pulled and imported {res.get('records_imported', 0)} tool records from Redis.")
+            else:
+                print(f"  \033[1;31m❌ Redis pull error: {res.get('error') or res.get('status')}\033[0m")
+
+    else:  # status
+        print(f"\n\033[1;36m--- OmniCache Workspace Sync Status ---\033[0m")
+        status = workspace_sync_manager.get_sync_status(
+            workspace_dir=workspace_dir,
+            workspace_fingerprint=workspace_fingerprint
+        )
+        print(f"Active Tool Executions:   {status.get('active_tool_records', 0)}")
+        print(f"Tokens Saved Potential:   {status.get('saved_tokens_potential', 0):,} tokens")
+        print(f"Active Custom Policies:   {status.get('custom_policies_active', 0)}")
+        dist = status.get("tool_distribution", {})
+        if dist:
+            print("\nTool Signature Breakdown:")
+            for t_name, cnt in sorted(dist.items(), key=lambda x: x[1], reverse=True)[:10]:
+                print(f"  - {t_name:<25} {cnt:>5} cached calls")
+        print("")
+
+
 def main():
     # Handle "omnicache run <command> [args...]"
     if len(sys.argv) > 1 and sys.argv[1] == "run":
         run_wrapper(sys.argv[2:], host=config.HOST, port=config.PORT)
         return
 
+    # Normalize "omnicache sync <action> [options]"
+    sync_action = "status"
+    if len(sys.argv) > 1 and sys.argv[1] == "sync":
+        if len(sys.argv) > 2 and sys.argv[2] in ("export", "import", "status", "push", "pull"):
+            sync_action = sys.argv[2]
+            del sys.argv[2]
+
     parser = argparse.ArgumentParser(
         prog="omnicache",
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats", "reset-circuit", "version"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")
+    parser.add_argument("--dir", type=str, default=None, help="Target workspace directory for warm or sync")
+    parser.add_argument("--ref", type=str, default="HEAD", help="Git reference for warm (default: HEAD)")
+    parser.add_argument("--max-files", type=int, default=200, help="Maximum number of files to warm (default: 200)")
+    parser.add_argument("--action", type=str, default=sync_action, choices=["export", "import", "status", "push", "pull"], help="Sync action (export, import, status, push, pull)")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Output file path for sync export")
+    parser.add_argument("-i", "--input", type=str, default=None, help="Input file path for sync import")
+    parser.add_argument("--workspace", type=str, default="default", help="Workspace fingerprint for sync")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose HTTP request logging")
 
     args = parser.parse_args()
@@ -481,6 +596,18 @@ def main():
     elif args.command == "version":
         print(f"omnicache {config.VERSION}")
         sys.exit(0)
+    elif args.command == "warm":
+        run_warm(workspace_dir=args.dir, ref=args.ref, max_files=args.max_files)
+        sys.exit(0)
+    elif args.command == "sync":
+        run_sync(
+            action=args.action or sync_action,
+            output_path=args.output,
+            input_path=args.input,
+            workspace_dir=args.dir,
+            workspace_fingerprint=args.workspace
+        )
+        sys.exit(0)
 
     port = args.port
     host = args.host
@@ -494,5 +621,7 @@ def main():
     
     uvicorn.run(app, host=host, port=port, access_log=access_log, log_level=log_level)
 
+
 if __name__ == "__main__":
     main()
+

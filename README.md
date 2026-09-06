@@ -132,6 +132,11 @@ print(response.choices[0].message.content)
   * Deduplicates concurrent in-flight requests for identical prompts, forwarding only one upstream call.
 * **Horizontal Scaling with Redis:**
   * Connect to Redis (`REDIS_URL="redis://127.0.0.1:6379/0"`) for shared team memory and multi-worker clusters.
+* **Configurable Business Tool Policies & Mutation Guard:**
+  * Define per-tool dynamic TTLs (`tool_policies_records`), auto-detect idempotent prefixes (`read`, `view`, `get`, `query`, `check`), and strictly block non-idempotent mutation tools (`write`, `delete`, `pay`, `charge`, `execute`).
+* **Multi-Agent Workspace Sync & CI/CD Cache Warming:**
+  * Pre-warm workspace repository structures, files, git status, and diffs during CI/CD before coding agent loops run.
+  * Export, import, and sync cache snapshots across team members and multi-agent sessions via portable JSON archives or Redis.
 * **Explainability Headers:**
   * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
@@ -145,6 +150,16 @@ omnicache doctor
 
 # Run high-speed micro-benchmarks on your machine
 omnicache benchmark
+
+# Pre-warm repository cache for Claude Code or agent sessions
+omnicache warm --dir . --max-files 100
+
+# Multi-agent team sync: export, import, push, pull, or check sync status
+omnicache sync status
+omnicache sync export --output snapshot.json
+omnicache sync import --input snapshot.json
+omnicache sync push   # Push workspace snapshot to shared Redis
+omnicache sync pull   # Pull workspace snapshot from shared Redis
 
 # Print cumulative token and USD savings
 omnicache stats

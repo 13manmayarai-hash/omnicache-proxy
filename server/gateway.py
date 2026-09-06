@@ -23,6 +23,7 @@ from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache
 from core.privacy_shield import privacy_shield
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
+from server.workspace_sync import workspace_warmer, workspace_sync_manager
 from server.cascade_router import cascade_router
 from server.quotas import quota_manager
 from server.singleflight import flight_bus
@@ -1218,6 +1219,142 @@ async def handle_tool_policies(request: Request) -> Response:
     return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
 
 
+async def handle_workspace_warm(request: Request) -> Response:
+    """
+    CI/CD and Developer Workspace Pre-Warming Endpoint.
+    Scans repository files, directory structures, and git commits to warm tool replay cache.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json() if request.method == "POST" else {}
+    except Exception:
+        body = {}
+
+    ws_dir = body.get("workspace_dir") or body.get("dir") or os.getcwd()
+    ws_fp = body.get("workspace_fingerprint", f"{org_id}:default")
+    ref = body.get("ref", "HEAD")
+    max_files = int(body.get("max_files", 200))
+    max_size = int(body.get("max_file_size_kb", 500))
+
+    try:
+        result = workspace_warmer.warm_workspace(
+            workspace_dir=ws_dir,
+            workspace_fingerprint=ws_fp,
+            ref=ref,
+            max_files=max_files,
+            max_file_size_kb=max_size
+        )
+        return JSONResponse(result, headers=cors_headers)
+    except Exception as e:
+        return JSONResponse({"status": "ERROR", "error": str(e)}, status_code=400, headers=cors_headers)
+
+
+async def handle_workspace_sync_export(request: Request) -> Response:
+    """
+    Exports a portable snapshot bundle of active workspace tool executions.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    ws_dir = request.query_params.get("workspace_dir")
+    ws_fp = request.query_params.get("workspace_fingerprint")
+
+    try:
+        bundle = workspace_sync_manager.export_snapshot(
+            workspace_dir=ws_dir,
+            workspace_fingerprint=ws_fp
+        )
+        return JSONResponse(bundle, headers=cors_headers)
+    except Exception as e:
+        return JSONResponse({"status": "ERROR", "error": str(e)}, status_code=500, headers=cors_headers)
+
+
+async def handle_workspace_sync_import(request: Request) -> Response:
+    """
+    Imports an external workspace snapshot bundle into the local tool cache and policy registry.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
+
+    try:
+        result = workspace_sync_manager.import_snapshot(body)
+        return JSONResponse(result, headers=cors_headers)
+    except Exception as e:
+        return JSONResponse({"status": "ERROR", "error": str(e)}, status_code=400, headers=cors_headers)
+
+
+async def handle_workspace_sync_status(request: Request) -> Response:
+    """
+    Returns workspace sync statistics, active tool counts, and token savings potential.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    ws_dir = request.query_params.get("workspace_dir")
+    ws_fp = request.query_params.get("workspace_fingerprint")
+
+    status = workspace_sync_manager.get_sync_status(
+        workspace_dir=ws_dir,
+        workspace_fingerprint=ws_fp
+    )
+    return JSONResponse(status, headers=cors_headers)
+
+
+async def handle_workspace_sync_redis(request: Request) -> Response:
+    """
+    Federates workspace tool cache across nodes via Redis push/pull.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
+
+    action = body.get("action", "push").strip().lower()
+    ws_fp = body.get("workspace_fingerprint", f"{org_id}:default")
+
+    if action == "pull":
+        result = workspace_sync_manager.sync_redis_pull(workspace_fingerprint=ws_fp)
+    else:
+        result = workspace_sync_manager.sync_redis_push(workspace_fingerprint=ws_fp)
+
+    return JSONResponse(result, headers=cors_headers)
+
+
 async def handle_purge(request: Request) -> Response:
     """Protected Cache Purge Endpoint."""
     cors_headers = get_cors_headers(request)
@@ -1308,7 +1445,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.8.0"),
+            "version": getattr(config, "VERSION", "2.9.0"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1453,7 +1590,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.8.0"),
+        "version": getattr(config, "VERSION", "2.9.0"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1475,7 +1612,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.8.0"),
+        "version": getattr(config, "VERSION", "2.9.0"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -1564,7 +1701,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.8.0"),
+            "version": getattr(config, "VERSION", "2.9.0"),
             "status": "connected"
         })
         while True:
@@ -1608,6 +1745,11 @@ routes = [
     Route("/v1/agent/tool_record", handle_tool_replay, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tools/policies", handle_tool_policies, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/agent/tool_policies", handle_tool_policies, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+    Route("/v1/workspace/warm", handle_workspace_warm, methods=["POST", "OPTIONS"]),
+    Route("/v1/workspace/sync/export", handle_workspace_sync_export, methods=["GET", "POST", "OPTIONS"]),
+    Route("/v1/workspace/sync/import", handle_workspace_sync_import, methods=["POST", "OPTIONS"]),
+    Route("/v1/workspace/sync/status", handle_workspace_sync_status, methods=["GET", "OPTIONS"]),
+    Route("/v1/workspace/sync/redis", handle_workspace_sync_redis, methods=["POST", "OPTIONS"]),
     Route("/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),

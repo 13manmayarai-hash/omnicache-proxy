@@ -13,7 +13,8 @@ from typing import Dict, Any, Optional, Tuple, List
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse, Response
-from starlette.routing import Route
+from starlette.routing import Route, WebSocketRoute
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from core.config import config, MODEL_PRICING
 from core.hasher import RequestHasher
@@ -1205,7 +1206,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.7.0"),
+            "version": getattr(config, "VERSION", "2.7.1"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1350,7 +1351,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.7.0"),
+        "version": getattr(config, "VERSION", "2.7.1"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1372,7 +1373,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.7.0"),
+        "version": getattr(config, "VERSION", "2.7.1"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -1440,6 +1441,55 @@ async def handle_mcp(request: Request) -> Response:
     return JSONResponse(res, headers=cors_headers)
 
 
+async def handle_ws_http(request: Request) -> Response:
+    """HTTP fallback for /ws endpoint (e.g. status check or handshake probe)."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    return JSONResponse({
+        "status": "ok",
+        "service": "OmniCache AI Proxy",
+        "version": getattr(config, "VERSION", "2.7.1"),
+        "websocket": "/ws",
+        "message": "WebSocket gateway operational. Connect with ws:// or wss://"
+    }, headers=cors_headers)
+
+
+async def handle_ws(websocket: WebSocket):
+    """Native WebSocket endpoint for client connections and real-time streaming."""
+    await websocket.accept()
+    try:
+        await websocket.send_json({
+            "type": "connection_established",
+            "service": "omnicache-proxy",
+            "version": getattr(config, "VERSION", "2.7.1"),
+            "status": "connected"
+        })
+        while True:
+            msg = await websocket.receive_text()
+            if msg.strip().lower() == "ping":
+                await websocket.send_text("pong")
+            else:
+                try:
+                    payload = json.loads(msg)
+                    action = payload.get("action", "ping")
+                    if action == "stats":
+                        stats = {
+                            "type": "stats",
+                            "tokens_saved": METRICS_LEDGER["total_tokens_saved"],
+                            "savings_usd": METRICS_LEDGER["total_savings_usd"],
+                            "agent_tools_recorded": METRICS_LEDGER["agent_tool_recorded_count"],
+                            "agent_tokens_compacted": METRICS_LEDGER["agent_tool_compacted_tokens"]
+                        }
+                        await websocket.send_json(stats)
+                    else:
+                        await websocket.send_json({"type": "ack", "status": "ok"})
+                except Exception:
+                    await websocket.send_text("ack")
+    except (WebSocketDisconnect, Exception):
+        pass
+
+
 # =====================================================================
 # Starlette Application Routing
 # =====================================================================
@@ -1465,6 +1515,8 @@ routes = [
     Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "POST", "OPTIONS"]),
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
+    Route("/ws", handle_ws_http, methods=["GET", "POST", "OPTIONS"]),
+    WebSocketRoute("/ws", handle_ws),
     Route("/{rest_of_path:path}", handle_catchall, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 ]
 

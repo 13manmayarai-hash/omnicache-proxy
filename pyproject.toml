@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.7.0"
+version = "2.7.1"
 description = "Local acceleration sidecar and Git-aware tool replayer for AI coding agents (Claude Code, Cursor, Aider)."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -22,7 +22,8 @@ dependencies = [
     "starlette>=0.37.0",
     "uvicorn>=0.29.0",
     "httpx>=0.27.0",
-    "redis>=5.0.0"
+    "redis>=5.0.0",
+    "websockets>=12.0"
 ]
 
 [project.optional-dependencies]

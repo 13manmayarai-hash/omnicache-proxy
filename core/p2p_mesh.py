@@ -415,7 +415,7 @@ class P2PMesh:
             return {
                 "node_id": self.node_id,
                 "endpoint": self.endpoint,
-                "version": getattr(config, "VERSION", "3.0.0-rc1"),
+                "version": getattr(config, "VERSION", "3.0.1"),
                 "lamport_clock": self._lamport_clock,
                 "vector_clock": dict(self._vector_clock),
                 "tombstones": [t.to_dict() for t in recent_t[:max_tombstones]],
@@ -608,7 +608,7 @@ class P2PMesh:
                 "mesh_enabled": getattr(config, "MESH_ENABLED", True),
                 "node_id": self.node_id,
                 "endpoint": self.endpoint,
-                "version": getattr(config, "VERSION", "3.0.0-rc1"),
+                "version": getattr(config, "VERSION", "3.0.1"),
                 "lamport_clock": self._lamport_clock,
                 "vector_clock": dict(self._vector_clock),
                 "peer_summary": {

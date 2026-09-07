@@ -79,7 +79,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "3.0.0-rc1"
+    VERSION: str = "3.0.1"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -194,6 +194,11 @@ class ProxyConfig:
     MESH_SYNC_INTERVAL_SECONDS: float = float(os.getenv("OMNICACHE_MESH_SYNC_INTERVAL", "10.0"))
     MESH_HEARTBEAT_TIMEOUT_SECONDS: float = float(os.getenv("OMNICACHE_MESH_HEARTBEAT_TIMEOUT", "30.0"))
     MESH_MAX_TOMBSTONES: int = int(os.getenv("OMNICACHE_MESH_MAX_TOMBSTONES", "10000"))
+
+    # Hardware-Accelerated Local Quantized Embedder (v3.0.1)
+    QUANTIZED_EMBEDDER_ENABLED: bool = os.getenv("OMNICACHE_QUANTIZED_EMBEDDER_ENABLED", "true").lower() in ("true", "1")
+    QUANTIZED_EMBEDDER_DIMS: int = int(os.getenv("OMNICACHE_QUANTIZED_EMBEDDER_DIMS", "256"))
+    QUANTIZED_EMBEDDER_BITS: int = int(os.getenv("OMNICACHE_QUANTIZED_EMBEDDER_BITS", "8"))
 
 
 def validate_startup_security_invariants(host: str = None):

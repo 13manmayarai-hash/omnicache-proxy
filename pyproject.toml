@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "3.0.0-rc1"
-description = "Local acceleration sidecar, distributed P2P edge mesh sync, multi-agent swarm delegation bus, Git-aware tool replayer, and cost arbiter for AI agents."
+version = "3.0.1"
+description = "Local acceleration sidecar, hardware-accelerated quantized embedder, distributed P2P edge mesh sync, multi-agent swarm delegation bus, Git-aware tool replayer, and cost arbiter for AI agents."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

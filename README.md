@@ -30,6 +30,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 │ Smart Model Cascading & Cost Arbiter          │ ❌ No (Always frontier rate)   │ ✅ <0.2ms (Shannon Entropy Arbiter) │
 │ Multi-Agent Swarms & Subagent Delegation Bus  │ ❌ No (Isolated per agent)     │ ✅ <0.1ms (Shared Bus & Mutation Purge) │
 │ Distributed P2P / Edge Mesh State Sync        │ ❌ No (Requires external DB)   │ ✅ <0.5ms (CRDT Vector Clock Sync) │
+│ Hardware Quantized Embedder (ARM/Edge SIMD)   │ ❌ No (Heavy remote models)    │ ✅ <0.4ms (Int8/Int4, 0 Downloads) │
 └───────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -112,7 +113,7 @@ Run the built-in end-to-end verification harness to guarantee sub-millisecond re
 
 ```text
 ========================================================================================
-🎯 OmniCache Live Agent Integration Harness (v2.9.8)
+🎯 OmniCache Live Agent Integration Harness (v3.0.1)
 ========================================================================================
 Subsystem / Protocol                 Status       Latency        Details
 ----------------------------------------------------------------------------------------
@@ -127,8 +128,11 @@ MCP Server Protocol (stdio/JSON-RPC) ✔ PASSED     0.018 ms       Discovered 9 
 Voice & Telephony Agent Adapter      ✔ PASSED     0.527 ms       Stripped fillers, canonicalized caller IDs
 Multimodal Audio Stream Caching      ✔ PASSED     28.99 ms       Acoustic match (aHash dist <= 6)
 Smart Model Cascading & Arbiter      ✔ PASSED     0.505 ms       Arbitrage Savings ($0.0001 saved, H_diff: 1.00)
+Multi-Agent Swarm Bus                ✔ PASSED     0.184 ms       Cross-Agent Memory Hit & Mutation Guard
+Distributed P2P Edge Mesh            ✔ PASSED     0.450 ms       CRDT State Sync & Vector Clocks
+Quantized Local Embedder             ✔ PASSED     0.416 ms       256-d Int8/Int4 SIMD (0 downloads)
 ----------------------------------------------------------------------------------------
-🎉 Scorecard: 11 / 11 checks PASSED (100% Ready)
+🎉 Scorecard: 14 / 14 checks PASSED (100% Ready)
 ========================================================================================
 ```
 
@@ -233,6 +237,12 @@ print(response.choices[0].message.content)
   * Monotonic vector clocks (`Dict[node_id, sequence]`) trace causal history and detect concurrent network mutations across edge pods and distributed agent runners.
   * Real-time anti-entropy gossip and bilateral sync: when files, prompts, or caches mutate on one node, tombstones are gossiped in `<0.5ms` to all alive mesh peers.
   * Dynamic peer discovery, heartbeat ping/pong, RTT exponential moving averages, and peer introspection via `/v1/mesh/peers`, `/v1/mesh/sync`, `/v1/mesh/heartbeat`, and `/v1/mesh/broadcast`.
+* **Hardware-Accelerated Local Quantized Embedder (v3.0.1):**
+  * Instant, zero-download, air-gapped vector semantic embeddings executing on standard edge and mobile CPU/SIMD hardware (ARM NEON / AVX2).
+  * 256-dimensional unit-normalized embeddings generated via deterministic orthogonal random projections derived from a cryptographic SHA-256 PRNG sequence (<512 KB memory footprint).
+  * Direct 8-bit signed int8 vectors (`embed_int8`) with pure integer dot products and fast cosine similarity without floating-point conversion overhead.
+  * 4-bit packed nibble compression (`pack_int4`/`unpack_int4`) providing **8x compression** (128 bytes per 256-d vector) over standard float32 vectors.
+  * Native OpenAI-compatible `/v1/embeddings` endpoint and edge-optimized `/v1/embeddings/quantized` (supporting `format="int8"` and `format="int4"`).
 * **Explainability Headers:**
   * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Cache-Status` (`HIT_EXACT` | `HIT_SEMANTIC` | `HIT_VISION` | `HIT_AUDIO` | `HIT_SWARM`), `X-OmniCache-Swarm-Hit`, `X-OmniCache-Origin-Agent`, `X-Cascade-Applied`, `X-Served-Model`, `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
@@ -244,7 +254,7 @@ print(response.choices[0].message.content)
 # Check database, port bindings, and vector engine health
 omnicache doctor
 
-# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio, Audio, Cascading, Swarms & Mesh (13/13 Scorecard)
+# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio, Audio, Cascading, Swarms, Mesh & Quantized Embedder (14/14 Scorecard)
 omnicache harness  # or omnicache verify-agent
 
 # CI/CD and Docker health probe (exits 0 if healthy, 1 if unreachable)

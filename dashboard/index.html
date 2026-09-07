@@ -49,8 +49,8 @@
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v3.0.0-rc1 ACTIVE</span></h1>
-          <p style="font-size: 0.75rem; color: #94a3b8;">P2P Edge Mesh Sync • Multi-Agent Swarm Bus • Radix Multi-Turn • Model Cascade • Prometheus Export</p>
+          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v3.0.1 ACTIVE</span></h1>
+          <p style="font-size: 0.75rem; color: #94a3b8;">Quantized Local Embedder • P2P Edge Mesh Sync • Multi-Agent Swarm Bus • Radix Multi-Turn • Model Cascade</p>
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
@@ -777,6 +777,10 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         badgeColor = '#f59e0b';
         badgeLabel = '🔀 CASCADED';
         detail = `${d.requested_model} ➔ ${d.routed_model} (${d.tier}, comp: ${d.complexity})`;
+      } else if (t === 'quantized_embeddings_generated' || t === 'quantized_embed') {
+        badgeColor = '#8b5cf6';
+        badgeLabel = '⚡ QUANT EMBED';
+        detail = `${d.count || 1} text(s), ${d.dimensions || 256}d int8 (${d.duration_ms || 0.4}ms)`;
       } else {
         detail = JSON.stringify(d);
       }

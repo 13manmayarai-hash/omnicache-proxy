@@ -27,6 +27,7 @@ from core.privacy_shield import privacy_shield
 from core.telephony_filter import telephony_filter
 from core.swarm_bus import swarm_bus
 from core.p2p_mesh import mesh_bus, CRDTTombstone
+from core.quantized_embedder import quantized_embedder
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
 from server.workspace_sync import workspace_warmer, workspace_sync_manager
 from server.cascade_router import cascade_router
@@ -67,7 +68,8 @@ METRICS_LEDGER = {
     "telephony_tokens_saved": 0,
     "audio_cache_hits": 0,
     "audio_requests_processed": 0,
-    "audio_tokens_saved": 0
+    "audio_tokens_saved": 0,
+    "quantized_embeddings_generated": 0
 }
 
 loaded_entries = snapshot_store.load_into_cache(cache_instance)
@@ -2182,11 +2184,12 @@ async def handle_stats(request: Request) -> Response:
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
             "radix_tree_hits": METRICS_LEDGER["radix_tree_hits"],
             "circuit_breaker": failover_engine.circuit_breaker.get_status(),
-            "recent_upstream_failures": failover_engine.get_recent_failures(10)
+            "recent_upstream_failures": failover_engine.get_recent_failures(10),
+            "quantized_embedder": quantized_embedder.stats()
         },
         "mesh_network": mesh_bus.get_mesh_topology(),
         "system_info": {
-            "version": getattr(config, "VERSION", "3.0.0-rc1"),
+            "version": getattr(config, "VERSION", "3.0.1"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -2385,6 +2388,84 @@ async def handle_mesh_broadcast(request: Request) -> Response:
     }, headers=cors_headers)
 
 
+async def handle_embeddings(request: Request) -> Response:
+    """
+    OpenAI-compatible semantic embeddings endpoint powered by local quantized embedder.
+    Supports single text string or list of text strings with zero external API calls.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": {"message": "Invalid JSON body", "type": "invalid_request_error"}}, status_code=400, headers=cors_headers)
+
+    input_data = body.get("input")
+    if not input_data:
+        return JSONResponse({"error": {"message": "Field 'input' is required", "type": "invalid_request_error"}}, status_code=400, headers=cors_headers)
+
+    model = body.get("model", "omnicache-quantized-256")
+    embed_format = body.get("format", "int8" if request.url.path.endswith("/quantized") else "float")
+    items = [input_data] if isinstance(input_data, str) else list(input_data)
+
+    data = []
+    total_tokens = 0
+    t0 = time.perf_counter()
+
+    for idx, item in enumerate(items):
+        text_str = str(item)
+        if embed_format == "int8":
+            raw_i8 = quantized_embedder.embed_int8(text_str)
+            vec = [(b - 256 if b > 127 else b) for b in raw_i8]
+        elif embed_format == "int4":
+            raw_i8 = quantized_embedder.embed_int8(text_str)
+            vec = list(quantized_embedder.pack_int4(raw_i8))
+        else:
+            vec = quantized_embedder.embed(text_str)
+        tok_est = max(1, len(text_str.split()))
+        total_tokens += tok_est
+        data.append({
+            "object": "embedding",
+            "index": idx,
+            "embedding": vec
+        })
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    METRICS_LEDGER["quantized_embeddings_generated"] += len(items)
+
+    emit_telemetry_event("quantized_embeddings_generated", {
+        "count": len(items),
+        "total_tokens": total_tokens,
+        "elapsed_ms": round(elapsed_ms, 3)
+    })
+
+    resp_dict = {
+        "object": "list",
+        "data": data,
+        "model": model,
+        "usage": {
+            "prompt_tokens": total_tokens,
+            "total_tokens": total_tokens
+        },
+        "quantization": {
+            "hardware_mode": quantized_embedder.hardware_mode,
+            "dimensions": quantized_embedder.dimensions,
+            "bits": 4 if embed_format == "int4" else 8,
+            "compression": "8x" if embed_format == "int4" else ("4x" if embed_format == "int8" else "1x"),
+            "offline": True
+        }
+    }
+    if "format" in body or request.url.path.endswith("/quantized"):
+        resp_dict["format"] = embed_format
+
+    return JSONResponse(resp_dict, headers=cors_headers)
+
+
 async def handle_circuit_reset(request: Request) -> Response:
     """Protected Circuit Breaker Reset Endpoint (Admin Only)."""
     cors_headers = get_cors_headers(request)
@@ -2569,7 +2650,10 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_mesh_sync_packets_received_total {mesh_bus.metrics['sync_packets_received']}",
         "# HELP omnicache_mesh_cross_node_invalidations_total Local cache invalidations applied from mesh peers",
         "# TYPE omnicache_mesh_cross_node_invalidations_total counter",
-        f"omnicache_mesh_cross_node_invalidations_total {mesh_bus.metrics['cross_node_invalidations']}"
+        f"omnicache_mesh_cross_node_invalidations_total {mesh_bus.metrics['cross_node_invalidations']}",
+        "# HELP omnicache_quantized_embeddings_total Total local quantized embeddings generated",
+        "# TYPE omnicache_quantized_embeddings_total counter",
+        f"omnicache_quantized_embeddings_total {quantized_embedder.total_embeddings}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -2578,7 +2662,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "3.0.0-rc1"),
+        "version": getattr(config, "VERSION", "3.0.1"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -2600,7 +2684,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "3.0.0-rc1"),
+        "version": getattr(config, "VERSION", "3.0.1"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -2608,6 +2692,7 @@ async def handle_root(request: Request) -> Response:
             "stats": "/v1/cache/stats",
             "openai_chat": "/v1/chat/completions",
             "anthropic_messages": "/v1/messages",
+            "embeddings": "/v1/embeddings",
             "mesh_peers": "/v1/mesh/peers",
             "mesh_sync": "/v1/mesh/sync",
             "mcp": "/mcp",
@@ -2678,7 +2763,7 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "3.0.0-rc1"),
+        "version": getattr(config, "VERSION", "3.0.1"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
@@ -2692,7 +2777,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "3.0.0-rc1"),
+            "version": getattr(config, "VERSION", "3.0.1"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })
@@ -2740,6 +2825,8 @@ routes = [
     Route("/models", handle_models, methods=["GET", "OPTIONS"]),
     Route("/v1/models", handle_models, methods=["GET", "OPTIONS"]),
     Route("/v1/chat/completions", handle_chat_completions, methods=["POST", "OPTIONS"]),
+    Route("/v1/embeddings", handle_embeddings, methods=["POST", "OPTIONS"]),
+    Route("/v1/embeddings/quantized", handle_embeddings, methods=["POST", "OPTIONS"]),
     Route("/v1/messages", handle_anthropic_messages, methods=["POST", "GET", "OPTIONS"]),
     Route("/v1/messages/count_tokens", handle_anthropic_count_tokens, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tool_replay", handle_tool_replay, methods=["POST", "OPTIONS"]),

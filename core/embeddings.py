@@ -202,10 +202,13 @@ class ONNXSemanticEmbedder(BaseEmbedder):
 class AutoEmbedder(BaseEmbedder):
     """Factory and dispatcher for active embedding engine based on configuration."""
 
-    def __init__(self):
-        backend = getattr(config, "EMBEDDER_BACKEND", "auto")
-        if backend == "onnx":
+    def __init__(self, backend: Optional[str] = None, dimensions: Optional[int] = None):
+        self.backend = (backend or getattr(config, "EMBEDDER_BACKEND", "auto")).strip().lower()
+        if self.backend == "onnx":
             self.engine = ONNXSemanticEmbedder()
+        elif self.backend in ("quantized", "int8", "simd", "local"):
+            from core.quantized_embedder import quantized_embedder
+            self.engine = quantized_embedder
         else:
             self.engine = FastHashEmbedder()
 

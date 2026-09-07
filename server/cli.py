@@ -113,6 +113,14 @@ def run_doctor():
     except Exception:
         pass
 
+    # 7. Hardware-Accelerated Local Quantized Embedder
+    try:
+        from core.quantized_embedder import quantized_embedder
+        emb_stats = quantized_embedder.stats()
+        print(f"Quantized Embed: Operational (Mode: {emb_stats['hardware_mode']}, {emb_stats['dimensions']}d int8, 0 external deps)")
+    except Exception:
+        pass
+
     print("\nStatus:         All subsystems operational.\n")
 
 def run_benchmark(iterations: int = 500):
@@ -307,6 +315,12 @@ def run_stats():
         if mesh:
             peer_sum = mesh.get("peer_summary", {})
             print(f"  P2P Edge Mesh Sync:      {peer_sum.get('alive', 0)}/{peer_sum.get('total', 0)} peers alive ({mesh.get('tombstone_count', 0):,} CRDT tombstones, node: {mesh.get('node_id', 'local')})")
+        quant_emb = live_data.get("quantized_embedder", {})
+        if quant_emb or ee.get("quantized_embeddings_generated", 0) > 0:
+            count = quant_emb.get("embeddings_generated", ee.get("quantized_embeddings_generated", 0))
+            mode = quant_emb.get("hardware_mode", "simd_int8")
+            dims = quant_emb.get("dimensions", 256)
+            print(f"  Quantized Embeddings:    {count:,} generated (Mode: {mode}, {dims}d int8, 0 deps)")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
@@ -340,6 +354,8 @@ def run_stats():
         print(f"  Tokens Forwarded:        {METRICS_LEDGER['total_tokens_used']:,}")
         print(f"  Cache Hit Rate:          {stats.get('hit_rate_percentage', 0.0)}%")
         print(f"  Cached Prompts in RAM:   {stats.get('active_l1_exact_entries', 0)} L1 / {stats.get('active_l2_semantic_entries', 0)} L2")
+        if METRICS_LEDGER.get("quantized_embeddings_generated", 0) > 0:
+            print(f"  Quantized Embeddings:    {METRICS_LEDGER['quantized_embeddings_generated']:,} generated (256-d Int8)")
         print(f"  SQLite Store:            {snapshot_store.db_path}")
         print("  (Start daemon with 'omnicache start' or 'omnicache run <agent>' for live telemetry)")
         print("========================================================\n")

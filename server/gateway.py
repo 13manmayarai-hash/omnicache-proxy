@@ -26,6 +26,7 @@ from core.audio_cache import audio_cache
 from core.privacy_shield import privacy_shield
 from core.telephony_filter import telephony_filter
 from core.swarm_bus import swarm_bus
+from core.p2p_mesh import mesh_bus, CRDTTombstone
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
 from server.workspace_sync import workspace_warmer, workspace_sync_manager
 from server.cascade_router import cascade_router
@@ -75,6 +76,32 @@ if loaded_entries > 0:
 
 if hasattr(cache_instance.storage, "client") and cache_instance.storage.client is not None:
     flight_bus.set_redis_client(cache_instance.storage.client)
+
+def _handle_mesh_tombstone(resource_id: str, reason: str, metadata: Dict[str, Any]):
+    """Applies cross-node CRDT tombstone invalidations to local cache fabrics."""
+    emit_telemetry_event("mesh_tombstone_applied", {
+        "resource_id": resource_id,
+        "reason": reason,
+        "metadata": metadata
+    })
+    if resource_id in ("*", "all"):
+        cache_instance.purge()
+        radix_tree.clear()
+        swarm_bus.clear_all()
+    elif resource_id.startswith("tag:"):
+        tag = resource_id[4:]
+        cache_instance.invalidate_tag(tag)
+    elif resource_id.startswith("file:") or "/" in resource_id or "\\" in resource_id:
+        f_path = resource_id[5:] if resource_id.startswith("file:") else resource_id
+        swarm_bus.invalidate_on_mutation(mutated_resource=f_path)
+        tool_cache.invalidate(resource_pattern=f_path)
+    else:
+        for org_dict in list(cache_instance.l1_exact_cache.values()):
+            if isinstance(org_dict, dict):
+                org_dict.pop(resource_id, None)
+        tool_cache.invalidate(resource_pattern=resource_id)
+
+mesh_bus.register_invalidation_handler(_handle_mesh_tombstone)
 
 # Real-Time WebSocket Telemetry Dispatcher & Event Buffer
 ACTIVE_WS_CLIENTS: Set[WebSocket] = set()
@@ -144,8 +171,8 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
     return {
         "Access-Control-Allow-Origin": allow_origin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type, x-api-key, x-admin-key, x-org-id, x-cache-bypass, x-omnicache-model-cascade, x-allow-cascade, x-omnicache-swarm-id, x-omnicache-agent-id, x-omnicache-parent-agent, x-omnicache-subagent-id, x-cache-ttl, x-cache-threshold, x-cache-tag, anthropic-version, anthropic-beta",
-        "Access-Control-Expose-Headers": "X-Cache-Status, X-Cache-Decision-Reason, X-Cache-Similarity, X-Cache-Latency-Ms, X-Cache-TTL-Remaining, X-Cost-Avoided-USD, X-Cost-Saved-USD, X-Tokens-Used, X-Tokens-Saved, X-Tokens-Accounting, X-Requested-Model, X-Served-Model, X-Cascade-Applied, X-Cascade-Reason, X-OmniCache-Swarm-Hit, X-OmniCache-Origin-Agent, X-OmniCache-Swarm-ID"
+        "Access-Control-Allow-Headers": "Authorization, Content-Type, x-api-key, x-admin-key, x-org-id, x-cache-bypass, x-omnicache-model-cascade, x-allow-cascade, x-omnicache-swarm-id, x-omnicache-agent-id, x-omnicache-parent-agent, x-omnicache-subagent-id, x-omnicache-mesh-node, x-omnicache-mesh-clock, x-cache-ttl, x-cache-threshold, x-cache-tag, anthropic-version, anthropic-beta",
+        "Access-Control-Expose-Headers": "X-Cache-Status, X-Cache-Decision-Reason, X-Cache-Similarity, X-Cache-Latency-Ms, X-Cache-TTL-Remaining, X-Cost-Avoided-USD, X-Cost-Saved-USD, X-Tokens-Used, X-Tokens-Saved, X-Tokens-Accounting, X-Requested-Model, X-Served-Model, X-Cascade-Applied, X-Cascade-Reason, X-OmniCache-Swarm-Hit, X-OmniCache-Origin-Agent, X-OmniCache-Swarm-ID, X-OmniCache-Mesh-Node, X-OmniCache-Mesh-Clock"
     }
 
 
@@ -1652,6 +1679,12 @@ async def handle_tool_replay(request: Request) -> Response:
         if swarm_id:
             invalidated = swarm_bus.invalidate_on_mutation(swarm_id, agent_id, mutated_resource=ws_dir)
             METRICS_LEDGER["swarm_mutations_invalidated"] += invalidated
+        if getattr(config, "MESH_ENABLED", True) and ws_dir:
+            tomb = mesh_bus.record_local_mutation(f"file:{ws_dir}", reason="tool_mutation", metadata={"tool_name": tool_name, "agent_id": agent_id})
+            try:
+                asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
+            except Exception:
+                pass
         return JSONResponse({
             "status": "REJECTED",
             "tool_name": tool_name,
@@ -1718,6 +1751,12 @@ async def handle_tool_replay(request: Request) -> Response:
         if swarm_id:
             invalidated = swarm_bus.invalidate_on_mutation(swarm_id, agent_id, mutated_resource=ws_dir)
             METRICS_LEDGER["swarm_mutations_invalidated"] += invalidated
+        if getattr(config, "MESH_ENABLED", True) and ws_dir:
+            tomb = mesh_bus.record_local_mutation(f"file:{ws_dir}", reason="tool_mutation", metadata={"tool_name": tool_name, "agent_id": agent_id})
+            try:
+                asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
+            except Exception:
+                pass
         return JSONResponse({
             "status": "MISS",
             "tool_name": tool_name,
@@ -2038,6 +2077,13 @@ async def handle_purge(request: Request) -> Response:
     
     in_mem_removed = cache_instance.purge(org_id=req_org)
     db_removed = snapshot_store.purge_all(org_id=req_org)
+
+    if getattr(config, "MESH_ENABLED", True):
+        tomb = mesh_bus.record_local_mutation("*", reason="cache_purge", metadata={"org_id": req_org or "all"})
+        try:
+            asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
+        except Exception:
+            pass
     
     return JSONResponse({
         "status": "success",
@@ -2066,6 +2112,14 @@ async def handle_invalidate_tag(request: Request) -> Response:
 
     removed = cache_instance.invalidate_tag(tag, org_id=req_org)
     db_removed = snapshot_store.delete_by_tag(tag, org_id=req_org)
+
+    if getattr(config, "MESH_ENABLED", True):
+        tomb = mesh_bus.record_local_mutation(f"tag:{tag}", reason="tag_invalidation", metadata={"tag": tag, "org_id": req_org or "all"})
+        try:
+            asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
+        except Exception:
+            pass
+
     return JSONResponse({
         "status": "success",
         "invalidated_tag": tag,
@@ -2130,8 +2184,9 @@ async def handle_stats(request: Request) -> Response:
             "circuit_breaker": failover_engine.circuit_breaker.get_status(),
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
+        "mesh_network": mesh_bus.get_mesh_topology(),
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.9"),
+            "version": getattr(config, "VERSION", "3.0.0-rc1"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -2200,6 +2255,133 @@ async def handle_swarm_delegate(request: Request) -> Response:
         "status": "success",
         "message": f"Delegation recorded: {parent_agent} -> {subagent_id}",
         "node": node
+    }, headers=cors_headers)
+
+
+async def handle_mesh_peers(request: Request) -> Response:
+    """Introspect, register, or remove mesh peers."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    if request.method == "GET":
+        active_only = request.query_params.get("active_only", "false").lower() in ("true", "1")
+        topology = mesh_bus.get_mesh_topology()
+        if active_only:
+            topology["peers"] = [p for p in topology["peers"] if p["status"] == "alive"]
+        return JSONResponse(topology, headers=cors_headers)
+
+    elif request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
+        endpoint = (body.get("endpoint") or "").strip()
+        node_id = (body.get("node_id") or "").strip() or None
+        metadata = body.get("metadata", {})
+        if not endpoint:
+            return JSONResponse({"error": "Field 'endpoint' is required"}, status_code=400, headers=cors_headers)
+        peer = mesh_bus.register_peer(endpoint=endpoint, node_id=node_id, metadata=metadata)
+        emit_telemetry_event("mesh_peer_registered", {
+            "endpoint": endpoint,
+            "node_id": peer.node_id if peer else None
+        })
+        return JSONResponse({
+            "status": "success",
+            "message": f"Peer registered: {endpoint}",
+            "peer": peer.to_dict() if peer else None,
+            "mesh_topology": mesh_bus.get_mesh_topology()
+        }, headers=cors_headers)
+
+    elif request.method == "DELETE":
+        identifier = (request.query_params.get("identifier") or request.query_params.get("endpoint") or request.query_params.get("node_id") or "").strip()
+        if not identifier:
+            return JSONResponse({"error": "Query param 'identifier' or 'endpoint' or 'node_id' required"}, status_code=400, headers=cors_headers)
+        unregistered = mesh_bus.unregister_peer(identifier)
+        return JSONResponse({
+            "status": "success" if unregistered else "not_found",
+            "identifier": identifier,
+            "unregistered": unregistered
+        }, headers=cors_headers)
+
+    return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
+
+
+async def handle_mesh_sync(request: Request) -> Response:
+    """Receives state synchronization packet from a mesh peer."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        packet = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON sync packet"}, status_code=400, headers=cors_headers)
+
+    result = mesh_bus.process_sync_packet(packet)
+    emit_telemetry_event("mesh_sync_processed", {
+        "remote_node_id": packet.get("node_id"),
+        "tombstones_applied": result.get("tombstones_applied", 0),
+        "lamport_clock": result.get("lamport_clock", 0)
+    })
+    return JSONResponse(result, headers=cors_headers)
+
+
+async def handle_mesh_heartbeat(request: Request) -> Response:
+    """Peer ping/pong heartbeat endpoint."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json() if request.method == "POST" else {}
+    except Exception:
+        body = {}
+
+    sender_id = body.get("node_id", "")
+    sender_endpoint = body.get("endpoint", "")
+    sender_clock = body.get("vector_clock", {})
+
+    pong = mesh_bus.process_heartbeat(sender_id, sender_endpoint, sender_clock)
+    return JSONResponse(pong, headers=cors_headers)
+
+
+async def handle_mesh_broadcast(request: Request) -> Response:
+    """Explicitly triggers local mutation recording and peer broadcast."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400, headers=cors_headers)
+
+    resource_id = (body.get("resource_id") or "").strip()
+    reason = (body.get("reason") or "mutation").strip()
+    metadata = body.get("metadata", {})
+    if not resource_id:
+        return JSONResponse({"error": "Field 'resource_id' is required"}, status_code=400, headers=cors_headers)
+
+    tombstone = mesh_bus.record_local_mutation(resource_id, reason=reason, metadata=metadata)
+    synced_peers = await mesh_bus.broadcast_tombstone_async(tombstone)
+
+    return JSONResponse({
+        "status": "success",
+        "tombstone": tombstone.to_dict(),
+        "synced_peers_count": synced_peers
     }, headers=cors_headers)
 
 
@@ -2372,7 +2554,22 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_swarm_tokens_saved_total {METRICS_LEDGER.get('swarm_tokens_saved', 0)}",
         "# HELP omnicache_swarm_mutations_invalidated_total Cross-agent read invalidations triggered by mutations",
         "# TYPE omnicache_swarm_mutations_invalidated_total counter",
-        f"omnicache_swarm_mutations_invalidated_total {METRICS_LEDGER.get('swarm_mutations_invalidated', 0)}"
+        f"omnicache_swarm_mutations_invalidated_total {METRICS_LEDGER.get('swarm_mutations_invalidated', 0)}",
+        "# HELP omnicache_mesh_peers_total Known mesh peers",
+        "# TYPE omnicache_mesh_peers_total gauge",
+        f"omnicache_mesh_peers_total {len(mesh_bus.list_peers())}",
+        "# HELP omnicache_mesh_peers_alive_total Active alive mesh peers",
+        "# TYPE omnicache_mesh_peers_alive_total gauge",
+        f"omnicache_mesh_peers_alive_total {len(mesh_bus.list_peers(active_only=True))}",
+        "# HELP omnicache_mesh_tombstones_total Active CRDT tombstones tracked",
+        "# TYPE omnicache_mesh_tombstones_total gauge",
+        f"omnicache_mesh_tombstones_total {len(mesh_bus._tombstones)}",
+        "# HELP omnicache_mesh_sync_packets_received_total State sync packets received from peers",
+        "# TYPE omnicache_mesh_sync_packets_received_total counter",
+        f"omnicache_mesh_sync_packets_received_total {mesh_bus.metrics['sync_packets_received']}",
+        "# HELP omnicache_mesh_cross_node_invalidations_total Local cache invalidations applied from mesh peers",
+        "# TYPE omnicache_mesh_cross_node_invalidations_total counter",
+        f"omnicache_mesh_cross_node_invalidations_total {mesh_bus.metrics['cross_node_invalidations']}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -2381,7 +2578,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.9"),
+        "version": getattr(config, "VERSION", "3.0.0-rc1"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -2403,7 +2600,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.9"),
+        "version": getattr(config, "VERSION", "3.0.0-rc1"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -2411,6 +2608,8 @@ async def handle_root(request: Request) -> Response:
             "stats": "/v1/cache/stats",
             "openai_chat": "/v1/chat/completions",
             "anthropic_messages": "/v1/messages",
+            "mesh_peers": "/v1/mesh/peers",
+            "mesh_sync": "/v1/mesh/sync",
             "mcp": "/mcp",
             "metrics": "/metrics"
         }
@@ -2479,7 +2678,7 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.9"),
+        "version": getattr(config, "VERSION", "3.0.0-rc1"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
@@ -2493,7 +2692,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.9.9"),
+            "version": getattr(config, "VERSION", "3.0.0-rc1"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })
@@ -2552,6 +2751,10 @@ routes = [
     Route("/v1/swarm/topology", handle_swarm_topology, methods=["GET", "OPTIONS"]),
     Route("/v1/swarm/stats", handle_swarm_stats, methods=["GET", "OPTIONS"]),
     Route("/v1/swarm/delegate", handle_swarm_delegate, methods=["POST", "OPTIONS"]),
+    Route("/v1/mesh/peers", handle_mesh_peers, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+    Route("/v1/mesh/sync", handle_mesh_sync, methods=["POST", "OPTIONS"]),
+    Route("/v1/mesh/heartbeat", handle_mesh_heartbeat, methods=["POST", "GET", "OPTIONS"]),
+    Route("/v1/mesh/broadcast", handle_mesh_broadcast, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/warm", handle_workspace_warm, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/sync/export", handle_workspace_sync_export, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/workspace/sync/import", handle_workspace_sync_import, methods=["POST", "OPTIONS"]),

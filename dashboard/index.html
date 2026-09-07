@@ -49,8 +49,8 @@
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v2.9.9 ACTIVE</span></h1>
-          <p style="font-size: 0.75rem; color: #94a3b8;">Radix Multi-Turn • Agent Tool Accelerator • Model Cascade • Prometheus Export</p>
+          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v3.0.0-rc1 ACTIVE</span></h1>
+          <p style="font-size: 0.75rem; color: #94a3b8;">P2P Edge Mesh Sync • Multi-Agent Swarm Bus • Radix Multi-Turn • Model Cascade • Prometheus Export</p>
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
@@ -761,6 +761,18 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         badgeColor = '#ef4444';
         badgeLabel = '🐝 SWARM PURGE';
         detail = `mutated: ${d.mutated_resource || 'workspace'}`;
+      } else if (t === 'mesh_peer_registered') {
+        badgeColor = '#06b6d4';
+        badgeLabel = '🌐 MESH PEER';
+        detail = `${d.endpoint || ''} (${d.node_id || ''})`;
+      } else if (t === 'mesh_sync_processed') {
+        badgeColor = '#3b82f6';
+        badgeLabel = '🌐 MESH SYNC';
+        detail = `sync from ${d.remote_node_id || 'peer'} (+${d.tombstones_applied || 0} tombstones)`;
+      } else if (t === 'mesh_tombstone_applied') {
+        badgeColor = '#ec4899';
+        badgeLabel = '🌐 TOMBSTONE';
+        detail = `${d.resource_id || ''} (${d.reason || ''})`;
       } else if (t === 'model_cascaded') {
         badgeColor = '#f59e0b';
         badgeLabel = '🔀 CASCADED';

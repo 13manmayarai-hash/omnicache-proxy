@@ -105,6 +105,14 @@ def run_doctor():
                 msg = fail.get("error_message", "")
                 print(f"   [{ts}] {prov} {code}: {msg[:80]}")
 
+    # 6. Distributed P2P Mesh Network
+    try:
+        from core.p2p_mesh import mesh_bus
+        mesh_topo = mesh_bus.get_mesh_topology()
+        print(f"P2P Edge Mesh:  Operational (Node: {mesh_topo['node_id']}, {len(mesh_topo['peers'])} peers registered)")
+    except Exception:
+        pass
+
     print("\nStatus:         All subsystems operational.\n")
 
 def run_benchmark(iterations: int = 500):
@@ -295,6 +303,10 @@ def run_stats():
             print(f"  Model Cascade Savings:   ${cascade_savings:.4f} USD ({cascade_downgrades:,} queries cascaded to economy tier)")
         if ee.get("swarm_cross_agent_hits", 0) > 0 or ee.get("swarm_requests_processed", 0) > 0:
             print(f"  Swarm Cross-Agent Hits:  {ee.get('swarm_cross_agent_hits', 0):,} ({ee.get('swarm_tokens_saved', 0):,} tok saved, {ee.get('swarm_mutations_invalidated', 0):,} mutations purged)")
+        mesh = live_data.get("mesh_network", {})
+        if mesh:
+            peer_sum = mesh.get("peer_summary", {})
+            print(f"  P2P Edge Mesh Sync:      {peer_sum.get('alive', 0)}/{peer_sum.get('total', 0)} peers alive ({mesh.get('tombstone_count', 0):,} CRDT tombstones, node: {mesh.get('node_id', 'local')})")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
@@ -423,6 +435,11 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         md_lines.append(f"| **Voice Telephony Calls** | **{telephony_calls:,} calls** | 🎙️ STT filler normalization & fast-path hits |")
     if audio_hits > 0:
         md_lines.append(f"| **Multimodal Audio Hits** | **{audio_hits:,} hits** | 🎵 Sub-band spectral matching & VAD silence trimming |")
+    mesh_info = live_data.get("mesh_network", {}) if live_data else {}
+    if mesh_info:
+        alive_p = mesh_info.get("peer_summary", {}).get("alive", 0)
+        tombs = mesh_info.get("tombstone_count", 0)
+        md_lines.append(f"| **P2P Edge Mesh Sync** | **{alive_p} peers / {tombs} tombstones** | 🌐 Decentralized CRDT cache state sync |")
     md_lines.extend([
         f"| **OmniCache Engine** | **{daemon_status}** | 🟢 Operational |",
         "",
@@ -1124,6 +1141,31 @@ def run_sync(
         print("")
 
 
+def run_mesh(peers_arg: Optional[str] = None):
+    import json
+    from core.p2p_mesh import mesh_bus
+    if peers_arg:
+        for p in peers_arg.split(","):
+            p = p.strip()
+            if p:
+                mesh_bus.register_peer(p)
+    topo = mesh_bus.get_mesh_topology()
+    print("\n========================================================")
+    print(f"🌐 OmniCache P2P Edge Mesh Topology (v{topo.get('version', config.VERSION)})")
+    print("========================================================")
+    print(f"Node ID:        {topo.get('node_id')}")
+    print(f"Endpoint:       {topo.get('endpoint')}")
+    print(f"Lamport Clock:  {topo.get('lamport_clock')}")
+    print(f"Vector Clock:   {json.dumps(topo.get('vector_clock', {}))}")
+    print(f"CRDT Tombstones:{topo.get('tombstone_count')}")
+    peer_sum = topo.get("peer_summary", {})
+    print(f"Peers:          {peer_sum.get('alive', 0)} alive / {peer_sum.get('total', 0)} registered")
+    for peer in topo.get("peers", []):
+        icon = "🟢" if peer["status"] == "alive" else "🔴"
+        print(f"  {icon} {peer['endpoint']} ({peer['node_id']}) - RTT: {peer['rtt_ms']}ms, last seen: {peer['age_seconds']}s ago")
+    print("========================================================\n")
+
+
 def main():
     # Handle "omnicache run <command> [args...]"
     if len(sys.argv) > 1 and sys.argv[1] == "run":
@@ -1142,7 +1184,7 @@ def main():
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync", "mesh"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal", "cascade", "arbiter", "swarm"], help="Target agent preset for init (default: all)")
@@ -1156,6 +1198,7 @@ def main():
     parser.add_argument("-o", "--output", type=str, default=None, help="Output file path for sync export or ci-summary")
     parser.add_argument("-i", "--input", type=str, default=None, help="Input file path for sync import")
     parser.add_argument("--workspace", type=str, default="default", help="Workspace fingerprint for sync")
+    parser.add_argument("--peers", type=str, default="", help="Comma-separated peer endpoints for P2P edge mesh sync")
     parser.add_argument("--iterations", type=int, default=5, help="Number of benchmark iterations (default: 5)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose debug logging")
 
@@ -1203,6 +1246,9 @@ def main():
             workspace_dir=args.dir,
             workspace_fingerprint=args.workspace
         )
+        sys.exit(0)
+    elif args.command == "mesh":
+        run_mesh(peers_arg=args.peers)
         sys.exit(0)
 
     port = args.port

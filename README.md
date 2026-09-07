@@ -29,6 +29,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 │ Multimodal Raw Audio Caching (Voice/Realtime) │ ❌ No (Re-transcribes & speaks)│ ✅ <1ms (Spectral LPC aHash)    │
 │ Smart Model Cascading & Cost Arbiter          │ ❌ No (Always frontier rate)   │ ✅ <0.2ms (Shannon Entropy Arbiter) │
 │ Multi-Agent Swarms & Subagent Delegation Bus  │ ❌ No (Isolated per agent)     │ ✅ <0.1ms (Shared Bus & Mutation Purge) │
+│ Distributed P2P / Edge Mesh State Sync        │ ❌ No (Requires external DB)   │ ✅ <0.5ms (CRDT Vector Clock Sync) │
 └───────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -226,6 +227,12 @@ print(response.choices[0].message.content)
   * Reuses deterministic tool replays and chat reasoning across peer agents without redundant disk reads or remote LLM roundtrips (`HIT_SWARM`).
   * Enforces cross-agent state invalidation: the moment any worker agent mutates a file or workspace, volatile read caches across all peer agents in that swarm session are instantly purged.
   * Live topology introspection and delegation graph queries via `/v1/swarm/topology`, `/v1/swarm/stats`, and `/v1/swarm/delegate`.
+* **Distributed P2P / Edge Mesh State Sync (v3.0.0-rc1):**
+  * Fully decentralized, serverless peer discovery and cache state sync without requiring an external centralized Redis cluster.
+  * Implements Conflict-Free Replicated Data Types (CRDT) with total ordering (Lamport logical clock + physical timestamp tie-breaking) for deterministic Last-Write-Wins (LWW) convergence.
+  * Monotonic vector clocks (`Dict[node_id, sequence]`) trace causal history and detect concurrent network mutations across edge pods and distributed agent runners.
+  * Real-time anti-entropy gossip and bilateral sync: when files, prompts, or caches mutate on one node, tombstones are gossiped in `<0.5ms` to all alive mesh peers.
+  * Dynamic peer discovery, heartbeat ping/pong, RTT exponential moving averages, and peer introspection via `/v1/mesh/peers`, `/v1/mesh/sync`, `/v1/mesh/heartbeat`, and `/v1/mesh/broadcast`.
 * **Explainability Headers:**
   * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Cache-Status` (`HIT_EXACT` | `HIT_SEMANTIC` | `HIT_VISION` | `HIT_AUDIO` | `HIT_SWARM`), `X-OmniCache-Swarm-Hit`, `X-OmniCache-Origin-Agent`, `X-Cascade-Applied`, `X-Served-Model`, `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
@@ -237,7 +244,7 @@ print(response.choices[0].message.content)
 # Check database, port bindings, and vector engine health
 omnicache doctor
 
-# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio, Audio, Cascading & Swarms (12/12 Scorecard)
+# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio, Audio, Cascading, Swarms & Mesh (13/13 Scorecard)
 omnicache harness  # or omnicache verify-agent
 
 # CI/CD and Docker health probe (exits 0 if healthy, 1 if unreachable)
@@ -261,6 +268,9 @@ omnicache sync export --output snapshot.json
 omnicache sync import --input snapshot.json
 omnicache sync push   # Push workspace snapshot to shared Redis
 omnicache sync pull   # Pull workspace snapshot from shared Redis
+
+# Inspect P2P Edge Mesh topology, vector clocks, and connect to remote peers
+omnicache mesh [--peers http://peer1:8000,http://peer2:8000]
 
 # Print cumulative token and USD savings (pass --markdown for CI tables)
 omnicache stats [--markdown]

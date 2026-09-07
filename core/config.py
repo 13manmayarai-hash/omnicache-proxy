@@ -79,7 +79,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "2.9.9"
+    VERSION: str = "3.0.0-rc1"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -184,6 +184,16 @@ class ProxyConfig:
     SWARM_BUS_ENABLED: bool = os.getenv("OMNICACHE_SWARM_BUS_ENABLED", "true").lower() in ("true", "1")
     SWARM_CACHE_TTL_SECONDS: int = int(os.getenv("OMNICACHE_SWARM_CACHE_TTL_SECONDS", "3600"))
     SWARM_MAX_ENTRIES_PER_SWARM: int = int(os.getenv("OMNICACHE_SWARM_MAX_ENTRIES_PER_SWARM", "1000"))
+
+    # Distributed P2P / Edge Mesh State Sync (v3.0.0-rc1)
+    MESH_ENABLED: bool = os.getenv("OMNICACHE_MESH_ENABLED", "true").lower() in ("true", "1")
+    MESH_NODE_ID: str = os.getenv("OMNICACHE_MESH_NODE_ID", "").strip()
+    MESH_PEERS: List[str] = [
+        p.strip() for p in os.getenv("OMNICACHE_MESH_PEERS", "").split(",") if p.strip()
+    ]
+    MESH_SYNC_INTERVAL_SECONDS: float = float(os.getenv("OMNICACHE_MESH_SYNC_INTERVAL", "10.0"))
+    MESH_HEARTBEAT_TIMEOUT_SECONDS: float = float(os.getenv("OMNICACHE_MESH_HEARTBEAT_TIMEOUT", "30.0"))
+    MESH_MAX_TOMBSTONES: int = int(os.getenv("OMNICACHE_MESH_MAX_TOMBSTONES", "10000"))
 
 
 def validate_startup_security_invariants(host: str = None):

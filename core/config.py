@@ -78,7 +78,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "2.9.5"
+    VERSION: str = "2.9.6"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -160,6 +160,13 @@ class ProxyConfig:
     PRUNE_LOOKBACK_TURNS: int = int(os.getenv("OMNICACHE_PRUNE_LOOKBACK_TURNS", "4"))
     PRUNE_MIN_CHARS: int = int(os.getenv("OMNICACHE_PRUNE_MIN_CHARS", "250"))
     PRUNE_HEAD_TAIL_LINES: int = int(os.getenv("OMNICACHE_PRUNE_HEAD_TAIL_LINES", "5"))
+
+    # Voice & Telephony Agent Adapter
+    VOICE_ADAPTER_ENABLED: bool = os.getenv("OMNICACHE_VOICE_ADAPTER_ENABLED", "true").lower() in ("true", "1")
+    VOICE_STRIP_FILLERS: bool = os.getenv("OMNICACHE_VOICE_STRIP_FILLERS", "true").lower() in ("true", "1")
+    VOICE_CANONICALIZE_METADATA: bool = os.getenv("OMNICACHE_VOICE_CANONICALIZE_METADATA", "true").lower() in ("true", "1")
+    VOICE_MAX_ACTIVE_TURNS: int = int(os.getenv("OMNICACHE_VOICE_MAX_ACTIVE_TURNS", "8"))
+    VOICE_FAST_PATH: bool = os.getenv("OMNICACHE_VOICE_FAST_PATH", "true").lower() in ("true", "1")
 
 
 def validate_startup_security_invariants(host: str = None):

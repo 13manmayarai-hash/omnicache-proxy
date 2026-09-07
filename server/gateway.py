@@ -23,6 +23,7 @@ from core.vector_cache import cache_instance, get_model_family, CacheEntry
 from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache
 from core.privacy_shield import privacy_shield
+from core.telephony_filter import telephony_filter
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
 from server.workspace_sync import workspace_warmer, workspace_sync_manager
 from server.cascade_router import cascade_router
@@ -50,7 +51,10 @@ METRICS_LEDGER = {
     "agent_tool_compacted_tokens": 0,
     "vision_cache_hits": 0,
     "singleflight_coalesced_count": 0,
-    "radix_tree_hits": 0
+    "radix_tree_hits": 0,
+    "telephony_requests_processed": 0,
+    "telephony_fillers_stripped": 0,
+    "telephony_tokens_saved": 0
 }
 
 loaded_entries = snapshot_store.load_into_cache(cache_instance)
@@ -247,6 +251,34 @@ def parse_cascade_opt_in(headers: Any) -> bool:
     return cascade_header in ("allow", "true", "1", "enabled", "yes")
 
 
+def detect_voice_mode(request: Request, payload: Optional[Dict[str, Any]] = None) -> bool:
+    """
+    Detects if an incoming request originates from a conversational voice agent
+    (LiveKit, Twilio Media Streams, Daily, Vapi, Retell, Pipecat, Vocode).
+    """
+    headers = request.headers
+    if headers.get("x-omnicache-voice-mode", "").lower() in ("true", "1"):
+        return True
+    if headers.get("x-omnicache-telephony", "").lower() in ("true", "1", "twilio", "livekit", "vapi", "retell", "daily", "pipecat", "vocode"):
+        return True
+    if headers.get("x-omnicache-agent", "").lower() in ("voice", "telephony", "livekit", "twilio", "phone"):
+        return True
+
+    # Check query parameters
+    qp = request.query_params
+    if qp.get("voice", "").lower() in ("true", "1") or qp.get("telephony", "").lower() in ("true", "1"):
+        return True
+
+    # Check payload attributes
+    if isinstance(payload, dict):
+        if payload.get("voice_mode") is True or payload.get("telephony") is True:
+            return True
+        if str(payload.get("agent", "")).lower() in ("voice", "telephony", "livekit", "twilio", "phone"):
+            return True
+
+    return False
+
+
 # =====================================================================
 # API Endpoints
 # =====================================================================
@@ -290,6 +322,60 @@ async def handle_chat_completions(request: Request) -> Response:
     auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
     if not auth_ok:
         return auth_err
+
+    # Voice / Telephony Agent Adapter (Early Fast-Path & Caller Metadata Canonicalization)
+    is_voice = detect_voice_mode(request, raw_payload)
+    voice_stats = None
+    if is_voice or getattr(config, "VOICE_ADAPTER_ENABLED", True):
+        raw_payload, voice_stats = telephony_filter.process_telephony_payload(raw_payload, is_voice_mode=is_voice)
+        if voice_stats.get("fast_path_reply"):
+            METRICS_LEDGER["telephony_requests_processed"] += 1
+            fast_text = voice_stats["fast_path_reply"]
+            fp_resp = {
+                "id": f"chatcmpl_voice_fp_{int(time.time() * 1000)}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": raw_payload.get("model", "default"),
+                "choices": [{
+                    "index": 0,
+                    "message": {"role": "assistant", "content": fast_text},
+                    "finish_reason": "stop"
+                }],
+                "usage": {
+                    "prompt_tokens": 15,
+                    "completion_tokens": len(fast_text.split()),
+                    "total_tokens": 15 + len(fast_text.split())
+                }
+            }
+            cors_headers["X-Cache-Status"] = "HIT_EXACT"
+            cors_headers["X-Cache-Similarity"] = "1.0000"
+            cors_headers["X-OmniCache-Fast-Path"] = "telephony"
+            cors_headers["X-OmniCache-Voice-Mode"] = "true"
+            emit_telemetry_event("telephony_fast_path", {
+                "protocol": "openai",
+                "model": raw_payload.get("model", "default"),
+                "reply": fast_text,
+                "latency_ms": 0.1
+            })
+            return JSONResponse(fp_resp, headers=cors_headers)
+
+        if voice_stats["fillers_removed"] > 0 or voice_stats["metadata_canonicalized"] > 0 or voice_stats["tokens_saved"] > 0:
+            METRICS_LEDGER["telephony_requests_processed"] += 1
+            METRICS_LEDGER["telephony_fillers_stripped"] += voice_stats["fillers_removed"]
+            METRICS_LEDGER["telephony_tokens_saved"] += voice_stats["tokens_saved"]
+            METRICS_LEDGER["total_tokens_saved"] += voice_stats["tokens_saved"]
+            METRICS_LEDGER["estimated_tokens_saved"] += voice_stats["tokens_saved"]
+            cors_headers["X-OmniCache-Voice-Filtered"] = "true"
+            cors_headers["X-OmniCache-Fillers-Stripped"] = str(voice_stats["fillers_removed"])
+            cors_headers["X-OmniCache-Voice-Tokens-Saved"] = str(voice_stats["tokens_saved"])
+            emit_telemetry_event("telephony_filtered", {
+                "protocol": "openai",
+                "model": raw_payload.get("model", "default"),
+                "fillers_stripped": voice_stats["fillers_removed"],
+                "metadata_canonicalized": voice_stats["metadata_canonicalized"],
+                "tokens_saved": voice_stats["tokens_saved"],
+                "turns_compacted": voice_stats["turns_compacted"]
+            })
 
     payload, pii_token_map, scrubbed_count = privacy_shield.sanitize_payload(raw_payload)
     if scrubbed_count > 0:
@@ -680,6 +766,57 @@ async def handle_anthropic_messages(request: Request) -> Response:
     auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
     if not auth_ok:
         return auth_err
+
+    # Voice / Telephony Agent Adapter (Early Fast-Path & Caller Metadata Canonicalization)
+    is_voice = detect_voice_mode(request, raw_payload)
+    voice_stats = None
+    if is_voice or getattr(config, "VOICE_ADAPTER_ENABLED", True):
+        raw_payload, voice_stats = telephony_filter.process_telephony_payload(raw_payload, is_voice_mode=is_voice)
+        requested_model = raw_payload.get("model", "claude-3-5-sonnet-20241022")
+        if voice_stats.get("fast_path_reply"):
+            METRICS_LEDGER["telephony_requests_processed"] += 1
+            fast_text = voice_stats["fast_path_reply"]
+            fp_resp = {
+                "id": f"msg_voice_fp_{int(time.time() * 1000)}",
+                "type": "message",
+                "role": "assistant",
+                "model": requested_model,
+                "content": [{"type": "text", "text": fast_text}],
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 15,
+                    "output_tokens": len(fast_text.split())
+                }
+            }
+            cors_headers["X-Cache-Status"] = "HIT_EXACT"
+            cors_headers["X-Cache-Similarity"] = "1.0000"
+            cors_headers["X-OmniCache-Fast-Path"] = "telephony"
+            cors_headers["X-OmniCache-Voice-Mode"] = "true"
+            emit_telemetry_event("telephony_fast_path", {
+                "protocol": "anthropic",
+                "model": requested_model,
+                "reply": fast_text,
+                "latency_ms": 0.1
+            })
+            return JSONResponse(fp_resp, headers=cors_headers)
+
+        if voice_stats["fillers_removed"] > 0 or voice_stats["metadata_canonicalized"] > 0 or voice_stats["tokens_saved"] > 0:
+            METRICS_LEDGER["telephony_requests_processed"] += 1
+            METRICS_LEDGER["telephony_fillers_stripped"] += voice_stats["fillers_removed"]
+            METRICS_LEDGER["telephony_tokens_saved"] += voice_stats["tokens_saved"]
+            METRICS_LEDGER["total_tokens_saved"] += voice_stats["tokens_saved"]
+            METRICS_LEDGER["estimated_tokens_saved"] += voice_stats["tokens_saved"]
+            cors_headers["X-OmniCache-Voice-Filtered"] = "true"
+            cors_headers["X-OmniCache-Fillers-Stripped"] = str(voice_stats["fillers_removed"])
+            cors_headers["X-OmniCache-Voice-Tokens-Saved"] = str(voice_stats["tokens_saved"])
+            emit_telemetry_event("telephony_filtered", {
+                "protocol": "anthropic",
+                "model": requested_model,
+                "fillers_stripped": voice_stats["fillers_removed"],
+                "metadata_canonicalized": voice_stats["metadata_canonicalized"],
+                "tokens_saved": voice_stats["tokens_saved"],
+                "turns_compacted": voice_stats["turns_compacted"]
+            })
 
     anthropic_payload, pii_token_map, scrubbed_count = privacy_shield.sanitize_payload(raw_payload)
     if scrubbed_count > 0:
@@ -1539,6 +1676,9 @@ async def handle_stats(request: Request) -> Response:
             "agent_tool_replays": METRICS_LEDGER["agent_tool_hits"],
             "agent_tools_recorded": METRICS_LEDGER.get("agent_tool_recorded_count", 0),
             "agent_tokens_compacted": METRICS_LEDGER.get("agent_tool_compacted_tokens", 0),
+            "telephony_requests": METRICS_LEDGER.get("telephony_requests_processed", 0),
+            "telephony_fillers_stripped": METRICS_LEDGER.get("telephony_fillers_stripped", 0),
+            "telephony_tokens_saved": METRICS_LEDGER.get("telephony_tokens_saved", 0),
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
             "radix_tree_hits": METRICS_LEDGER["radix_tree_hits"],
@@ -1546,7 +1686,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.5"),
+            "version": getattr(config, "VERSION", "2.9.6"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1682,7 +1822,16 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_agent_tool_compacted_tokens {METRICS_LEDGER.get('agent_tool_compacted_tokens', 0)}",
         "# HELP omnicache_agent_tools_recorded_total Unique tool executions indexed",
         "# TYPE omnicache_agent_tools_recorded_total counter",
-        f"omnicache_agent_tools_recorded_total {METRICS_LEDGER.get('agent_tool_recorded_count', 0)}"
+        f"omnicache_agent_tools_recorded_total {METRICS_LEDGER.get('agent_tool_recorded_count', 0)}",
+        "# HELP omnicache_telephony_requests_total Conversational voice agent requests processed",
+        "# TYPE omnicache_telephony_requests_total counter",
+        f"omnicache_telephony_requests_total {METRICS_LEDGER.get('telephony_requests_processed', 0)}",
+        "# HELP omnicache_telephony_fillers_stripped_total Speech-to-text filler tokens normalized",
+        "# TYPE omnicache_telephony_fillers_stripped_total counter",
+        f"omnicache_telephony_fillers_stripped_total {METRICS_LEDGER.get('telephony_fillers_stripped', 0)}",
+        "# HELP omnicache_telephony_tokens_saved_total Prompt tokens saved by voice adapter",
+        "# TYPE omnicache_telephony_tokens_saved_total counter",
+        f"omnicache_telephony_tokens_saved_total {METRICS_LEDGER.get('telephony_tokens_saved', 0)}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -1691,7 +1840,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.5"),
+        "version": getattr(config, "VERSION", "2.9.6"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1713,7 +1862,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.5"),
+        "version": getattr(config, "VERSION", "2.9.6"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -1803,7 +1952,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.9.5"),
+            "version": getattr(config, "VERSION", "2.9.6"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })
@@ -1821,7 +1970,9 @@ async def handle_ws(websocket: WebSocket):
                             "tokens_saved": METRICS_LEDGER["total_tokens_saved"],
                             "savings_usd": METRICS_LEDGER["total_savings_usd"],
                             "agent_tools_recorded": METRICS_LEDGER["agent_tool_recorded_count"],
-                            "agent_tokens_compacted": METRICS_LEDGER["agent_tool_compacted_tokens"]
+                            "agent_tokens_compacted": METRICS_LEDGER["agent_tool_compacted_tokens"],
+                            "telephony_fillers_stripped": METRICS_LEDGER.get("telephony_fillers_stripped", 0),
+                            "telephony_tokens_saved": METRICS_LEDGER.get("telephony_tokens_saved", 0)
                         }
                         await websocket.send_json(stats)
                     elif action == "events":

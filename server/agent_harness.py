@@ -384,6 +384,55 @@ class AgentHarness:
             })
 
         # -------------------------------------------------------------
+        # 9. Voice & Telephony Adapter (STT Normalizer & Metadata Masker)
+        # -------------------------------------------------------------
+        try:
+            from core.telephony_filter import telephony_filter
+            t_sub = time.perf_counter()
+
+            # Test transcript normalization + metadata canonicalization + fast path
+            voice_raw = "uh, yeah, um, [clears throat] I-I want to check my account balance... you know?"
+            sys_prompt = "Caller Phone: +1-415-555-0199, Call SID: CA48f98c89b213456789abcdef01234567, Session: room_voice_774912"
+            test_voice_payload = {
+                "model": "gpt-4o",
+                "messages": [
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user", "content": voice_raw}
+                ]
+            }
+            proc_payload, v_stats = telephony_filter.process_telephony_payload(test_voice_payload, is_voice_mode=True)
+            latency_ms = (time.perf_counter() - t_sub) * 1000
+
+            clean_user = proc_payload["messages"][1]["content"]
+            canon_sys = proc_payload["messages"][0]["content"]
+
+            passed = (
+                v_stats["fillers_removed"] >= 4 and
+                v_stats["metadata_canonicalized"] >= 3 and
+                "<CALL_SID>" in canon_sys and
+                "<CALLER_PHONE>" in canon_sys and
+                "<SESSION_ID>" in canon_sys and
+                "uh" not in clean_user.lower().split() and
+                "um" not in clean_user.lower().split() and
+                clean_user.startswith("Yeah")
+            )
+            results.append({
+                "subsystem": "Voice & Telephony Agent Adapter",
+                "passed": passed,
+                "latency_ms": latency_ms,
+                "details": f"Stripped {v_stats['fillers_removed']} fillers, canonicalized {v_stats['metadata_canonicalized']} caller IDs",
+                "speedup": f"{int(500.0 / max(0.001, latency_ms)):,}x"
+            })
+        except Exception as e:
+            results.append({
+                "subsystem": "Voice & Telephony Agent Adapter",
+                "passed": False,
+                "latency_ms": 0.0,
+                "details": f"Failed: {e}",
+                "speedup": "N/A"
+            })
+
+        # -------------------------------------------------------------
         # Render Formatted ASCII Scorecard
         # -------------------------------------------------------------
         print(f"{'Subsystem / Protocol':<36} {'Status':<12} {'Latency':<14} {'Details'}")
@@ -407,6 +456,7 @@ class AgentHarness:
             print("   • Cursor IDE   (Agent & Composer)")
             print("   • Cline        (VS Code / Cursor Extension)")
             print("   • OpenHands    (Autonomous Agent)")
+            print("   • LiveKit & Twilio (Conversational Voice Agents)")
         else:
             print(f"\033[1;31m⚠️ Scorecard: {passed_count} / {total_count} checks passed. Please review failures above.\033[0m")
         print("========================================================================================\n")

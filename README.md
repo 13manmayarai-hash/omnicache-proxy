@@ -108,7 +108,7 @@ Run the built-in end-to-end verification harness to guarantee sub-millisecond re
 
 ```text
 ========================================================================================
-🎯 OmniCache Live Agent Integration Harness
+🎯 OmniCache Live Agent Integration Harness (v2.9.6)
 ========================================================================================
 Subsystem / Protocol                 Status       Latency        Details
 ----------------------------------------------------------------------------------------
@@ -117,10 +117,12 @@ Cursor & OpenAI SDK Gateway          ✔ PASSED     0.041 ms       Standard /v1/
 L2 FastHash Semantic Vector Engine   ✔ PASSED     0.985 ms       Cosine similarity >= 0.68 threshold
 Agent Tool Replayer (Git-Aware)      ✔ PASSED     0.192 ms       Sub-ms deterministic tool replay
 Mutation Guard Safety Policy         ✔ PASSED     0.015 ms       Blocked mutative tool caching
+Adaptive Context Compactor           ✔ PASSED     0.025 ms       Pruned historical tokens
 Workspace CI/CD Cache Warming        ✔ PASSED     14.20 ms       Indexed files into tool store
 MCP Server Protocol (stdio/JSON-RPC) ✔ PASSED     0.018 ms       Discovered 9 MCP tools
+Voice & Telephony Agent Adapter      ✔ PASSED     0.527 ms       Stripped fillers, canonicalized caller IDs
 ----------------------------------------------------------------------------------------
-🎉 Scorecard: 7 / 7 checks PASSED (100% Ready)
+🎉 Scorecard: 9 / 9 checks PASSED (100% Ready)
 ========================================================================================
 ```
 
@@ -199,6 +201,11 @@ print(response.choices[0].message.content)
 * **Multi-Agent Workspace Sync & CI/CD Cache Warming:**
   * Pre-warm workspace repository structures, files, git status, and diffs during CI/CD before coding agent loops run (`omnicache warm`).
   * Export, import, and sync cache snapshots across team members and multi-agent sessions via portable JSON archives or Redis (`omnicache sync`).
+* **Conversational Voice & Telephony Agent Adapter (v2.9.6):**
+  * Built for real-time calling agents (LiveKit, Twilio Media Streams, Daily, Vapi, Retell, Pipecat).
+  * Automatically strips Speech-to-Text disfluencies and acoustic artifacts ("uh", "um", "err", stutter syllables, `[pause]`, `[clears throat]`).
+  * Canonicalizes dynamic caller session metadata (`<CALL_SID>`, `<CALLER_PHONE>`, `<TIMESTAMP>`, `<SESSION_ID>`) in system prompts to trigger instant prompt cache hits across callers.
+  * Sub-millisecond fast-path intent matching (<0.2ms) for telephony checks ("can you hear me?", "hold on", "repeat that").
 * **Explainability Headers:**
   * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
@@ -210,14 +217,20 @@ print(response.choices[0].message.content)
 # Check database, port bindings, and vector engine health
 omnicache doctor
 
-# Verify agent integration across Claude Code, Cursor, Cline, OpenHands
+# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit & Twilio
 omnicache harness
+
+# CI/CD and Docker health probe (exits 0 if healthy, 1 if unreachable)
+omnicache health
+
+# Generate GitHub Actions CI/CD step summary Markdown report
+omnicache ci-summary
 
 # Run high-speed micro-benchmarks on your machine
 omnicache benchmark [--iterations 500]
 
 # Auto-configure agent presets or show configuration snippets
-omnicache init [--agent {all,claude,cursor,cline,openhands,env}] [--show]
+omnicache init [--agent {all,claude,cursor,cline,openhands,env,voice,livekit,twilio}] [--show]
 
 # Pre-warm repository cache for Claude Code or agent sessions
 omnicache warm --dir . --max-files 200
@@ -229,8 +242,8 @@ omnicache sync import --input snapshot.json
 omnicache sync push   # Push workspace snapshot to shared Redis
 omnicache sync pull   # Pull workspace snapshot from shared Redis
 
-# Print cumulative token and USD savings
-omnicache stats
+# Print cumulative token and USD savings (pass --markdown for CI tables)
+omnicache stats [--markdown]
 ```
 
 ---

@@ -284,6 +284,8 @@ def run_stats():
         print(f"  Exact / Semantic Hits:   {cs.get('exact_hits', 0)} exact / {cs.get('semantic_hits', 0)} semantic")
         print(f"  Agent Tool Replays:      {ee.get('agent_tool_replays', 0):,}")
         print(f"  Context Pruned Tokens:   {ee.get('agent_tokens_compacted', 0):,} tokens")
+        if ee.get("telephony_requests", 0) > 0:
+            print(f"  Voice Telephony Calls:   {ee.get('telephony_requests', 0):,} ({ee.get('telephony_fillers_stripped', 0):,} fillers stripped, {ee.get('telephony_tokens_saved', 0):,} tok saved)")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
@@ -363,6 +365,7 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         semantic_hits = cs.get("semantic_hits", 0)
         tool_replays = ee.get("agent_tool_replays", 0)
         tokens_compacted = ee.get("agent_tokens_compacted", 0)
+        telephony_calls = ee.get("telephony_requests", 0)
         daemon_status = f"Live Daemon (v{ver})"
     else:
         stats = cache_instance.get_stats()
@@ -375,6 +378,7 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         semantic_hits = stats.get("semantic_hits", 0)
         tool_replays = METRICS_LEDGER.get("agent_tool_hits", 0)
         tokens_compacted = METRICS_LEDGER.get("agent_tool_compacted_tokens", 0)
+        telephony_calls = METRICS_LEDGER.get("telephony_requests_processed", 0)
         daemon_status = f"Local Store (v{ver})"
 
     md_lines = [
@@ -389,11 +393,15 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         f"| **Exact / Semantic Hits** | **{exact_hits} exact / {semantic_hits} semantic** | 🧠 Multi-layer acceleration |",
         f"| **Agent Tool Replays** | **{tool_replays:,} replays** | 🚀 Sub-millisecond deterministic cache hits |",
         f"| **Context Tokens Pruned** | **{tokens_compacted:,} tokens** | ✂️ Deep multi-turn agent context compaction |",
+    ]
+    if telephony_calls > 0:
+        md_lines.append(f"| **Voice Telephony Calls** | **{telephony_calls:,} calls** | 🎙️ STT filler normalization & fast-path hits |")
+    md_lines.extend([
         f"| **OmniCache Engine** | **{daemon_status}** | 🟢 Operational |",
         "",
         "> *Report generated automatically by [OmniCache AI Proxy](https://github.com/13manmayarai-hash/omnicache-proxy).* ",
         ""
-    ]
+    ])
     md_content = "\n".join(md_lines)
     print(md_content)
 
@@ -664,6 +672,25 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Shell Environment (~/.omnicache/env.sh) ---\033[0m")
             print(env_sh)
 
+        if clean_agent in ("all", "voice", "livekit", "twilio"):
+            print("\033[1;33m--- Voice & Telephony Agents (LiveKit / Twilio / Vapi) ---\033[0m")
+            print(json.dumps({
+                "omnicache": {
+                    "version": "2.9.6",
+                    "voice_mode": True,
+                    "strip_fillers": True,
+                    "canonicalize_telephony_metadata": True,
+                    "max_active_turns": 8,
+                    "fast_path_intents": True,
+                    "proxy_url": f"http://127.0.0.1:{port}/v1"
+                },
+                "headers": {
+                    "X-OmniCache-Voice-Mode": "true",
+                    "X-OmniCache-Telephony": "livekit"
+                }
+            }, indent=2))
+            print(f'Voice Adapter Header: X-OmniCache-Voice-Mode: true\n')
+
         print("\033[1;36m==========================================================================================\033[0m\n")
         return
 
@@ -789,6 +816,41 @@ def run_init(agent: str = "all", show_only: bool = False):
             with open(env_sh_path, "w", encoding="utf-8") as f:
                 f.write(env_sh)
             configured_items.append(f"Shell Env Helper:       {env_sh_path}")
+        except Exception:
+            pass
+
+    # 6. Voice & Telephony Calling Agents
+    if clean_agent in ("all", "voice", "livekit", "twilio"):
+        voice_path = os.path.join(os.getcwd(), ".omnicache-voice.json")
+        try:
+            with open(voice_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "omnicache": {
+                        "version": "2.9.6",
+                        "voice_mode": True,
+                        "strip_fillers": True,
+                        "canonicalize_telephony_metadata": True,
+                        "max_active_turns": 8,
+                        "fast_path_intents": True,
+                        "proxy_url": f"http://127.0.0.1:{port}/v1"
+                    },
+                    "livekit_adapter": {
+                        "openai_api_base": f"http://127.0.0.1:{port}/v1",
+                        "anthropic_api_base": f"http://127.0.0.1:{port}",
+                        "headers": {
+                            "X-OmniCache-Voice-Mode": "true",
+                            "X-OmniCache-Telephony": "livekit"
+                        }
+                    },
+                    "twilio_media_streams": {
+                        "llm_endpoint": f"http://127.0.0.1:{port}/v1/chat/completions",
+                        "headers": {
+                            "X-OmniCache-Voice-Mode": "true",
+                            "X-OmniCache-Telephony": "twilio"
+                        }
+                    }
+                }, f, indent=2)
+            configured_items.append(f"Voice Telephony Config: {voice_path}")
         except Exception:
             pass
 
@@ -923,7 +985,7 @@ def main():
     parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
-    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env"], help="Target agent preset for init (default: all)")
+    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio"], help="Target agent preset for init (default: all)")
     parser.add_argument("--show", action="store_true", help="Display agent configuration presets without writing to disk")
     parser.add_argument("--markdown", action="store_true", help="Output telemetry metrics formatted as GitHub Flavored Markdown")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")

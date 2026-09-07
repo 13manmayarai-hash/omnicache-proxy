@@ -721,6 +721,14 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         badgeColor = '#34d399';
         badgeLabel = '✂️ PRUNED';
         detail = `-${d.tokens_compacted || 0} prompt tokens`;
+      } else if (t === 'telephony_filtered') {
+        badgeColor = '#06b6d4';
+        badgeLabel = '🎙️ VOICE FILTER';
+        detail = `-${d.fillers_stripped || 0} fillers, +${d.tokens_saved || 0} tok saved`;
+      } else if (t === 'telephony_fast_path') {
+        badgeColor = '#38bdf8';
+        badgeLabel = '⚡ VOICE FAST';
+        detail = `${(d.reply || '').slice(0, 32)}... (<0.2ms)`;
       } else if (t === 'tool_recorded') {
         badgeColor = '#60a5fa';
         badgeLabel = '📥 RECORDED';

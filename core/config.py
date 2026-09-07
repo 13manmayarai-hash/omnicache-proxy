@@ -60,6 +60,7 @@ def get_or_generate_privacy_salt() -> str:
 
 MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
+    "gpt-4o-audio-preview": {"input": 2.50, "output": 10.00, "cached_input": 1.25, "audio_input": 40.00, "audio_output": 80.00},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached_input": 0.075},
     "o1": {"input": 15.00, "output": 60.00, "cached_input": 7.50},
     "o3-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
@@ -78,7 +79,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "2.9.6"
+    VERSION: str = "2.9.7"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -167,6 +168,11 @@ class ProxyConfig:
     VOICE_CANONICALIZE_METADATA: bool = os.getenv("OMNICACHE_VOICE_CANONICALIZE_METADATA", "true").lower() in ("true", "1")
     VOICE_MAX_ACTIVE_TURNS: int = int(os.getenv("OMNICACHE_VOICE_MAX_ACTIVE_TURNS", "8"))
     VOICE_FAST_PATH: bool = os.getenv("OMNICACHE_VOICE_FAST_PATH", "true").lower() in ("true", "1")
+
+    # Multimodal Raw Audio Caching
+    AUDIO_CACHE_ENABLED: bool = os.getenv("OMNICACHE_AUDIO_CACHE_ENABLED", "true").lower() in ("true", "1")
+    AUDIO_MAX_HAMMING_DISTANCE: int = int(os.getenv("OMNICACHE_AUDIO_MAX_HAMMING_DISTANCE", "6"))
+    AUDIO_VAD_ENERGY_THRESHOLD: float = float(os.getenv("OMNICACHE_AUDIO_VAD_ENERGY_THRESHOLD", "0.015"))
 
 
 def validate_startup_security_invariants(host: str = None):

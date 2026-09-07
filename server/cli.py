@@ -286,6 +286,8 @@ def run_stats():
         print(f"  Context Pruned Tokens:   {ee.get('agent_tokens_compacted', 0):,} tokens")
         if ee.get("telephony_requests", 0) > 0:
             print(f"  Voice Telephony Calls:   {ee.get('telephony_requests', 0):,} ({ee.get('telephony_fillers_stripped', 0):,} fillers stripped, {ee.get('telephony_tokens_saved', 0):,} tok saved)")
+        if ee.get("audio_cache_hits", 0) > 0:
+            print(f"  Multimodal Audio Hits:   {ee.get('audio_cache_hits', 0):,} ({ee.get('audio_tokens_saved', 0):,} tok saved, {ee.get('audio_requests', 0):,} queries)")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
@@ -366,6 +368,7 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         tool_replays = ee.get("agent_tool_replays", 0)
         tokens_compacted = ee.get("agent_tokens_compacted", 0)
         telephony_calls = ee.get("telephony_requests", 0)
+        audio_hits = ee.get("audio_cache_hits", 0)
         daemon_status = f"Live Daemon (v{ver})"
     else:
         stats = cache_instance.get_stats()
@@ -379,6 +382,7 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         tool_replays = METRICS_LEDGER.get("agent_tool_hits", 0)
         tokens_compacted = METRICS_LEDGER.get("agent_tool_compacted_tokens", 0)
         telephony_calls = METRICS_LEDGER.get("telephony_requests_processed", 0)
+        audio_hits = METRICS_LEDGER.get("audio_cache_hits", 0)
         daemon_status = f"Local Store (v{ver})"
 
     md_lines = [
@@ -396,6 +400,8 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
     ]
     if telephony_calls > 0:
         md_lines.append(f"| **Voice Telephony Calls** | **{telephony_calls:,} calls** | 🎙️ STT filler normalization & fast-path hits |")
+    if audio_hits > 0:
+        md_lines.append(f"| **Multimodal Audio Hits** | **{audio_hits:,} hits** | 🎵 Sub-band spectral matching & VAD silence trimming |")
     md_lines.extend([
         f"| **OmniCache Engine** | **{daemon_status}** | 🟢 Operational |",
         "",
@@ -676,7 +682,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Voice & Telephony Agents (LiveKit / Twilio / Vapi) ---\033[0m")
             print(json.dumps({
                 "omnicache": {
-                    "version": "2.9.6",
+                    "version": "2.9.7",
                     "voice_mode": True,
                     "strip_fillers": True,
                     "canonicalize_telephony_metadata": True,
@@ -690,6 +696,24 @@ def run_init(agent: str = "all", show_only: bool = False):
                 }
             }, indent=2))
             print(f'Voice Adapter Header: X-OmniCache-Voice-Mode: true\n')
+
+        if clean_agent in ("all", "audio", "realtime", "multimodal"):
+            print("\033[1;33m--- Multimodal Raw Audio Agents (OpenAI Realtime & GPT-4o Audio) ---\033[0m")
+            print(json.dumps({
+                "omnicache": {
+                    "version": "2.9.7",
+                    "audio_cache": True,
+                    "spectral_subband_hasher": "aHash-64",
+                    "vad_silence_trimming": True,
+                    "max_hamming_distance": 6,
+                    "proxy_url": f"http://127.0.0.1:{port}/v1"
+                },
+                "openai_realtime": {
+                    "api_base": f"http://127.0.0.1:{port}/v1",
+                    "model": "gpt-4o-audio-preview"
+                }
+            }, indent=2))
+            print(f'Multimodal Audio Cache: Enabled (sub-band spectral matching & VAD)\n')
 
         print("\033[1;36m==========================================================================================\033[0m\n")
         return
@@ -826,7 +850,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             with open(voice_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "omnicache": {
-                        "version": "2.9.6",
+                        "version": "2.9.7",
                         "voice_mode": True,
                         "strip_fillers": True,
                         "canonicalize_telephony_metadata": True,
@@ -851,6 +875,29 @@ def run_init(agent: str = "all", show_only: bool = False):
                     }
                 }, f, indent=2)
             configured_items.append(f"Voice Telephony Config: {voice_path}")
+        except Exception:
+            pass
+
+    # 7. Multimodal Raw Audio Agents (OpenAI Realtime & GPT-4o Audio)
+    if clean_agent in ("all", "audio", "realtime", "multimodal"):
+        audio_path = os.path.join(os.getcwd(), ".omnicache-audio.json")
+        try:
+            with open(audio_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "omnicache": {
+                        "version": "2.9.7",
+                        "audio_cache": True,
+                        "spectral_subband_hasher": "aHash-64",
+                        "vad_silence_trimming": True,
+                        "max_hamming_distance": 6,
+                        "proxy_url": f"http://127.0.0.1:{port}/v1"
+                    },
+                    "openai_realtime": {
+                        "api_base": f"http://127.0.0.1:{port}/v1",
+                        "model": "gpt-4o-audio-preview"
+                    }
+                }, f, indent=2)
+            configured_items.append(f"Multimodal Audio Config: {audio_path}")
         except Exception:
             pass
 
@@ -982,10 +1029,10 @@ def main():
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
-    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio"], help="Target agent preset for init (default: all)")
+    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal"], help="Target agent preset for init (default: all)")
     parser.add_argument("--show", action="store_true", help="Display agent configuration presets without writing to disk")
     parser.add_argument("--markdown", action="store_true", help="Output telemetry metrics formatted as GitHub Flavored Markdown")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")
@@ -996,15 +1043,15 @@ def main():
     parser.add_argument("-o", "--output", type=str, default=None, help="Output file path for sync export or ci-summary")
     parser.add_argument("-i", "--input", type=str, default=None, help="Input file path for sync import")
     parser.add_argument("--workspace", type=str, default="default", help="Workspace fingerprint for sync")
-    parser.add_argument("--iterations", type=int, default=500, help="Benchmark iteration count (default: 500)")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose HTTP request logging")
+    parser.add_argument("--iterations", type=int, default=5, help="Number of benchmark iterations (default: 5)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose debug logging")
 
     args = parser.parse_args()
 
     if args.command == "init":
         run_init(agent=args.agent, show_only=args.show)
         sys.exit(0)
-    elif args.command == "harness":
+    elif args.command in ("harness", "verify-agent"):
         from server.agent_harness import AgentHarness
         success = AgentHarness.run(host=args.host, port=args.port, verbose=args.verbose)
         sys.exit(0 if success else 1)

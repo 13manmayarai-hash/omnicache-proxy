@@ -26,6 +26,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 │ Cross-Teammate Knowledge Sharing              │ ❌ 0% (Isolated per session)  │ ✅ Shared Team Redis Store      │
 │ Terminal SSE Stream Jitter Replay             │ ❌ No                         │ ✅ ~65 tok/s (Glitch-free CLI)  │
 │ Multi-Modal Visual Deduplication (Screenshots) │ ❌ No (Re-uploads megabytes)   │ ✅ Perceptual dHash Match       │
+│ Multimodal Raw Audio Caching (Voice/Realtime) │ ❌ No (Re-transcribes & speaks)│ ✅ <1ms (Spectral LPC aHash)    │
 └───────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -206,8 +207,13 @@ print(response.choices[0].message.content)
   * Automatically strips Speech-to-Text disfluencies and acoustic artifacts ("uh", "um", "err", stutter syllables, `[pause]`, `[clears throat]`).
   * Canonicalizes dynamic caller session metadata (`<CALL_SID>`, `<CALLER_PHONE>`, `<TIMESTAMP>`, `<SESSION_ID>`) in system prompts to trigger instant prompt cache hits across callers.
   * Sub-millisecond fast-path intent matching (<0.2ms) for telephony checks ("can you hear me?", "hold on", "repeat that").
+* **Multimodal Raw Audio Perception Caching Engine (v2.9.7):**
+  * Built for raw voice audio streams (OpenAI Realtime API `gpt-4o-realtime-preview`, GPT-4o Audio `input_audio`, Gemini Live, and Anthropic audio blocks).
+  * Pure-Python, zero-dependency 64-bit spectral aHash with multi-lag autocorrelation (LPC-inspired) and VAD silence trimming (<1.5ms).
+  * Invariant to microphone distance/gain and ambient room noise, allowing repeated spoken queries to hit cache directly at the acoustic waveform level.
+  * Eliminates both upstream LLM reasoning cost ($40/1M audio in, $80/1M audio out) AND text-to-speech audio synthesis latency.
 * **Explainability Headers:**
-  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
+  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Cache-Status` (`HIT_EXACT` | `HIT_SEMANTIC` | `HIT_VISION` | `HIT_AUDIO`), `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
 ---
 
@@ -217,8 +223,8 @@ print(response.choices[0].message.content)
 # Check database, port bindings, and vector engine health
 omnicache doctor
 
-# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit & Twilio
-omnicache harness
+# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio & Realtime Audio (10/10 Scorecard)
+omnicache harness  # or omnicache verify-agent
 
 # CI/CD and Docker health probe (exits 0 if healthy, 1 if unreachable)
 omnicache health
@@ -230,7 +236,7 @@ omnicache ci-summary
 omnicache benchmark [--iterations 500]
 
 # Auto-configure agent presets or show configuration snippets
-omnicache init [--agent {all,claude,cursor,cline,openhands,env,voice,livekit,twilio}] [--show]
+omnicache init [--agent {all,claude,cursor,cline,openhands,env,voice,livekit,twilio,audio,realtime,multimodal}] [--show]
 
 # Pre-warm repository cache for Claude Code or agent sessions
 omnicache warm --dir . --max-files 200

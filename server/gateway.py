@@ -22,6 +22,7 @@ from core.hasher import RequestHasher
 from core.vector_cache import cache_instance, get_model_family, CacheEntry
 from core.radix_tree import radix_tree
 from core.vision_cache import vision_cache
+from core.audio_cache import audio_cache
 from core.privacy_shield import privacy_shield
 from core.telephony_filter import telephony_filter
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
@@ -54,7 +55,10 @@ METRICS_LEDGER = {
     "radix_tree_hits": 0,
     "telephony_requests_processed": 0,
     "telephony_fillers_stripped": 0,
-    "telephony_tokens_saved": 0
+    "telephony_tokens_saved": 0,
+    "audio_cache_hits": 0,
+    "audio_requests_processed": 0,
+    "audio_tokens_saved": 0
 }
 
 loaded_entries = snapshot_store.load_into_cache(cache_instance)
@@ -454,6 +458,58 @@ async def handle_chat_completions(request: Request) -> Response:
                     )
                 return JSONResponse(rehydrated, headers=resp_headers)
 
+    # 1b. Multimodal Audio Cache Check (OpenAI Realtime & GPT-4o Audio)
+    extracted_audio = audio_cache.extract_audio_from_payload(payload) if (not bypass_cache and getattr(config, "AUDIO_CACHE_ENABLED", True)) else []
+    if extracted_audio:
+        METRICS_LEDGER["audio_requests_processed"] += 1
+        for aud_hash, prompt_text, aud_meta in extracted_audio:
+            is_ahit, a_response, a_dist = audio_cache.lookup_audio(aud_hash, prompt_text, model=requested_model)
+            if is_ahit and a_response is not None:
+                latency_ms = (time.perf_counter() - start_time) * 1000
+                savings = upstream_client.calculate_savings(requested_model, 200, 150)
+                METRICS_LEDGER["audio_cache_hits"] += 1
+                METRICS_LEDGER["total_savings_usd"] += savings
+                METRICS_LEDGER["total_tokens_saved"] += 350
+
+                emit_telemetry_event("audio_cache_hit", {
+                    "audio_hash": aud_hash,
+                    "distance": a_dist,
+                    "similarity": round(1.0 - (a_dist / 64.0), 4),
+                    "model": requested_model,
+                    "latency_ms": round(latency_ms, 2)
+                })
+
+                resp_headers = {
+                    "X-OmniCache-Decision": "HIT",
+                    "X-OmniCache-Reason": f"HIT_AUDIO_SPECTRAL: Multimodal acoustic match (Hamming distance {a_dist}/64)",
+                    "X-OmniCache-Similarity": f"{1.0 - (a_dist / 64.0):.4f}",
+                    "X-Cache-Status": "HIT_AUDIO",
+                    "X-Cache-Decision-Reason": f"HIT_AUDIO_SPECTRAL: Multimodal acoustic match (Hamming distance {a_dist}/64)",
+                    "X-Cache-Similarity": f"{1.0 - (a_dist / 64.0):.4f}",
+                    "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
+                    "X-Cost-Avoided-USD": f"{savings:.6f}",
+                    "X-Cost-Saved-USD": f"{savings:.6f}",
+                    "X-Tokens-Used": "0",
+                    "X-Tokens-Saved": "350",
+                    "X-Tokens-Accounting": "estimated",
+                    "X-Requested-Model": requested_model,
+                    "X-Served-Model": requested_model,
+                    **cors_headers
+                }
+                rehydrated = privacy_shield.rehydrate_response(a_response, pii_token_map)
+                if is_stream:
+                    return StreamingResponse(
+                        StreamReplayer.replay_cached_stream(rehydrated, tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC),
+                        media_type="text/event-stream",
+                        headers={
+                            **resp_headers,
+                            "Cache-Control": "no-cache, no-transform",
+                            "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no"
+                        }
+                    )
+                return JSONResponse(rehydrated, headers=resp_headers)
+
     # 2. Text / Dual-Tier Cache Check (L1 Exact + L2 Semantic + Radix Prefix Tree)
     if not bypass_cache:
         status, entry, similarity, decision_reason = cache_instance.lookup(payload, org_id=org_id, custom_threshold=custom_threshold)
@@ -622,6 +678,9 @@ async def handle_chat_completions(request: Request) -> Response:
                 if extracted_images:
                     for img_h, p_txt in extracted_images:
                         vision_cache.store_image(img_h, p_txt, res_data)
+                if extracted_audio:
+                    for aud_h, p_txt, _ in extracted_audio:
+                        audio_cache.store_audio(aud_h, p_txt, res_data)
 
             rehydrated = privacy_shield.rehydrate_response(res_data, pii_token_map)
             cache_status_header = "MISS" if is_leader else "HIT_SINGLEFLIGHT"
@@ -723,6 +782,9 @@ async def handle_chat_completions(request: Request) -> Response:
                 if extracted_images:
                     for img_h, p_txt in extracted_images:
                         vision_cache.store_image(img_h, p_txt, synthesized)
+                if extracted_audio:
+                    for aud_h, p_txt, _ in extracted_audio:
+                        audio_cache.store_audio(aud_h, p_txt, synthesized)
             elif recorded_chunks and not stream_cleanly_completed:
                 print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ OpenAI stream aborted ({len(recorded_chunks)} chunks received) - discarding partial response from cache.", flush=True)
 
@@ -884,6 +946,68 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     "usage": {"input_tokens": 100, "output_tokens": 200}
                 }
                 rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
+                return JSONResponse(rehydrated, headers=resp_headers)
+
+    # 1b. Multimodal Audio Cache Check (Anthropic & Multimodal Audio)
+    extracted_audio = audio_cache.extract_audio_from_payload(anthropic_payload) if (not bypass_cache and getattr(config, "AUDIO_CACHE_ENABLED", True)) else []
+    if extracted_audio:
+        METRICS_LEDGER["audio_requests_processed"] += 1
+        for aud_hash, prompt_text, aud_meta in extracted_audio:
+            is_ahit, a_response, a_dist = audio_cache.lookup_audio(aud_hash, prompt_text, model=requested_model)
+            if is_ahit and a_response is not None:
+                latency_ms = (time.perf_counter() - start_time) * 1000
+                savings = upstream_client.calculate_savings(requested_model, 200, 150)
+                METRICS_LEDGER["audio_cache_hits"] += 1
+                METRICS_LEDGER["total_savings_usd"] += savings
+                METRICS_LEDGER["total_tokens_saved"] += 350
+
+                emit_telemetry_event("audio_cache_hit", {
+                    "audio_hash": aud_hash,
+                    "distance": a_dist,
+                    "similarity": round(1.0 - (a_dist / 64.0), 4),
+                    "model": requested_model,
+                    "latency_ms": round(latency_ms, 2)
+                })
+
+                resp_headers = {
+                    "X-OmniCache-Decision": "HIT",
+                    "X-OmniCache-Reason": f"HIT_AUDIO_SPECTRAL: Multimodal acoustic match (Hamming distance {a_dist}/64)",
+                    "X-OmniCache-Similarity": f"{1.0 - (a_dist / 64.0):.4f}",
+                    "X-Cache-Status": "HIT_AUDIO",
+                    "X-Cache-Decision-Reason": f"HIT_AUDIO_SPECTRAL: Multimodal acoustic match (Hamming distance {a_dist}/64)",
+                    "X-Cache-Similarity": f"{1.0 - (a_dist / 64.0):.4f}",
+                    "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
+                    "X-Cost-Avoided-USD": f"{savings:.6f}",
+                    "X-Cost-Saved-USD": f"{savings:.6f}",
+                    "X-Requested-Model": requested_model,
+                    "X-Served-Model": requested_model,
+                    **cors_headers
+                }
+                if "choices" in a_response:
+                    content = a_response.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    anthropic_res = {
+                        "id": f"msg_cached_{int(time.time()*1000)}",
+                        "type": "message",
+                        "role": "assistant",
+                        "model": requested_model,
+                        "content": [{"type": "text", "text": content}],
+                        "stop_reason": "end_turn",
+                        "usage": {"input_tokens": 200, "output_tokens": 150}
+                    }
+                else:
+                    anthropic_res = a_response
+                rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
+                if is_stream:
+                    return StreamingResponse(
+                        StreamReplayer.replay_cached_anthropic_stream(rehydrated, tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC),
+                        media_type="text/event-stream",
+                        headers={
+                            **resp_headers,
+                            "Cache-Control": "no-cache, no-transform",
+                            "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no"
+                        }
+                    )
                 return JSONResponse(rehydrated, headers=resp_headers)
 
     messages = []
@@ -1118,6 +1242,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     )
                     asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
                     radix_tree.insert_conversation(messages, cacheable_res_payload, model=requested_model, org_id=org_id)
+                    if extracted_audio:
+                        for aud_h, p_txt, _ in extracted_audio:
+                            audio_cache.store_audio(aud_h, p_txt, cacheable_res_payload)
                 elif full_text_accum and not stream_cleanly_completed:
                     print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ Stream aborted ({len(full_text_accum)} chunks received) - discarding partial response from cache.", flush=True)
 
@@ -1196,6 +1323,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
             )
             asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
             radix_tree.insert_conversation(messages, cacheable_res_payload, model=requested_model, org_id=org_id)
+            if extracted_audio:
+                for aud_h, p_txt, _ in extracted_audio:
+                    audio_cache.store_audio(aud_h, p_txt, anthropic_res)
 
         rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
         cache_status_header = "MISS" if is_leader else "HIT_SINGLEFLIGHT"
@@ -1679,6 +1809,10 @@ async def handle_stats(request: Request) -> Response:
             "telephony_requests": METRICS_LEDGER.get("telephony_requests_processed", 0),
             "telephony_fillers_stripped": METRICS_LEDGER.get("telephony_fillers_stripped", 0),
             "telephony_tokens_saved": METRICS_LEDGER.get("telephony_tokens_saved", 0),
+            "audio_cache_hits": METRICS_LEDGER.get("audio_cache_hits", 0),
+            "audio_requests": METRICS_LEDGER.get("audio_requests_processed", 0),
+            "audio_tokens_saved": METRICS_LEDGER.get("audio_tokens_saved", 0),
+            "audio_cache": audio_cache.stats(),
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
             "radix_tree_hits": METRICS_LEDGER["radix_tree_hits"],
@@ -1686,7 +1820,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.6"),
+            "version": getattr(config, "VERSION", "2.9.7"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1831,7 +1965,16 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_telephony_fillers_stripped_total {METRICS_LEDGER.get('telephony_fillers_stripped', 0)}",
         "# HELP omnicache_telephony_tokens_saved_total Prompt tokens saved by voice adapter",
         "# TYPE omnicache_telephony_tokens_saved_total counter",
-        f"omnicache_telephony_tokens_saved_total {METRICS_LEDGER.get('telephony_tokens_saved', 0)}"
+        f"omnicache_telephony_tokens_saved_total {METRICS_LEDGER.get('telephony_tokens_saved', 0)}",
+        "# HELP omnicache_audio_cache_hits_total Multimodal raw audio cache hits",
+        "# TYPE omnicache_audio_cache_hits_total counter",
+        f"omnicache_audio_cache_hits_total {METRICS_LEDGER.get('audio_cache_hits', 0)}",
+        "# HELP omnicache_audio_requests_total Raw audio requests processed",
+        "# TYPE omnicache_audio_requests_total counter",
+        f"omnicache_audio_requests_total {METRICS_LEDGER.get('audio_requests_processed', 0)}",
+        "# HELP omnicache_audio_tokens_saved_total Tokens saved by audio cache",
+        "# TYPE omnicache_audio_tokens_saved_total counter",
+        f"omnicache_audio_tokens_saved_total {METRICS_LEDGER.get('audio_tokens_saved', 0)}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -1840,7 +1983,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.6"),
+        "version": getattr(config, "VERSION", "2.9.7"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)

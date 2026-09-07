@@ -9,7 +9,8 @@ import time
 import json
 import os
 import asyncio
-from typing import Dict, Any, Optional, Tuple, List
+import collections
+from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse, Response
@@ -58,6 +59,52 @@ if loaded_entries > 0:
 
 if hasattr(cache_instance.storage, "client") and cache_instance.storage.client is not None:
     flight_bus.set_redis_client(cache_instance.storage.client)
+
+# Real-Time WebSocket Telemetry Dispatcher & Event Buffer
+ACTIVE_WS_CLIENTS: Set[WebSocket] = set()
+RECENT_WS_EVENTS: collections.deque = collections.deque(maxlen=100)
+
+
+async def broadcast_ws_event(event_type: str, data: Dict[str, Any]) -> None:
+    """Broadcasts real-time events to all active dashboard / subscriber WebSockets."""
+    now = time.time()
+    time_str = time.strftime("%H:%M:%S", time.localtime(now))
+    event_payload = {
+        "type": "event",
+        "event_type": event_type,
+        "timestamp": now,
+        "time_str": time_str,
+        "data": data
+    }
+    RECENT_WS_EVENTS.append(event_payload)
+    if not ACTIVE_WS_CLIENTS:
+        return
+    dead = set()
+    for ws in list(ACTIVE_WS_CLIENTS):
+        try:
+            await ws.send_json(event_payload)
+        except Exception:
+            dead.add(ws)
+    if dead:
+        ACTIVE_WS_CLIENTS.difference_update(dead)
+
+
+def emit_telemetry_event(event_type: str, data: Dict[str, Any]) -> None:
+    """Thread-safe & async-safe dispatcher for WebSocket telemetry events."""
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(broadcast_ws_event(event_type, data))
+    except RuntimeError:
+        now = time.time()
+        time_str = time.strftime("%H:%M:%S", time.localtime(now))
+        RECENT_WS_EVENTS.append({
+            "type": "event",
+            "event_type": event_type,
+            "timestamp": now,
+            "time_str": time_str,
+            "data": data
+        })
+
 
 
 
@@ -257,6 +304,13 @@ async def handle_chat_completions(request: Request) -> Response:
         savings_usd = upstream_client.calculate_savings(payload.get("model", "default"), compacted_tokens, 0)
         METRICS_LEDGER["total_savings_usd"] += savings_usd
         cors_headers["X-OmniCache-Context-Compacted-Tokens"] = str(compacted_tokens)
+        emit_telemetry_event("context_compacted", {
+            "protocol": "openai",
+            "model": payload.get("model", "default"),
+            "tokens_compacted": compacted_tokens,
+            "savings_usd": round(savings_usd, 6),
+            "tools_recorded": tools_recorded
+        })
     if tools_recorded > 0:
         METRICS_LEDGER["agent_tool_recorded_count"] += tools_recorded
 
@@ -366,6 +420,15 @@ async def handle_chat_completions(request: Request) -> Response:
             METRICS_LEDGER["exact_tokens_saved"] += total_saved_tokens
         else:
             METRICS_LEDGER["estimated_tokens_saved"] += total_saved_tokens
+
+        emit_telemetry_event("cache_hit", {
+            "protocol": "openai",
+            "status": status,
+            "model": pricing_model,
+            "tokens_saved": total_saved_tokens,
+            "savings_usd": round(savings, 6),
+            "latency_ms": round(latency_ms, 2)
+        })
 
         resp_headers = {
             "X-OmniCache-Decision": "HIT",
@@ -632,6 +695,13 @@ async def handle_anthropic_messages(request: Request) -> Response:
         METRICS_LEDGER["total_savings_usd"] += savings_usd
         cors_headers["X-OmniCache-Context-Compacted-Tokens"] = str(compacted_tokens)
         print(f"[OmniCache] 🛠️ In-line tool compaction: pruned {compacted_tokens} redundant tokens from context ({tools_recorded} tools indexed).", flush=True)
+        emit_telemetry_event("context_compacted", {
+            "protocol": "anthropic",
+            "model": anthropic_payload.get("model", "claude-3-5-sonnet-20241022"),
+            "tokens_compacted": compacted_tokens,
+            "savings_usd": round(savings_usd, 6),
+            "tools_recorded": tools_recorded
+        })
     if tools_recorded > 0:
         METRICS_LEDGER["agent_tool_recorded_count"] += tools_recorded
 
@@ -760,6 +830,15 @@ async def handle_anthropic_messages(request: Request) -> Response:
             METRICS_LEDGER["exact_tokens_saved"] += total_saved_tokens
         else:
             METRICS_LEDGER["estimated_tokens_saved"] += total_saved_tokens
+
+        emit_telemetry_event("cache_hit", {
+            "protocol": "anthropic",
+            "status": status,
+            "model": entry.model or requested_model,
+            "tokens_saved": total_saved_tokens,
+            "savings_usd": round(savings, 6),
+            "latency_ms": round(latency_ms, 2)
+        })
 
         resp_headers = {
             "X-OmniCache-Decision": "HIT",
@@ -1086,6 +1165,11 @@ async def handle_tool_replay(request: Request) -> Response:
             workspace_dir=ws_dir
         )
         if not tool_key:
+            emit_telemetry_event("mutation_blocked", {
+                "tool_name": tool_name,
+                "status": "REJECTED",
+                "reason": "Non-cacheable mutation guard"
+            })
             return JSONResponse({
                 "status": "REJECTED",
                 "tool_name": tool_name,
@@ -1094,6 +1178,11 @@ async def handle_tool_replay(request: Request) -> Response:
             }, status_code=200, headers=cors_headers)
 
         effective_ttl = ttl_seconds if ttl_seconds is not None else tool_policy_manager.get_ttl(tool_name)
+        emit_telemetry_event("tool_recorded", {
+            "tool_name": tool_name,
+            "tool_key": tool_key,
+            "ttl_seconds": effective_ttl
+        })
         return JSONResponse({
             "status": "STORED",
             "tool_name": tool_name,
@@ -1114,6 +1203,11 @@ async def handle_tool_replay(request: Request) -> Response:
 
     if is_hit:
         METRICS_LEDGER["agent_tool_hits"] += 1
+        emit_telemetry_event("tool_replay", {
+            "tool_name": tool_name,
+            "status": "HIT",
+            "cached": True
+        })
         return JSONResponse({
             "status": "HIT",
             "tool_name": tool_name,
@@ -1253,6 +1347,11 @@ async def handle_workspace_warm(request: Request) -> Response:
             max_files=max_files,
             max_file_size_kb=max_size
         )
+        emit_telemetry_event("workspace_warmed", {
+            "files_warmed": result.get("files_warmed", 0),
+            "entries_recorded": result.get("entries_recorded", 0),
+            "duration_ms": result.get("duration_ms", 0)
+        })
         return JSONResponse(result, headers=cors_headers)
     except Exception as e:
         return JSONResponse({"status": "ERROR", "error": str(e)}, status_code=400, headers=cors_headers)
@@ -1447,7 +1546,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.3"),
+            "version": getattr(config, "VERSION", "2.9.4"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1592,7 +1691,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.3"),
+        "version": getattr(config, "VERSION", "2.9.4"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1614,7 +1713,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.3"),
+        "version": getattr(config, "VERSION", "2.9.4"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -1690,21 +1789,23 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.7.1"),
+        "version": getattr(config, "VERSION", "2.9.4"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
 
 
 async def handle_ws(websocket: WebSocket):
-    """Native WebSocket endpoint for client connections and real-time streaming."""
+    """Native WebSocket endpoint for client connections, live streaming, and real-time activity ticker."""
     await websocket.accept()
+    ACTIVE_WS_CLIENTS.add(websocket)
     try:
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.9.3"),
-            "status": "connected"
+            "version": getattr(config, "VERSION", "2.9.4"),
+            "status": "connected",
+            "recent_events": list(RECENT_WS_EVENTS)
         })
         while True:
             msg = await websocket.receive_text()
@@ -1723,12 +1824,19 @@ async def handle_ws(websocket: WebSocket):
                             "agent_tokens_compacted": METRICS_LEDGER["agent_tool_compacted_tokens"]
                         }
                         await websocket.send_json(stats)
+                    elif action == "events":
+                        await websocket.send_json({
+                            "type": "events_replay",
+                            "events": list(RECENT_WS_EVENTS)
+                        })
                     else:
                         await websocket.send_json({"type": "ack", "status": "ok"})
                 except Exception:
                     await websocket.send_text("ack")
     except (WebSocketDisconnect, Exception):
         pass
+    finally:
+        ACTIVE_WS_CLIENTS.discard(websocket)
 
 
 # =====================================================================

@@ -49,7 +49,7 @@
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v2.9.3 ACTIVE</span></h1>
+          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v2.9.4 ACTIVE</span></h1>
           <p style="font-size: 0.75rem; color: #94a3b8;">Radix Multi-Turn • Agent Tool Accelerator • Model Cascade • Prometheus Export</p>
         </div>
       </div>
@@ -78,6 +78,12 @@
         <div class="kpi-title">Agent Tool Hits</div>
         <div class="kpi-value text-purple" id="stat-tool-hits">0</div>
         <div style="font-size: 0.7rem; color: #c084fc; margin-top: 0.25rem;">⚡ Claude/Cursor loops</div>
+      </div>
+
+      <div class="card" style="border: 1px solid #0284c7;">
+        <div class="kpi-title">Context Tokens Pruned</div>
+        <div class="kpi-value text-cyan" id="stat-pruned-tok">0</div>
+        <div style="font-size: 0.7rem; color: #38bdf8; margin-top: 0.25rem;">✂️ Deep agent turns</div>
       </div>
 
       <div class="card" style="border: 1px solid #059669;">
@@ -230,6 +236,22 @@
             <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.25rem; max-height: 100px; overflow-y: auto; font-size: 0.7rem; font-family: monospace;">
               <div style="color: #64748b;">Loading policies...</div>
             </div>
+        </div>
+
+        <!-- Live WebSocket Activity Ticker & Pruner Feed -->
+        <div class="card" style="border: 1px solid #3b82f6; box-shadow: 0 0 15px -3px rgba(59, 130, 246, 0.25);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span id="ws-indicator" style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
+              <h2 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #60a5fa;">⚡ Live Event Stream</h2>
+            </div>
+            <div style="display: flex; gap: 0.35rem; align-items: center;">
+              <span id="ws-status-text" style="font-size: 0.65rem; color: #34d399; font-family: monospace;">CONNECTED</span>
+              <button onclick="clearEventFeed()" class="btn" style="background: #1e293b; padding: 0.15rem 0.45rem; font-size: 0.65rem; border-radius: 0.25rem; border: 1px solid #334155;">Clear</button>
+            </div>
+          </div>
+          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 180px; overflow-y: auto; font-size: 0.7rem; font-family: monospace;">
+            <div style="color: #64748b; font-style: italic;">Listening for live cache, tool replay & context pruning events...</div>
           </div>
         </div>
 
@@ -522,6 +544,8 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         document.getElementById('stat-savings').textContent = `$${totalSavedUsd.toFixed(4)}`;
         document.getElementById('stat-tok-saved').textContent = totalTokensSaved.toLocaleString();
         document.getElementById('stat-tool-hits').textContent = toolHits.toLocaleString();
+        const prunedElem = document.getElementById('stat-pruned-tok');
+        if (prunedElem) prunedElem.textContent = (ee.agent_tool_compacted_tokens || 0).toLocaleString();
         document.getElementById('stat-pii-scrubbed').textContent = (ee.privacy_redactions_total || fm.privacy_scrubbed_count || 0).toLocaleString();
         document.getElementById('stat-vision-hits').textContent = visionHits.toLocaleString();
         document.getElementById('stat-hitrate').textContent = `${cs.hit_rate_percentage || data.hit_rate_percentage || 0}%`;
@@ -529,7 +553,7 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         document.getElementById('stat-total-reqs').textContent = total;
 
         // Update Charts
-        updateCharts(totalSavedUsd, totalTokensSaved, exact, semantic, toolHits, visionHits, misses);
+        updateCharts(totalSavedUsd, totalTokensSaved, exact + (ee.agent_tokens_compacted || 0), semantic, toolHits, visionHits, misses);
 
         // Quotas
         const qRes = await fetch('/v1/enterprise/quotas');
@@ -615,8 +639,134 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
       } catch (e) {}
     }
 
+    // --- WebSocket Live Telemetry Engine ---
+    let ws = null;
+    let wsReconnectTimeout = null;
+
+    function initWebSocket() {
+      if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          const ind = document.getElementById('ws-indicator');
+          const txt = document.getElementById('ws-status-text');
+          if (ind) {
+            ind.style.background = '#10b981';
+            ind.style.boxShadow = '0 0 8px #10b981';
+          }
+          if (txt) {
+            txt.textContent = 'CONNECTED';
+            txt.style.color = '#34d399';
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'connection_established' && Array.isArray(msg.recent_events)) {
+              msg.recent_events.forEach(addEventToFeed);
+            } else if (msg.type === 'event') {
+              addEventToFeed(msg);
+              refreshData();
+            }
+          } catch (e) {}
+        };
+
+        ws.onclose = () => {
+          const ind = document.getElementById('ws-indicator');
+          const txt = document.getElementById('ws-status-text');
+          if (ind) {
+            ind.style.background = '#f59e0b';
+            ind.style.boxShadow = '0 0 8px #f59e0b';
+          }
+          if (txt) {
+            txt.textContent = 'RECONNECTING';
+            txt.style.color = '#fbbf24';
+          }
+          wsReconnectTimeout = setTimeout(initWebSocket, 3000);
+        };
+
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+      } catch (e) {
+        wsReconnectTimeout = setTimeout(initWebSocket, 5000);
+      }
+    }
+
+    function addEventToFeed(ev) {
+      const feed = document.getElementById('live-event-feed');
+      if (!feed) return;
+      if (feed.firstElementChild && feed.firstElementChild.style.fontStyle === 'italic') {
+        feed.innerHTML = '';
+      }
+
+      const time = ev.time_str || new Date(ev.timestamp * 1000).toLocaleTimeString([], { hour12: false });
+      const t = ev.event_type;
+      const d = ev.data || {};
+
+      let badgeColor = '#38bdf8';
+      let badgeLabel = (t || 'EVENT').toUpperCase();
+      let detail = '';
+
+      if (t === 'tool_replay' || t === 'tool_hit') {
+        badgeColor = '#c084fc';
+        badgeLabel = '⚡ TOOL HIT';
+        detail = `${d.tool_name || 'tool'} (${d.latency_ms || 0.2}ms)`;
+      } else if (t === 'context_compacted' || t === 'context_pruned') {
+        badgeColor = '#34d399';
+        badgeLabel = '✂️ PRUNED';
+        detail = `-${d.tokens_compacted || 0} prompt tokens`;
+      } else if (t === 'tool_recorded') {
+        badgeColor = '#60a5fa';
+        badgeLabel = '📥 RECORDED';
+        detail = `${d.tool_name || 'tool'} (${d.ttl_seconds || 300}s TTL)`;
+      } else if (t === 'mutation_blocked') {
+        badgeColor = '#fb7185';
+        badgeLabel = '🛡️ BLOCKED';
+        detail = `${d.tool_name || 'mutative_tool'}`;
+      } else if (t === 'cache_hit') {
+        badgeColor = '#10b981';
+        badgeLabel = d.status || 'HIT';
+        detail = `${d.model || ''} +${d.tokens_saved || 0} tok ($${d.savings_usd || '0.00'})`;
+      } else if (t === 'workspace_warmed') {
+        badgeColor = '#f59e0b';
+        badgeLabel = '📁 WARMED';
+        detail = `${d.files_warmed || 0} files in ${d.duration_ms || 0}ms`;
+      } else {
+        detail = JSON.stringify(d);
+      }
+
+      const item = document.createElement('div');
+      item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0.4rem; background: #0f172a; border-radius: 0.3rem; border-left: 3px solid ' + badgeColor + ';';
+      item.innerHTML = `
+        <div style="display: flex; gap: 0.4rem; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span style="color: #64748b; font-size: 0.65rem;">${time}</span>
+          <span style="color: ${badgeColor}; font-weight: 700; font-size: 0.65rem;">${badgeLabel}</span>
+          <span style="color: #cbd5e1; font-size: 0.7rem;">${detail}</span>
+        </div>
+      `;
+
+      feed.insertBefore(item, feed.firstChild);
+      while (feed.children.length > 50) {
+        feed.removeChild(feed.lastChild);
+      }
+    }
+
+    function clearEventFeed() {
+      const feed = document.getElementById('live-event-feed');
+      if (feed) {
+        feed.innerHTML = '<div style="color: #64748b; font-style: italic;">Feed cleared. Waiting for events...</div>';
+      }
+    }
+
     initCharts();
     refreshData();
+    initWebSocket();
     setInterval(refreshData, 3000);
   </script>
 </body>

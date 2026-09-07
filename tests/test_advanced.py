@@ -12,6 +12,7 @@ from server.translator import ProtocolTranslator
 from server.failover import CircuitBreaker, FailoverOrchestrator
 from persistence.snapshot_store import SnapshotStore
 from core.vector_cache import DualTierCache, CacheEntry
+from core.config import config
 from server.gateway import app
 
 class TestAdvancedOmniCache(unittest.TestCase):
@@ -128,7 +129,7 @@ class TestAdvancedOmniCache(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn("OmniCache AI Proxy", resp.text)
         self.assertIn('id="version-badge"', resp.text)
-        self.assertIn("v2.9.5 ACTIVE", resp.text)
+        self.assertIn(f"v{config.VERSION} ACTIVE", resp.text)
         self.assertNotIn("v2.1 ACTIVE", resp.text)
         self.assertIn('id="savingsTimelineChart"', resp.text)
         self.assertIn('id="distributionDoughnutChart"', resp.text)

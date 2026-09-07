@@ -486,6 +486,82 @@ class AgentHarness:
             })
 
         # -------------------------------------------------------------
+        # 11. Smart Model Cascading & Automated Cost Arbiter (Shannon Entropy & Arbitrage)
+        # -------------------------------------------------------------
+        try:
+            from server.cascade_router import cascade_router, compute_shannon_entropy
+            t_sub = time.perf_counter()
+
+            # A. Trivial Query (Formatting / JSON / Uppercase) -> Down-route with opt-in
+            trivial_payload = {
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "json format uppercase this list: apple, banana, cherry"}]
+            }
+            routed_model, tier, comp, was_cascaded, reason = cascade_router.evaluate_route(
+                "gpt-4o", trivial_payload, allow_cascade=True
+            )
+
+            # B. Complex Deep Reasoning Query -> Retain Frontier Model
+            deep_payload = {
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "architect and derive a formal verification proof for distributed deadlock avoidance under concurrency with dynamic programming and algorithm optimization"}]
+            }
+            routed_deep, tier_deep, comp_deep, was_cascaded_deep, reason_deep = cascade_router.evaluate_route(
+                "gpt-4o", deep_payload, allow_cascade=True
+            )
+
+            # C. Guardrail Enforcement -> When allow_cascade=False, NEVER downgrade
+            model_guard, _, _, cascaded_guard, reason_guard = cascade_router.evaluate_route(
+                "gpt-4o", trivial_payload, allow_cascade=False
+            )
+
+            # D. Vendor Affinity -> Claude Sonnet cascades to Claude Haiku
+            claude_payload = {
+                "model": "claude-3-7-sonnet",
+                "messages": [{"role": "user", "content": "fix grammar and spell check: thsi is a test"}]
+            }
+            routed_claude, tier_claude, _, cascaded_claude, _ = cascade_router.evaluate_route(
+                "claude-3-7-sonnet", claude_payload, allow_cascade=True, vendor_affinity="same-vendor"
+            )
+
+            # E. Shannon Entropy verification
+            entropy_repetitive = compute_shannon_entropy("test test test test test test test test")
+            entropy_diverse = compute_shannon_entropy("concurrency deadlock formal verification algorithm optimization proof")
+
+            latency_ms = (time.perf_counter() - t_sub) * 1000
+
+            passed = (
+                was_cascaded is True and
+                routed_model in ("gemini-2.5-flash", "gpt-4o-mini") and
+                comp < 0.35 and
+                was_cascaded_deep is False and
+                routed_deep == "gpt-4o" and
+                comp_deep >= 0.60 and
+                cascaded_guard is False and
+                reason_guard == "cascade_opt_in_disabled" and
+                cascaded_claude is True and
+                "haiku" in routed_claude.lower() and
+                entropy_repetitive < entropy_diverse and
+                cascade_router.arbitrage_savings_usd > 0
+            )
+
+            results.append({
+                "subsystem": "Smart Model Cascading & Arbiter",
+                "passed": passed,
+                "latency_ms": latency_ms,
+                "details": f"Arbitrage Savings (${cascade_router.arbitrage_savings_usd:.4f} saved, H_diff: {entropy_diverse - entropy_repetitive:.2f})",
+                "speedup": f"{int(500.0 / max(0.001, latency_ms)):,}x"
+            })
+        except Exception as e:
+            results.append({
+                "subsystem": "Smart Model Cascading & Arbiter",
+                "passed": False,
+                "latency_ms": 0.0,
+                "details": f"Failed: {e}",
+                "speedup": "N/A"
+            })
+
+        # -------------------------------------------------------------
         # Render Formatted ASCII Scorecard
         # -------------------------------------------------------------
         print(f"{'Subsystem / Protocol':<36} {'Status':<12} {'Latency':<14} {'Details'}")
@@ -511,6 +587,7 @@ class AgentHarness:
             print("   • OpenHands    (Autonomous Agent)")
             print("   • LiveKit & Twilio (Conversational Voice Agents)")
             print("   • OpenAI Realtime & GPT-4o Audio (Multimodal Streams)")
+            print("   • Smart Model Cascading & Cost Arbiter (Autonomous Arbitrage)")
         else:
             print(f"\033[1;31m⚠️ Scorecard: {passed_count} / {total_count} checks passed. Please review failures above.\033[0m")
         print("========================================================================================\n")

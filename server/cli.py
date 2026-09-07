@@ -288,6 +288,11 @@ def run_stats():
             print(f"  Voice Telephony Calls:   {ee.get('telephony_requests', 0):,} ({ee.get('telephony_fillers_stripped', 0):,} fillers stripped, {ee.get('telephony_tokens_saved', 0):,} tok saved)")
         if ee.get("audio_cache_hits", 0) > 0:
             print(f"  Multimodal Audio Hits:   {ee.get('audio_cache_hits', 0):,} ({ee.get('audio_tokens_saved', 0):,} tok saved, {ee.get('audio_requests', 0):,} queries)")
+        cascade_stats = ee.get("cascade_stats", {})
+        cascade_savings = fm.get("arbitrage_savings_usd", 0.0) or cascade_stats.get("arbitrage_savings_usd", 0.0)
+        cascade_downgrades = cascade_stats.get("downgraded_count", 0) or ee.get("cascade_downgrades_total", 0)
+        if cascade_downgrades > 0 or cascade_savings > 0:
+            print(f"  Model Cascade Savings:   ${cascade_savings:.4f} USD ({cascade_downgrades:,} queries cascaded to economy tier)")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
@@ -369,6 +374,9 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         tokens_compacted = ee.get("agent_tokens_compacted", 0)
         telephony_calls = ee.get("telephony_requests", 0)
         audio_hits = ee.get("audio_cache_hits", 0)
+        cascade_stats = ee.get("cascade_stats", {})
+        cascade_savings = fm.get("arbitrage_savings_usd", 0.0) or cascade_stats.get("arbitrage_savings_usd", 0.0)
+        cascade_downgrades = cascade_stats.get("downgraded_count", 0) or ee.get("cascade_downgrades_total", 0)
         daemon_status = f"Live Daemon (v{ver})"
     else:
         stats = cache_instance.get_stats()
@@ -383,6 +391,9 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         tokens_compacted = METRICS_LEDGER.get("agent_tool_compacted_tokens", 0)
         telephony_calls = METRICS_LEDGER.get("telephony_requests_processed", 0)
         audio_hits = METRICS_LEDGER.get("audio_cache_hits", 0)
+        from server.cascade_router import cascade_router
+        cascade_savings = cascade_router.arbitrage_savings_usd
+        cascade_downgrades = cascade_router.downgraded_count
         daemon_status = f"Local Store (v{ver})"
 
     md_lines = [
@@ -398,6 +409,8 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         f"| **Agent Tool Replays** | **{tool_replays:,} replays** | 🚀 Sub-millisecond deterministic cache hits |",
         f"| **Context Tokens Pruned** | **{tokens_compacted:,} tokens** | ✂️ Deep multi-turn agent context compaction |",
     ]
+    if cascade_downgrades > 0 or cascade_savings > 0:
+        md_lines.append(f"| **Model Cascade Savings** | **${cascade_savings:.4f} USD** | 🔀 Smart Shannon entropy downgrade ({cascade_downgrades:,} queries) |")
     if telephony_calls > 0:
         md_lines.append(f"| **Voice Telephony Calls** | **{telephony_calls:,} calls** | 🎙️ STT filler normalization & fast-path hits |")
     if audio_hits > 0:
@@ -682,7 +695,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Voice & Telephony Agents (LiveKit / Twilio / Vapi) ---\033[0m")
             print(json.dumps({
                 "omnicache": {
-                    "version": "2.9.7",
+                    "version": "2.9.8",
                     "voice_mode": True,
                     "strip_fillers": True,
                     "canonicalize_telephony_metadata": True,
@@ -701,7 +714,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Multimodal Raw Audio Agents (OpenAI Realtime & GPT-4o Audio) ---\033[0m")
             print(json.dumps({
                 "omnicache": {
-                    "version": "2.9.7",
+                    "version": "2.9.8",
                     "audio_cache": True,
                     "spectral_subband_hasher": "aHash-64",
                     "vad_silence_trimming": True,
@@ -714,6 +727,27 @@ def run_init(agent: str = "all", show_only: bool = False):
                 }
             }, indent=2))
             print(f'Multimodal Audio Cache: Enabled (sub-band spectral matching & VAD)\n')
+
+        if clean_agent in ("all", "cascade", "arbiter"):
+            print("\033[1;33m--- Smart Model Cascading & Automated Cost Arbiter ---\033[0m")
+            print(json.dumps({
+                "omnicache": {
+                    "version": "2.9.8",
+                    "model_cascading": True,
+                    "policy": "auto",
+                    "shannon_entropy_routing": True,
+                    "threshold_economy": 0.35,
+                    "threshold_balanced": 0.60,
+                    "proxy_url": f"http://127.0.0.1:{port}/v1"
+                },
+                "headers": {
+                    "X-OmniCache-Model-Cascade": "allow"
+                },
+                "env": {
+                    "OMNICACHE_CASCADE_POLICY": "auto"
+                }
+            }, indent=2))
+            print(f'Cascade Opt-In Header: X-OmniCache-Model-Cascade: allow\n')
 
         print("\033[1;36m==========================================================================================\033[0m\n")
         return
@@ -885,7 +919,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             with open(audio_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "omnicache": {
-                        "version": "2.9.7",
+                        "version": "2.9.8",
                         "audio_cache": True,
                         "spectral_subband_hasher": "aHash-64",
                         "vad_silence_trimming": True,
@@ -898,6 +932,29 @@ def run_init(agent: str = "all", show_only: bool = False):
                     }
                 }, f, indent=2)
             configured_items.append(f"Multimodal Audio Config: {audio_path}")
+        except Exception:
+            pass
+
+    # 8. Smart Model Cascading & Automated Cost Arbiter
+    if clean_agent in ("all", "cascade", "arbiter"):
+        cascade_path = os.path.join(os.getcwd(), ".omnicache-cascade.json")
+        try:
+            with open(cascade_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "omnicache": {
+                        "version": "2.9.8",
+                        "model_cascading": True,
+                        "policy": "auto",
+                        "shannon_entropy_routing": True,
+                        "threshold_economy": 0.35,
+                        "threshold_balanced": 0.60,
+                        "proxy_url": f"http://127.0.0.1:{port}/v1"
+                    },
+                    "headers": {
+                        "X-OmniCache-Model-Cascade": "allow"
+                    }
+                }, f, indent=2)
+            configured_items.append(f"Model Cascade Config: {cascade_path}")
         except Exception:
             pass
 
@@ -1032,7 +1089,7 @@ def main():
     parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
-    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal"], help="Target agent preset for init (default: all)")
+    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal", "cascade", "arbiter"], help="Target agent preset for init (default: all)")
     parser.add_argument("--show", action="store_true", help="Display agent configuration presets without writing to disk")
     parser.add_argument("--markdown", action="store_true", help="Output telemetry metrics formatted as GitHub Flavored Markdown")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")

@@ -79,7 +79,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "2.9.7"
+    VERSION: str = "2.9.8"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -173,6 +173,12 @@ class ProxyConfig:
     AUDIO_CACHE_ENABLED: bool = os.getenv("OMNICACHE_AUDIO_CACHE_ENABLED", "true").lower() in ("true", "1")
     AUDIO_MAX_HAMMING_DISTANCE: int = int(os.getenv("OMNICACHE_AUDIO_MAX_HAMMING_DISTANCE", "6"))
     AUDIO_VAD_ENERGY_THRESHOLD: float = float(os.getenv("OMNICACHE_AUDIO_VAD_ENERGY_THRESHOLD", "0.015"))
+
+    # Smart Model Cascade & Automated Cost Arbiter
+    CASCADE_POLICY: str = os.getenv("OMNICACHE_CASCADE_POLICY", "off").lower()
+    CASCADE_THRESHOLD_ECONOMY: float = float(os.getenv("OMNICACHE_CASCADE_THRESHOLD_ECONOMY", "0.35"))
+    CASCADE_THRESHOLD_BALANCED: float = float(os.getenv("OMNICACHE_CASCADE_THRESHOLD_BALANCED", "0.60"))
+    CASCADE_MAX_SPEND_PER_DAY: float = float(os.getenv("OMNICACHE_CASCADE_MAX_SPEND_PER_DAY", "0.0"))
 
 
 def validate_startup_security_invariants(host: str = None):

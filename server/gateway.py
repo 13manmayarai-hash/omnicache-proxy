@@ -46,6 +46,9 @@ METRICS_LEDGER = {
     "exact_tokens_saved": 0,
     "estimated_tokens_saved": 0,
     "arbitrage_savings_usd": 0.0,
+    "cascade_routes_total": 0,
+    "cascade_downgrades_total": 0,
+    "cascade_savings_usd": 0.0,
     "privacy_scrubbed_count": 0,
     "agent_tool_hits": 0,
     "agent_tool_recorded_count": 0,
@@ -247,12 +250,17 @@ def authenticate_admin(request: Request) -> Tuple[bool, Optional[Response], Dict
 
 
 def parse_cascade_opt_in(headers: Any) -> bool:
-    """Evaluates caller opt-in for Speculative Model Cascading. Default False."""
+    """Evaluates caller opt-in for Speculative Model Cascading. Default False unless CASCADE_POLICY is active."""
     cascade_header = (
         headers.get("x-omnicache-model-cascade", "").strip().lower() or
         headers.get("x-allow-cascade", "").strip().lower()
     )
-    return cascade_header in ("allow", "true", "1", "enabled", "yes")
+    if cascade_header in ("deny", "false", "0", "disabled", "no", "off"):
+        return False
+    if cascade_header in ("allow", "true", "1", "enabled", "yes"):
+        return True
+    policy = getattr(config, "CASCADE_POLICY", "off").strip().lower()
+    return policy in ("auto", "budget", "all", "on", "enabled")
 
 
 def detect_voice_mode(request: Request, payload: Optional[Dict[str, Any]] = None) -> bool:
@@ -617,6 +625,19 @@ async def handle_chat_completions(request: Request) -> Response:
         requested_model, payload, allow_cascade=allow_cascade
     )
     payload["model"] = routed_model
+    METRICS_LEDGER["arbitrage_savings_usd"] = cascade_router.arbitrage_savings_usd
+    METRICS_LEDGER["cascade_routes_total"] = cascade_router.total_routed
+    METRICS_LEDGER["cascade_downgrades_total"] = cascade_router.downgraded_count
+    METRICS_LEDGER["cascade_savings_usd"] = cascade_router.arbitrage_savings_usd
+    if was_cascaded:
+        emit_telemetry_event("model_cascaded", {
+            "requested_model": requested_model,
+            "routed_model": routed_model,
+            "tier": route_tier,
+            "complexity": round(complexity, 2),
+            "reason": cascade_reason,
+            "arbitrage_savings_usd": round(cascade_router.arbitrage_savings_usd, 6)
+        })
 
     exact_flight_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
 
@@ -1160,7 +1181,25 @@ async def handle_anthropic_messages(request: Request) -> Response:
             rehydrated = privacy_shield.rehydrate_response(anthropic_response, pii_token_map)
             return JSONResponse(rehydrated, headers=resp_headers)
 
-    # 3. Anthropic Cache MISS -> Forward Upstream
+    # 3. Anthropic Cache MISS -> Evaluate Model Cascade & Forward Upstream
+    routed_model, route_tier, complexity, was_cascaded, cascade_reason = cascade_router.evaluate_route(
+        requested_model, anthropic_payload, allow_cascade=allow_cascade, vendor_affinity="same-vendor"
+    )
+    anthropic_payload["model"] = routed_model
+    METRICS_LEDGER["arbitrage_savings_usd"] = cascade_router.arbitrage_savings_usd
+    METRICS_LEDGER["cascade_routes_total"] = cascade_router.total_routed
+    METRICS_LEDGER["cascade_downgrades_total"] = cascade_router.downgraded_count
+    METRICS_LEDGER["cascade_savings_usd"] = cascade_router.arbitrage_savings_usd
+    if was_cascaded:
+        emit_telemetry_event("model_cascaded", {
+            "requested_model": requested_model,
+            "routed_model": routed_model,
+            "tier": route_tier,
+            "complexity": round(complexity, 2),
+            "reason": cascade_reason,
+            "arbitrage_savings_usd": round(cascade_router.arbitrage_savings_usd, 6)
+        })
+
     req_params = dict(request.query_params) if request.query_params else None
     if "messages" in anthropic_payload and isinstance(anthropic_payload["messages"], list):
         anthropic_payload["messages"] = radix_tree.align_ephemeral_cache_blocks(anthropic_payload["messages"])
@@ -1259,7 +1298,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
             "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
             "X-Tokens-Accounting": "estimated",
             "X-Requested-Model": requested_model,
-            "X-Served-Model": requested_model,
+            "X-Served-Model": routed_model,
+            "X-Cascade-Applied": "true" if was_cascaded else "false",
+            "X-Cascade-Reason": cascade_reason,
             "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
@@ -1345,11 +1386,19 @@ async def handle_anthropic_messages(request: Request) -> Response:
             "X-Tokens-Saved": str(0 if is_leader else tokens_used),
             "X-Tokens-Accounting": "exact",
             "X-Requested-Model": requested_model,
-            "X-Served-Model": requested_model,
+            "X-Served-Model": routed_model,
+            "X-Cascade-Applied": "true" if was_cascaded else "false",
+            "X-Cascade-Reason": cascade_reason,
             **cors_headers
         })
     else:
-        return JSONResponse(anthropic_res, status_code=status_code, headers=cors_headers)
+        return JSONResponse(anthropic_res, status_code=status_code, headers={
+            "X-Requested-Model": requested_model,
+            "X-Served-Model": routed_model,
+            "X-Cascade-Applied": "true" if was_cascaded else "false",
+            "X-Cascade-Reason": cascade_reason,
+            **cors_headers
+        })
 
 
 async def handle_anthropic_count_tokens(request: Request) -> Response:
@@ -1795,6 +1844,7 @@ async def handle_stats(request: Request) -> Response:
         "financial_telemetry": {
             "total_savings_usd": round(METRICS_LEDGER["total_savings_usd"], 6),
             "arbitrage_savings_usd": round(METRICS_LEDGER["arbitrage_savings_usd"], 6),
+            "cascade_savings_usd": round(cascade_router.arbitrage_savings_usd, 6),
             "total_tokens_saved": METRICS_LEDGER["total_tokens_saved"],
             "total_tokens_used": METRICS_LEDGER["total_tokens_used"],
             "exact_tokens_saved": METRICS_LEDGER["exact_tokens_saved"],
@@ -1813,6 +1863,11 @@ async def handle_stats(request: Request) -> Response:
             "audio_requests": METRICS_LEDGER.get("audio_requests_processed", 0),
             "audio_tokens_saved": METRICS_LEDGER.get("audio_tokens_saved", 0),
             "audio_cache": audio_cache.stats(),
+            "cascade_stats": cascade_router.get_stats(),
+            "cascade_routes_total": cascade_router.total_routed,
+            "cascade_downgrades_total": cascade_router.downgraded_count,
+            "cascade_tokens_diverted": cascade_router.tokens_diverted_to_economy,
+            "cascade_policy": getattr(config, "CASCADE_POLICY", "off"),
             "vision_cache_hits": METRICS_LEDGER["vision_cache_hits"],
             "singleflight_coalesced": METRICS_LEDGER["singleflight_coalesced_count"],
             "radix_tree_hits": METRICS_LEDGER["radix_tree_hits"],
@@ -1820,7 +1875,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.7"),
+            "version": getattr(config, "VERSION", "2.9.8"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1974,7 +2029,19 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_audio_requests_total {METRICS_LEDGER.get('audio_requests_processed', 0)}",
         "# HELP omnicache_audio_tokens_saved_total Tokens saved by audio cache",
         "# TYPE omnicache_audio_tokens_saved_total counter",
-        f"omnicache_audio_tokens_saved_total {METRICS_LEDGER.get('audio_tokens_saved', 0)}"
+        f"omnicache_audio_tokens_saved_total {METRICS_LEDGER.get('audio_tokens_saved', 0)}",
+        "# HELP omnicache_cascade_routes_total Total model cascade routing evaluations",
+        "# TYPE omnicache_cascade_routes_total counter",
+        f"omnicache_cascade_routes_total {cascade_router.total_routed}",
+        "# HELP omnicache_cascade_downgrades_total Total queries cascaded to economy models",
+        "# TYPE omnicache_cascade_downgrades_total counter",
+        f"omnicache_cascade_downgrades_total {cascade_router.downgraded_count}",
+        "# HELP omnicache_cascade_arbitrage_savings_usd Total dollar savings from model cascading",
+        "# TYPE omnicache_cascade_arbitrage_savings_usd gauge",
+        f"omnicache_cascade_arbitrage_savings_usd {cascade_router.arbitrage_savings_usd:.6f}",
+        "# HELP omnicache_cascade_tokens_diverted_total Prompt tokens diverted to economy models",
+        "# TYPE omnicache_cascade_tokens_diverted_total counter",
+        f"omnicache_cascade_tokens_diverted_total {cascade_router.tokens_diverted_to_economy}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -1983,7 +2050,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.7"),
+        "version": getattr(config, "VERSION", "2.9.8"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -2005,7 +2072,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.6"),
+        "version": getattr(config, "VERSION", "2.9.8"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -2081,7 +2148,7 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.5"),
+        "version": getattr(config, "VERSION", "2.9.8"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
@@ -2095,7 +2162,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.9.6"),
+            "version": getattr(config, "VERSION", "2.9.8"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })

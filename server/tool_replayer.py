@@ -11,6 +11,7 @@ import os
 import sqlite3
 import subprocess
 from typing import Dict, Any, Optional, Tuple, List
+from core.config import config
 
 # Explicit tool mutation & safety registries
 DEFAULT_MUTATION_PREFIXES = (
@@ -935,6 +936,65 @@ def compact_and_record_agent_tools(
                     anthropic_compacted[(earlier_run["msg_idx"], earlier_run["block_idx"])] = pruned_note
                 else:
                     openai_compacted[earlier_run["msg_idx"]] = pruned_note
+
+    # 2. Adaptive Historical Context Compactor & Token Pruner (Pass 2)
+    enable_pruning = getattr(config, "ENABLE_CONTEXT_PRUNING", True)
+    if enable_pruning:
+        lookback_turns = getattr(config, "PRUNE_LOOKBACK_TURNS", 4)
+        min_chars = getattr(config, "PRUNE_MIN_CHARS", 250)
+        head_tail = getattr(config, "PRUNE_HEAD_TAIL_LINES", 5)
+        cutoff_msg_idx = max(0, len(messages) - lookback_turns)
+
+        # Collect all executed tool runs
+        all_runs: List[Dict[str, Any]] = []
+        for runs in tool_executions_by_sig.values():
+            all_runs.extend(runs)
+
+        for run in all_runs:
+            # Skip if within active recent lookback horizon
+            if run["msg_idx"] >= cutoff_msg_idx:
+                continue
+            # Skip if already compacted by duplicate pass
+            if run["format"] == "anthropic" and (run["msg_idx"], run["block_idx"]) in anthropic_compacted:
+                continue
+            if run["format"] == "openai" and run["msg_idx"] in openai_compacted:
+                continue
+            # Do not prune errors or non-cacheable tools
+            if run.get("is_error"):
+                continue
+            t_name = run.get("tool_name", "")
+            if not tool_policy_manager.is_cacheable(t_name):
+                continue
+
+            orig_output = run["output_text"]
+            if len(orig_output) < min_chars:
+                continue
+
+            lines = orig_output.splitlines()
+            if len(lines) > (head_tail * 2 + 3):
+                head = lines[:head_tail]
+                tail = lines[-head_tail:]
+                pruned_lines = len(lines) - (2 * head_tail)
+                marker = f"\n[⚡ OmniCache Adaptive Pruner: {pruned_lines} intermediate lines safely pruned from historical turn. Full content archived in tool cache.]\n"
+                compacted_text = "\n".join(head) + marker + "\n".join(tail)
+            elif len(orig_output) > 600:
+                head_chars = orig_output[:200]
+                tail_chars = orig_output[-200:]
+                pruned_bytes = len(orig_output) - 400
+                marker = f" ... [⚡ OmniCache Adaptive Pruner: {pruned_bytes} bytes safely pruned from historical turn. Full content archived in tool cache.] ... "
+                compacted_text = head_chars + marker + tail_chars
+            else:
+                continue
+
+            orig_tokens = int(len(orig_output.split()) * 1.3)
+            new_tokens = int(len(compacted_text.split()) * 1.3)
+            saved = max(0, orig_tokens - new_tokens)
+            tokens_compacted += saved
+
+            if run["format"] == "anthropic":
+                anthropic_compacted[(run["msg_idx"], run["block_idx"])] = compacted_text
+            else:
+                openai_compacted[run["msg_idx"]] = compacted_text
 
     if not anthropic_compacted and not openai_compacted:
         return payload, 0, tools_recorded

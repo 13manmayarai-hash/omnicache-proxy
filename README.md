@@ -21,6 +21,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 ├───────────────────────────────────────────────┼───────────────────────────────┼─────────────────────────────────┤
 │ In-Session Prefix Input Token Discount        │ ✅ 90% (Anthropic ephemeral)  │ ✅ Supported (Passthrough)      │
 │ Redundant Disk Tool Replay (git/grep/read)    │ ❌ No (Hits disk & LLM every turn) │ ✅ <0.3ms (Git-state hashed)    │
+│ Context Window Compaction (Deep Agent Loops)  │ ❌ No (Unbounded token growth)│ ✅ Adaptive Head/Tail Pruning   │
 │ Cross-Session Memory (New CLI sessions)       │ ❌ 0% (Expires in 5 minutes)   │ ✅ Persistent (SQLite / Redis)  │
 │ Cross-Teammate Knowledge Sharing              │ ❌ 0% (Isolated per session)  │ ✅ Shared Team Redis Store      │
 │ Terminal SSE Stream Jitter Replay             │ ❌ No                         │ ✅ ~65 tok/s (Glitch-free CLI)  │
@@ -31,6 +32,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 1. **Tool-Call Acceleration:** When Claude Code repeatedly calls `git_status`, `grep_search`, or `read_file`, native caching still runs the tool on disk and pays for the network roundtrip. OmniCache cryptographically hashes your Git working tree state (`HEAD` commit + `git status --porcelain`). If files haven't changed, tool calls return in **`<0.3ms`** with **$0.00** spent. The moment you edit a file, the cache instantly invalidates.
 2. **Persistent Cross-Session & Team Memory:** Native prompt cache is ephemeral (5-minute TTL). OmniCache stores answers in an embedded SQLite WAL database or shared Redis, so opening a new session or having a teammate ask a similar architecture question reuses existing answers.
 3. **Smooth CLI Stream Replaying:** Returning a 4,000-token cached completion instantaneously in 0ms can cause buffer overflows and terminal glitches in interactive CLIs. OmniCache emulates natural token-streaming (~65 tokens/sec with subtle stochastic jitter).
+4. **Adaptive Context Compaction & Token Pruning:** Deep multi-turn agent conversations (15–30+ turns) accumulate bulky file dumps and historical search outputs. OmniCache maintains an active lookback horizon while safely pruning intermediate lines of older tool results (preserving head/tail syntax and full archive in cache), slashing historical prompt tokens by 60–90%.
 
 ---
 

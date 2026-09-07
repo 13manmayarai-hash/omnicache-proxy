@@ -283,6 +283,7 @@ def run_stats():
         print(f"  Cache Hit Rate:          {cs.get('hit_rate_percentage', 0.0)}%")
         print(f"  Exact / Semantic Hits:   {cs.get('exact_hits', 0)} exact / {cs.get('semantic_hits', 0)} semantic")
         print(f"  Agent Tool Replays:      {ee.get('agent_tool_replays', 0):,}")
+        print(f"  Context Pruned Tokens:   {ee.get('agent_tokens_compacted', 0):,} tokens")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")

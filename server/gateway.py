@@ -256,6 +256,7 @@ async def handle_chat_completions(request: Request) -> Response:
         METRICS_LEDGER["estimated_tokens_saved"] += compacted_tokens
         savings_usd = upstream_client.calculate_savings(payload.get("model", "default"), compacted_tokens, 0)
         METRICS_LEDGER["total_savings_usd"] += savings_usd
+        cors_headers["X-OmniCache-Context-Compacted-Tokens"] = str(compacted_tokens)
     if tools_recorded > 0:
         METRICS_LEDGER["agent_tool_recorded_count"] += tools_recorded
 
@@ -629,6 +630,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
         METRICS_LEDGER["estimated_tokens_saved"] += compacted_tokens
         savings_usd = upstream_client.calculate_savings(anthropic_payload.get("model", "claude-3-5-sonnet-20241022"), compacted_tokens, 0)
         METRICS_LEDGER["total_savings_usd"] += savings_usd
+        cors_headers["X-OmniCache-Context-Compacted-Tokens"] = str(compacted_tokens)
         print(f"[OmniCache] 🛠️ In-line tool compaction: pruned {compacted_tokens} redundant tokens from context ({tools_recorded} tools indexed).", flush=True)
     if tools_recorded > 0:
         METRICS_LEDGER["agent_tool_recorded_count"] += tools_recorded
@@ -1445,7 +1447,7 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.2"),
+            "version": getattr(config, "VERSION", "2.9.3"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -1590,7 +1592,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.2"),
+        "version": getattr(config, "VERSION", "2.9.3"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -1612,7 +1614,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.2"),
+        "version": getattr(config, "VERSION", "2.9.3"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -1701,7 +1703,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.9.2"),
+            "version": getattr(config, "VERSION", "2.9.3"),
             "status": "connected"
         })
         while True:

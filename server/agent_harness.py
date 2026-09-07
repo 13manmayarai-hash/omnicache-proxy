@@ -277,7 +277,50 @@ class AgentHarness:
             })
 
         # -------------------------------------------------------------
-        # 6. Workspace CI/CD Pre-Warming Engine
+        # 6. Adaptive Context Compaction & Token Pruner
+        # -------------------------------------------------------------
+        try:
+            from server.tool_replayer import compact_and_record_agent_tools
+            t_sub = time.perf_counter()
+            bulky_content = "\n".join([f"line_{i:02d}: result = {i}" for i in range(1, 30)])
+            prune_payload = {
+                "model": "claude-3-5-sonnet-20241022",
+                "messages": [
+                    {"role": "user", "content": "Fetch data"},
+                    {"role": "assistant", "content": [{"type": "tool_use", "id": "t_prune_01", "name": "read_file", "input": {"path": "test.txt"}}]},
+                    {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t_prune_01", "content": bulky_content}]},
+                    {"role": "assistant", "content": "Turn 4"},
+                    {"role": "user", "content": "Turn 5"},
+                    {"role": "assistant", "content": "Turn 6"},
+                    {"role": "user", "content": "Turn 7"},
+                    {"role": "assistant", "content": "Turn 8"}
+                ]
+            }
+            res_payload, compacted_tokens, _ = compact_and_record_agent_tools(prune_payload)
+            latency_ms = (time.perf_counter() - t_sub) * 1000
+
+            passed = (
+                compacted_tokens > 0 and
+                "⚡ OmniCache Adaptive Pruner" in str(res_payload["messages"][2]["content"])
+            )
+            results.append({
+                "subsystem": "Adaptive Context Compactor",
+                "passed": passed,
+                "latency_ms": latency_ms,
+                "details": f"Pruned {compacted_tokens} tokens from historical turn 2",
+                "speedup": f"Saved {compacted_tokens} tok"
+            })
+        except Exception as e:
+            results.append({
+                "subsystem": "Adaptive Context Compactor",
+                "passed": False,
+                "latency_ms": 0.0,
+                "details": f"Failed: {e}",
+                "speedup": "N/A"
+            })
+
+        # -------------------------------------------------------------
+        # 7. Workspace CI/CD Pre-Warming Engine
         # -------------------------------------------------------------
         try:
             from server.workspace_sync import workspace_warmer
@@ -308,7 +351,7 @@ class AgentHarness:
             })
 
         # -------------------------------------------------------------
-        # 7. Model Context Protocol (MCP) Server Protocol
+        # 8. Model Context Protocol (MCP) Server Protocol
         # -------------------------------------------------------------
         try:
             from mcp.server import process_mcp_jsonrpc

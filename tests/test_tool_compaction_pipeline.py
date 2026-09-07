@@ -199,3 +199,78 @@ def test_end_to_end_gateway_tool_compaction_metrics(client):
     assert ee["agent_tokens_compacted"] > 0
     assert fin["total_tokens_saved"] > 0
     assert fin["total_savings_usd"] > 0.0
+
+
+def test_adaptive_head_tail_historical_pruning():
+    """
+    Verifies that historical bulky tool outputs older than lookback horizon
+    have their intermediate lines pruned, while head/tail lines and recent turns remain intact.
+    """
+    # 30 lines of code
+    bulky_gateway_code = "\n".join([f"line_{i:02d}: def func_{i}(): pass" for i in range(1, 31)])
+    recent_tool_code = "\n".join([f"recent_line_{i}: value = {i}" for i in range(1, 20)])
+
+    # 8-turn conversation
+    payload = {
+        "model": "claude-3-5-sonnet-20241022",
+        "messages": [
+            {"role": "user", "content": "Read gateway file"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "hist_tool_01", "name": "view_file", "input": {"path": "server/gateway.py"}}
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "hist_tool_01", "content": bulky_gateway_code}
+                ]
+            },
+            {"role": "assistant", "content": "I examined the gateway."},
+            {"role": "user", "content": "Now look at config"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "recent_tool_02", "name": "read_file", "input": {"path": "core/config.py"}}
+                ]
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "recent_tool_02", "content": recent_tool_code}
+                ]
+            },
+            {"role": "assistant", "content": "I am ready to write the solution."}
+        ]
+    }
+
+    compacted_payload, tokens_saved, tools_recorded = compact_and_record_agent_tools(payload)
+
+    assert tools_recorded >= 2
+    assert tokens_saved > 0
+
+    msgs = compacted_payload["messages"]
+
+    # 1. Turn 2 (historical tool result at index 2) MUST be pruned in the middle
+    turn_2_text = msgs[2]["content"][0]["content"]
+    assert "⚡ OmniCache Adaptive Pruner:" in turn_2_text
+    assert "intermediate lines safely pruned" in turn_2_text
+    # Head lines preserved:
+    assert "line_01: def func_1(): pass" in turn_2_text
+    assert "line_05: def func_5(): pass" in turn_2_text
+    # Middle line pruned:
+    assert "line_15: def func_15(): pass" not in turn_2_text
+    # Tail lines preserved:
+    assert "line_30: def func_30(): pass" in turn_2_text
+
+    # 2. Turn 6 (recent tool result at index 6, within last 4 turns) MUST remain 100% untouched
+    turn_6_text = msgs[6]["content"][0]["content"]
+    assert turn_6_text == recent_tool_code
+    assert "⚡ OmniCache Adaptive Pruner:" not in turn_6_text
+
+    # 3. Tool cache has the full, unpruned original content archived for future replays
+    is_hit, cached_out, _ = tool_cache.lookup_tool_call("view_file", {"path": "server/gateway.py"})
+    assert is_hit is True
+    assert cached_out == bulky_gateway_code
+

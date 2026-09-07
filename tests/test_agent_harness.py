@@ -10,7 +10,7 @@ from server.agent_harness import AgentHarness
 from server.cli import run_init
 
 def test_01_agent_harness_full_scorecard():
-    """Verifies all 7 checks in the Agent Integration Harness pass."""
+    """Verifies all 8 checks in the Agent Integration Harness pass."""
     success = AgentHarness.run()
     assert success is True
 

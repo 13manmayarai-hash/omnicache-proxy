@@ -289,8 +289,9 @@ class TestDistributedRedisArchitecture(unittest.TestCase):
                 await asyncio.sleep(0.1)
                 return {"text": "coalesced_output"}, None
 
-            task_a = asyncio.create_task(bus_replica_a.execute("flight_shared_key", expensive_upstream))
-            task_b = asyncio.create_task(bus_replica_b.execute("flight_shared_key", expensive_upstream))
+            unique_key = f"flight_shared_{time.time()}"
+            task_a = asyncio.create_task(bus_replica_a.execute(unique_key, expensive_upstream))
+            task_b = asyncio.create_task(bus_replica_b.execute(unique_key, expensive_upstream))
 
             res_a, chunks_a, is_leader_a = await task_a
             res_b, chunks_b, is_leader_b = await task_b

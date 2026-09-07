@@ -63,11 +63,13 @@ class WorkspaceWarmer:
         dirs_warmed = 0
         tools_recorded = 0
         tokens_warmed = 0
+        batch_items: List[Dict[str, Any]] = []
 
         # 1. Probe Git state if target_dir is a Git repository
         git_commit = None
         git_branch = None
         git_status_str = ""
+        cached_git_state = None
         is_git_repo = False
 
         try:
@@ -94,6 +96,15 @@ class WorkspaceWarmer:
                     git_branch = b_res.stdout.strip()
 
                 # Get porcelain git status
+                p_res = subprocess.run(
+                    ["git", "-C", target_dir, "status", "--porcelain"],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2.0
+                )
+                porcelain_raw = p_res.stdout if p_res.returncode == 0 else ""
+                status_hash = hashlib.sha256(porcelain_raw.encode("utf-8")).hexdigest()[:16]
+                cached_git_state = f"{git_commit}:{status_hash}" if git_commit else None
+
+                # Get human-readable git status
                 s_res = subprocess.run(
                     ["git", "-C", target_dir, "status"],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2.0
@@ -117,52 +128,48 @@ class WorkspaceWarmer:
 
                 # Record git status tool variants
                 for s_args in [{}, {"workspace_dir": target_dir}, {"cwd": target_dir}]:
-                    k1 = tool_cache.store_tool_call(
-                        tool_name="git_status",
-                        arguments=s_args,
-                        output=git_status_str,
-                        workspace_fingerprint=workspace_fingerprint,
-                        workspace_dir=target_dir
-                    )
-                    if k1:
-                        tools_recorded += 1
+                    batch_items.append({
+                        "tool_name": "git_status",
+                        "arguments": s_args,
+                        "output": git_status_str,
+                        "workspace_fingerprint": workspace_fingerprint,
+                        "workspace_state": cached_git_state,
+                        "workspace_dir": target_dir
+                    })
 
                 # Record bash 'git status'
-                k_bash_status = tool_cache.store_tool_call(
-                    tool_name="bash",
-                    arguments={"command": "git status"},
-                    output=git_status_str,
-                    workspace_fingerprint=workspace_fingerprint,
-                    workspace_dir=target_dir
-                )
-                if k_bash_status:
-                    tools_recorded += 1
+                batch_items.append({
+                    "tool_name": "bash",
+                    "arguments": {"command": "git status"},
+                    "output": git_status_str,
+                    "workspace_fingerprint": workspace_fingerprint,
+                    "workspace_state": cached_git_state,
+                    "workspace_dir": target_dir
+                })
 
                 # Record git log tool variants
                 for l_args in [{}, {"n": 10}, {"max_count": 10}]:
-                    k_log = tool_cache.store_tool_call(
-                        tool_name="git_log",
-                        arguments=l_args,
-                        output=git_log_str,
-                        workspace_fingerprint=workspace_fingerprint,
-                        workspace_dir=target_dir
-                    )
-                    if k_log:
-                        tools_recorded += 1
+                    batch_items.append({
+                        "tool_name": "git_log",
+                        "arguments": l_args,
+                        "output": git_log_str,
+                        "workspace_fingerprint": workspace_fingerprint,
+                        "workspace_state": cached_git_state,
+                        "workspace_dir": target_dir
+                    })
 
                 # Record git diff
-                k_diff = tool_cache.store_tool_call(
-                    tool_name="git_diff",
-                    arguments={},
-                    output=git_diff_str,
-                    workspace_fingerprint=workspace_fingerprint,
-                    workspace_dir=target_dir
-                )
-                if k_diff:
-                    tools_recorded += 1
+                batch_items.append({
+                    "tool_name": "git_diff",
+                    "arguments": {},
+                    "output": git_diff_str,
+                    "workspace_fingerprint": workspace_fingerprint,
+                    "workspace_state": cached_git_state,
+                    "workspace_dir": target_dir
+                })
 
         except Exception:
-            pass
+            cached_git_state = None
 
         # 2. Walk directory tree and pre-record files and listings
         max_bytes = max_file_size_kb * 1024
@@ -193,25 +200,23 @@ class WorkspaceWarmer:
                 list_args_candidates.append({})
 
             for l_args in list_args_candidates:
-                k = tool_cache.store_tool_call(
-                    tool_name="list_dir",
-                    arguments=l_args,
-                    output=listing_output,
-                    workspace_fingerprint=workspace_fingerprint,
-                    workspace_dir=target_dir
-                )
-                if k:
-                    tools_recorded += 1
+                batch_items.append({
+                    "tool_name": "list_dir",
+                    "arguments": l_args,
+                    "output": listing_output,
+                    "workspace_fingerprint": workspace_fingerprint,
+                    "workspace_state": cached_git_state,
+                    "workspace_dir": target_dir
+                })
 
-            k_ls = tool_cache.store_tool_call(
-                tool_name="ls",
-                arguments={"path": rel_root_str or "."},
-                output=listing_output,
-                workspace_fingerprint=workspace_fingerprint,
-                workspace_dir=target_dir
-            )
-            if k_ls:
-                tools_recorded += 1
+            batch_items.append({
+                "tool_name": "ls",
+                "arguments": {"path": rel_root_str or "."},
+                "output": listing_output,
+                "workspace_fingerprint": workspace_fingerprint,
+                "workspace_state": cached_git_state,
+                "workspace_dir": target_dir
+            })
             dirs_warmed += 1
 
             # Pre-record file contents
@@ -238,6 +243,9 @@ class WorkspaceWarmer:
                     with open(abs_file, "r", encoding="utf-8", errors="replace") as f:
                         content = f.read()
 
+                    file_fp = f"{st.st_mtime_ns}_{st.st_size}"
+                    file_state = f"target_file:{abs_file}:{file_fp}"
+
                     # Pre-record read_file, view_file, cat
                     read_variants = [
                         {"file_path": rel_file},
@@ -246,35 +254,32 @@ class WorkspaceWarmer:
                         {"path": abs_file}
                     ]
                     for r_arg in read_variants:
-                        k_read = tool_cache.store_tool_call(
-                            tool_name="read_file",
-                            arguments=r_arg,
-                            output=content,
-                            workspace_fingerprint=workspace_fingerprint,
-                            workspace_dir=target_dir
-                        )
-                        if k_read:
-                            tools_recorded += 1
+                        batch_items.append({
+                            "tool_name": "read_file",
+                            "arguments": r_arg,
+                            "output": content,
+                            "workspace_fingerprint": workspace_fingerprint,
+                            "workspace_state": file_state,
+                            "workspace_dir": target_dir
+                        })
 
-                    k_view = tool_cache.store_tool_call(
-                        tool_name="view_file",
-                        arguments={"AbsolutePath": abs_file},
-                        output=content,
-                        workspace_fingerprint=workspace_fingerprint,
-                        workspace_dir=target_dir
-                    )
-                    if k_view:
-                        tools_recorded += 1
+                    batch_items.append({
+                        "tool_name": "view_file",
+                        "arguments": {"AbsolutePath": abs_file},
+                        "output": content,
+                        "workspace_fingerprint": workspace_fingerprint,
+                        "workspace_state": file_state,
+                        "workspace_dir": target_dir
+                    })
 
-                    k_cat = tool_cache.store_tool_call(
-                        tool_name="cat",
-                        arguments={"file": rel_file},
-                        output=content,
-                        workspace_fingerprint=workspace_fingerprint,
-                        workspace_dir=target_dir
-                    )
-                    if k_cat:
-                        tools_recorded += 1
+                    batch_items.append({
+                        "tool_name": "cat",
+                        "arguments": {"file": rel_file},
+                        "output": content,
+                        "workspace_fingerprint": workspace_fingerprint,
+                        "workspace_state": file_state,
+                        "workspace_dir": target_dir
+                    })
 
                     files_warmed += 1
                     tokens_warmed += int(len(content.split()) * 1.3) + 10
@@ -284,6 +289,10 @@ class WorkspaceWarmer:
 
             if files_warmed >= max_files:
                 break
+
+        # Atomic bulk persistence to RAM hot cache and SQLite
+        stored_keys = tool_cache.store_tool_calls_batch(batch_items)
+        tools_recorded = len(stored_keys)
 
         elapsed = time.perf_counter() - start_time
         return {

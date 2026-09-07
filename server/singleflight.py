@@ -167,7 +167,8 @@ class SingleFlightGroup:
 
                 lock_active = await self._redis_call("exists", lock_key)
                 if not lock_active:
-                    # Lock was released, check data_key one last time
+                    # Leader released lock; allow brief 50ms buffer for data write before promotion
+                    await asyncio.sleep(0.05)
                     raw = await self._redis_call("get", data_key)
                     if raw:
                         received_data = raw

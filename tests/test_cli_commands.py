@@ -48,6 +48,17 @@ def test_run_doctor_and_stats():
     run_stats()
 
 
+def test_run_benchmark(capsys):
+    from server.cli import run_benchmark
+    run_benchmark(iterations=10)
+    captured = capsys.readouterr()
+    assert "OmniCache AI Acceleration Benchmark" in captured.out
+    assert "L1 Exact Cache" in captured.out
+    assert "L2 Semantic Cache" in captured.out
+    assert "Agent Tool Replayer" in captured.out
+    assert "Workspace Pre-Warming" in captured.out
+
+
 def test_circuit_reset_and_error_recording(capsys):
     from server.failover import CircuitBreaker, failover_engine
     from server.cli import run_reset_circuit

@@ -86,24 +86,42 @@ class TestPhase5LoadBenchmark(unittest.TestCase):
         }
         cache_instance.store(payload, res_payload, org_id="org_capped")
 
+        import threading
+        import server.quotas
+
+        real_time = time.time
+        frozen_time = 1700000000.0
+        time_offset = 0.0
+        time_lock = threading.Lock()
+
+        def controlled_time():
+            nonlocal time_offset
+            with time_lock:
+                time_offset += 0.005
+                return frozen_time + time_offset
+
         success_count = 0
         rate_limited_count = 0
 
-        def send_request():
-            resp = self.client.post("/v1/chat/completions", json=payload, headers={"x-api-key": "rate_capped_tenant"})
-            return resp.status_code
+        server.quotas.time.time = controlled_time
+        try:
+            def send_request():
+                resp = self.client.post("/v1/chat/completions", json=payload, headers={"x-api-key": "rate_capped_tenant"})
+                return resp.status_code
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = [executor.submit(send_request) for _ in range(40)]
-            for fut in as_completed(futures):
-                code = fut.result()
-                if code == 200:
-                    success_count += 1
-                elif code == 429:
-                    rate_limited_count += 1
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                futures = [executor.submit(send_request) for _ in range(40)]
+                for fut in as_completed(futures):
+                    code = fut.result()
+                    if code == 200:
+                        success_count += 1
+                    elif code == 429:
+                        rate_limited_count += 1
 
-        self.assertEqual(success_count, 20)
-        self.assertEqual(rate_limited_count, 20)
+            self.assertEqual(success_count, 20)
+            self.assertEqual(rate_limited_count, 20)
+        finally:
+            server.quotas.time.time = real_time
 
     def test_04_multi_tenant_parallel_isolation(self):
         """Verify multiple tenants operating concurrently maintain strict data boundaries."""

@@ -321,6 +321,99 @@ def run_stats():
         print("  (Start daemon with 'omnicache start' or 'omnicache run <agent>' for live telemetry)")
         print("========================================================\n")
 
+def run_health(host: str = "127.0.0.1", port: int = None) -> bool:
+    """Readiness and liveness probe for CI/CD pipelines, Docker healthchecks, and scripts."""
+    import urllib.request
+    import json
+    port = port or config.PORT
+    target_host = "127.0.0.1" if host in ("0.0.0.0", "", "::1") else host
+    url = f"http://{target_host}:{port}/healthz"
+    req = urllib.request.Request(url)
+    try:
+        with urllib.request.urlopen(req, timeout=1.5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                ver = data.get("version", config.VERSION)
+                print(f"✔ OmniCache daemon is healthy (v{ver}) on http://{target_host}:{port}")
+                return True
+    except Exception:
+        pass
+    print(f"✖ OmniCache daemon is unreachable or unhealthy on http://{target_host}:{port}")
+    return False
+
+def run_ci_summary(output_path: Optional[str] = None) -> str:
+    """
+    Generates a GitHub Actions / CI-CD Markdown summary report.
+    Automatically appends to $GITHUB_STEP_SUMMARY if present in the environment.
+    """
+    target_host = "127.0.0.1" if config.HOST in ("0.0.0.0", "", "::1") else config.HOST
+    live_data = fetch_live_stats(host=target_host, port=config.PORT)
+    
+    if live_data:
+        cs = live_data.get("cache_stats", {})
+        fm = live_data.get("financial_telemetry", {})
+        ee = live_data.get("enterprise_engine", {})
+        sys_info = live_data.get("system_info", {})
+        ver = sys_info.get("version", config.VERSION)
+        savings_usd = fm.get("total_savings_usd", 0.0)
+        tokens_saved = fm.get("total_tokens_saved", 0)
+        tokens_forwarded = fm.get("total_tokens_used", 0)
+        hit_rate = cs.get("hit_rate_percentage", 0.0)
+        exact_hits = cs.get("exact_hits", 0)
+        semantic_hits = cs.get("semantic_hits", 0)
+        tool_replays = ee.get("agent_tool_replays", 0)
+        tokens_compacted = ee.get("agent_tokens_compacted", 0)
+        daemon_status = f"Live Daemon (v{ver})"
+    else:
+        stats = cache_instance.get_stats()
+        ver = config.VERSION
+        savings_usd = METRICS_LEDGER["total_savings_usd"]
+        tokens_saved = METRICS_LEDGER["total_tokens_saved"]
+        tokens_forwarded = METRICS_LEDGER["total_tokens_used"]
+        hit_rate = stats.get("hit_rate_percentage", 0.0)
+        exact_hits = stats.get("exact_hits", 0)
+        semantic_hits = stats.get("semantic_hits", 0)
+        tool_replays = METRICS_LEDGER.get("agent_tool_hits", 0)
+        tokens_compacted = METRICS_LEDGER.get("agent_tool_compacted_tokens", 0)
+        daemon_status = f"Local Store (v{ver})"
+
+    md_lines = [
+        "### ⚡ OmniCache AI Acceleration & Cost Savings Report",
+        "",
+        "| Metric | Telemetry Value | Impact |",
+        "| :--- | :--- | :--- |",
+        f"| **Total Cost Avoided** | **${savings_usd:.4f} USD** | 💰 Direct API savings |",
+        f"| **Remote Tokens Avoided** | **{tokens_saved:,} tokens** | ⚡ Eliminated remote LLM roundtrips |",
+        f"| **Tokens Forwarded** | **{tokens_forwarded:,} tokens** | 📡 Actual upstream LLM usage |",
+        f"| **Cache Hit Rate** | **{hit_rate}%** | 🎯 Dual-tier Exact + Semantic matches |",
+        f"| **Exact / Semantic Hits** | **{exact_hits} exact / {semantic_hits} semantic** | 🧠 Multi-layer acceleration |",
+        f"| **Agent Tool Replays** | **{tool_replays:,} replays** | 🚀 Sub-millisecond deterministic cache hits |",
+        f"| **Context Tokens Pruned** | **{tokens_compacted:,} tokens** | ✂️ Deep multi-turn agent context compaction |",
+        f"| **OmniCache Engine** | **{daemon_status}** | 🟢 Operational |",
+        "",
+        "> *Report generated automatically by [OmniCache AI Proxy](https://github.com/13manmayarai-hash/omnicache-proxy).* ",
+        ""
+    ]
+    md_content = "\n".join(md_lines)
+    print(md_content)
+
+    if output_path:
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(md_content)
+        except Exception as e:
+            print(f"Warning: Could not write summary to {output_path}: {e}")
+
+    gh_step_summary = os.getenv("GITHUB_STEP_SUMMARY")
+    if gh_step_summary:
+        try:
+            with open(gh_step_summary, "a", encoding="utf-8") as f:
+                f.write("\n" + md_content + "\n")
+        except Exception:
+            pass
+
+    return md_content
+
 def run_reset_circuit(provider: Optional[str] = None):
     import urllib.request
     import json
@@ -827,17 +920,18 @@ def main():
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "stats", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env"], help="Target agent preset for init (default: all)")
     parser.add_argument("--show", action="store_true", help="Display agent configuration presets without writing to disk")
+    parser.add_argument("--markdown", action="store_true", help="Output telemetry metrics formatted as GitHub Flavored Markdown")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")
     parser.add_argument("--dir", type=str, default=None, help="Target workspace directory for warm or sync")
     parser.add_argument("--ref", type=str, default="HEAD", help="Git reference for warm (default: HEAD)")
     parser.add_argument("--max-files", type=int, default=200, help="Maximum number of files to warm (default: 200)")
     parser.add_argument("--action", type=str, default=sync_action, choices=["export", "import", "status", "push", "pull"], help="Sync action (export, import, status, push, pull)")
-    parser.add_argument("-o", "--output", type=str, default=None, help="Output file path for sync export")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Output file path for sync export or ci-summary")
     parser.add_argument("-i", "--input", type=str, default=None, help="Input file path for sync import")
     parser.add_argument("--workspace", type=str, default="default", help="Workspace fingerprint for sync")
     parser.add_argument("--iterations", type=int, default=500, help="Benchmark iteration count (default: 500)")
@@ -859,7 +953,16 @@ def main():
         run_benchmark(iterations=args.iterations)
         sys.exit(0)
     elif args.command == "stats":
-        run_stats()
+        if args.markdown:
+            run_ci_summary(output_path=args.output)
+        else:
+            run_stats()
+        sys.exit(0)
+    elif args.command == "health":
+        ok = run_health(host=args.host, port=args.port)
+        sys.exit(0 if ok else 1)
+    elif args.command == "ci-summary":
+        run_ci_summary(output_path=args.output)
         sys.exit(0)
     elif args.command == "reset-circuit":
         run_reset_circuit(provider=args.provider)

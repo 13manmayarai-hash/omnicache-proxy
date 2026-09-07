@@ -1,0 +1,85 @@
+name: OmniCache Turnkey CI/CD & Agent Acceleration
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-and-accelerate:
+    name: Test & Agent Harness (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Cache OmniCache Local Store (~/.omnicache)
+        uses: actions/cache@v4
+        with:
+          path: ~/.omnicache
+          key: omnicache-store-${{ runner.os }}-${{ hashFiles('**/pyproject.toml') }}-${{ github.sha }}
+          restore-keys: |
+            omnicache-store-${{ runner.os }}-${{ hashFiles('**/pyproject.toml') }}-
+            omnicache-store-${{ runner.os }}-
+
+      - name: Install Package & Test Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pytest httpx
+          pip install -e ".[test]"
+
+      - name: Run Full Regression Test Suite
+        run: |
+          pytest -v
+
+      - name: Launch OmniCache Background Daemon
+        run: |
+          omnicache start &
+          # Wait up to 15s for the daemon to become ready
+          python -c "
+          import time, urllib.request, sys
+          ready = False
+          for _ in range(30):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=1) as resp:
+                      if resp.status == 200:
+                          ready = True
+                          break
+              except Exception:
+                  time.sleep(0.5)
+          if not ready:
+              print('Daemon failed to start in 15s')
+              sys.exit(1)
+          "
+
+      - name: Verify Daemon Health Probe
+        run: |
+          omnicache health
+
+      - name: Pre-Warm Workspace Repository Cache
+        run: |
+          omnicache warm --dir . --max-files 200
+
+      - name: Execute Live Agent Integration Harness
+        run: |
+          omnicache harness
+
+      - name: Generate Telemetry Summary (GitHub Actions Step Summary)
+        if: always()
+        run: |
+          omnicache ci-summary

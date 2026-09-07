@@ -39,7 +39,7 @@ services:
     volumes:
       - omnicache_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      test: ["CMD-SHELL", "omnicache health || curl -f http://localhost:8000/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3

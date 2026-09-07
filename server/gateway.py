@@ -25,6 +25,7 @@ from core.vision_cache import vision_cache
 from core.audio_cache import audio_cache
 from core.privacy_shield import privacy_shield
 from core.telephony_filter import telephony_filter
+from core.swarm_bus import swarm_bus
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
 from server.workspace_sync import workspace_warmer, workspace_sync_manager
 from server.cascade_router import cascade_router
@@ -49,6 +50,10 @@ METRICS_LEDGER = {
     "cascade_routes_total": 0,
     "cascade_downgrades_total": 0,
     "cascade_savings_usd": 0.0,
+    "swarm_requests_processed": 0,
+    "swarm_cross_agent_hits": 0,
+    "swarm_tokens_saved": 0,
+    "swarm_mutations_invalidated": 0,
     "privacy_scrubbed_count": 0,
     "agent_tool_hits": 0,
     "agent_tool_recorded_count": 0,
@@ -139,8 +144,8 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
     return {
         "Access-Control-Allow-Origin": allow_origin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-        "Access-Control-Allow-Headers": "Authorization, Content-Type, x-api-key, x-admin-key, x-org-id, x-cache-bypass, x-omnicache-model-cascade, x-allow-cascade, x-cache-ttl, x-cache-threshold, x-cache-tag, anthropic-version, anthropic-beta",
-        "Access-Control-Expose-Headers": "X-Cache-Status, X-Cache-Decision-Reason, X-Cache-Similarity, X-Cache-Latency-Ms, X-Cache-TTL-Remaining, X-Cost-Avoided-USD, X-Cost-Saved-USD, X-Tokens-Used, X-Tokens-Saved, X-Tokens-Accounting, X-Requested-Model, X-Served-Model, X-Cascade-Applied, X-Cascade-Reason"
+        "Access-Control-Allow-Headers": "Authorization, Content-Type, x-api-key, x-admin-key, x-org-id, x-cache-bypass, x-omnicache-model-cascade, x-allow-cascade, x-omnicache-swarm-id, x-omnicache-agent-id, x-omnicache-parent-agent, x-omnicache-subagent-id, x-cache-ttl, x-cache-threshold, x-cache-tag, anthropic-version, anthropic-beta",
+        "Access-Control-Expose-Headers": "X-Cache-Status, X-Cache-Decision-Reason, X-Cache-Similarity, X-Cache-Latency-Ms, X-Cache-TTL-Remaining, X-Cost-Avoided-USD, X-Cost-Saved-USD, X-Tokens-Used, X-Tokens-Saved, X-Tokens-Accounting, X-Requested-Model, X-Served-Model, X-Cascade-Applied, X-Cascade-Reason, X-OmniCache-Swarm-Hit, X-OmniCache-Origin-Agent, X-OmniCache-Swarm-ID"
     }
 
 
@@ -420,6 +425,15 @@ async def handle_chat_completions(request: Request) -> Response:
     cache_tag = headers.get("x-cache-tag", None)
     auth_header = headers.get("authorization", None)
 
+    swarm_id = (headers.get("x-omnicache-swarm-id") or payload.get("swarm_id") or "").strip()
+    agent_id = (headers.get("x-omnicache-agent-id") or headers.get("x-omnicache-subagent-id") or payload.get("agent_id") or "lead").strip()
+    parent_agent = (headers.get("x-omnicache-parent-agent") or payload.get("parent_agent") or "").strip()
+
+    if swarm_id:
+        METRICS_LEDGER["swarm_requests_processed"] += 1
+        if parent_agent:
+            swarm_bus.record_delegation(swarm_id, parent_agent, agent_id)
+
     is_stream = bool(payload.get("stream", False))
     requested_model = payload.get("model", "default")
 
@@ -518,8 +532,61 @@ async def handle_chat_completions(request: Request) -> Response:
                     )
                 return JSONResponse(rehydrated, headers=resp_headers)
 
-    # 2. Text / Dual-Tier Cache Check (L1 Exact + L2 Semantic + Radix Prefix Tree)
+    # 2. Text / Dual-Tier Cache Check (Swarm Bus + L1 Exact + L2 Semantic + Radix Prefix Tree)
     if not bypass_cache:
+        if swarm_id:
+            is_s_hit, s_resp, s_meta = swarm_bus.lookup_shared_result(
+                swarm_id=swarm_id,
+                agent_id=agent_id,
+                task_type="chat_completion",
+                payload=payload
+            )
+            if is_s_hit and s_resp is not None:
+                saved_toks = s_meta.get("tokens_saved", 50)
+                METRICS_LEDGER["swarm_cross_agent_hits"] += 1
+                METRICS_LEDGER["swarm_tokens_saved"] += saved_toks
+                METRICS_LEDGER["total_tokens_saved"] += saved_toks
+                latency_ms = (time.perf_counter() - start_time) * 1000
+                emit_telemetry_event("swarm_hit", {
+                    "swarm_id": swarm_id,
+                    "origin_agent": s_meta.get("origin_agent_id"),
+                    "requesting_agent": agent_id,
+                    "tokens_saved": saved_toks
+                })
+                rehydrated = privacy_shield.rehydrate_response(s_resp, pii_token_map)
+                resp_headers = {
+                    "X-OmniCache-Decision": "HIT",
+                    "X-OmniCache-Reason": f"HIT_SWARM_BUS: Inter-agent memory hit (reused from '{s_meta.get('origin_agent_id')}')",
+                    "X-OmniCache-Similarity": "1.0000",
+                    "X-Cache-Status": "HIT_SWARM",
+                    "X-Cache-Decision-Reason": f"HIT_SWARM_BUS: Reused from subagent '{s_meta.get('origin_agent_id')}' in swarm '{swarm_id}'",
+                    "X-Cache-Similarity": "1.0000",
+                    "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
+                    "X-Tokens-Used": "0",
+                    "X-Tokens-Saved": str(saved_toks),
+                    "X-Tokens-Accounting": "exact",
+                    "X-Requested-Model": requested_model,
+                    "X-Served-Model": requested_model,
+                    "X-Cascade-Applied": "false",
+                    "X-OmniCache-Swarm-Hit": "true",
+                    "X-OmniCache-Origin-Agent": str(s_meta.get("origin_agent_id")),
+                    "X-OmniCache-Swarm-ID": swarm_id,
+                    **cors_headers
+                }
+                if is_stream:
+                    return StreamingResponse(
+                        StreamReplayer.replay_cached_stream(rehydrated, tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC),
+                        media_type="text/event-stream",
+                        headers={
+                            **resp_headers,
+                            "Cache-Control": "no-cache, no-transform",
+                            "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no"
+                        }
+                    )
+                else:
+                    return JSONResponse(rehydrated, headers=resp_headers)
+
         status, entry, similarity, decision_reason = cache_instance.lookup(payload, org_id=org_id, custom_threshold=custom_threshold)
         messages = payload.get("messages", [])
         if entry is None and messages:
@@ -703,6 +770,16 @@ async def handle_chat_completions(request: Request) -> Response:
                     for aud_h, p_txt, _ in extracted_audio:
                         audio_cache.store_audio(aud_h, p_txt, res_data)
 
+                if swarm_id:
+                    swarm_bus.record_shared_result(
+                        swarm_id=swarm_id,
+                        agent_id=agent_id,
+                        task_type="chat_completion",
+                        payload=payload,
+                        result_payload=res_data,
+                        tokens_saved=tokens_used
+                    )
+
             rehydrated = privacy_shield.rehydrate_response(res_data, pii_token_map)
             cache_status_header = "MISS" if is_leader else "HIT_SINGLEFLIGHT"
             decision_header = "MISS" if is_leader else "HIT"
@@ -806,6 +883,15 @@ async def handle_chat_completions(request: Request) -> Response:
                 if extracted_audio:
                     for aud_h, p_txt, _ in extracted_audio:
                         audio_cache.store_audio(aud_h, p_txt, synthesized)
+                if swarm_id:
+                    swarm_bus.record_shared_result(
+                        swarm_id=swarm_id,
+                        agent_id=agent_id,
+                        task_type="chat_completion",
+                        payload=payload,
+                        result_payload=synthesized,
+                        tokens_saved=tokens_used
+                    )
             elif recorded_chunks and not stream_cleanly_completed:
                 print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ OpenAI stream aborted ({len(recorded_chunks)} chunks received) - discarding partial response from cache.", flush=True)
 
@@ -1061,7 +1147,69 @@ async def handle_anthropic_messages(request: Request) -> Response:
         "tools": anthropic_payload.get("tools", None)
     }
 
+    swarm_id = (headers.get("x-omnicache-swarm-id") or anthropic_payload.get("swarm_id") or "").strip()
+    agent_id = (headers.get("x-omnicache-agent-id") or headers.get("x-omnicache-subagent-id") or anthropic_payload.get("agent_id") or "lead").strip()
+    parent_agent = (headers.get("x-omnicache-parent-agent") or anthropic_payload.get("parent_agent") or "").strip()
+
+    if swarm_id:
+        METRICS_LEDGER["swarm_requests_processed"] += 1
+        if parent_agent:
+            swarm_bus.record_delegation(swarm_id, parent_agent, agent_id, task_prompt=str(normalized_payload.get("messages", ""))[:200])
+
     if not bypass_cache:
+        if swarm_id:
+            is_s_hit, s_resp, s_meta = swarm_bus.lookup_shared_result(
+                swarm_id=swarm_id,
+                agent_id=agent_id,
+                task_type="anthropic_messages",
+                payload=normalized_payload
+            )
+            if is_s_hit and s_resp is not None:
+                saved_toks = s_meta.get("tokens_saved", 50)
+                METRICS_LEDGER["swarm_cross_agent_hits"] += 1
+                METRICS_LEDGER["swarm_tokens_saved"] += saved_toks
+                METRICS_LEDGER["total_tokens_saved"] += saved_toks
+                latency_ms = (time.perf_counter() - start_time) * 1000
+                emit_telemetry_event("swarm_hit", {
+                    "swarm_id": swarm_id,
+                    "origin_agent": s_meta.get("origin_agent_id"),
+                    "requesting_agent": agent_id,
+                    "tokens_saved": saved_toks
+                })
+                rehydrated = privacy_shield.rehydrate_response(s_resp, pii_token_map)
+                resp_headers = {
+                    "X-OmniCache-Decision": "HIT",
+                    "X-OmniCache-Reason": f"HIT_SWARM_BUS: Inter-agent memory hit (reused from '{s_meta.get('origin_agent_id')}')",
+                    "X-OmniCache-Similarity": "1.0000",
+                    "X-Cache-Status": "HIT_SWARM",
+                    "X-Cache-Decision-Reason": f"HIT_SWARM_BUS: Reused from subagent '{s_meta.get('origin_agent_id')}' in swarm '{swarm_id}'",
+                    "X-Cache-Similarity": "1.0000",
+                    "X-Cache-Latency-Ms": f"{latency_ms:.2f}",
+                    "X-Tokens-Used": "0",
+                    "X-Tokens-Saved": str(saved_toks),
+                    "X-Tokens-Accounting": "exact",
+                    "X-Requested-Model": requested_model,
+                    "X-Served-Model": requested_model,
+                    "X-Cascade-Applied": "false",
+                    "X-OmniCache-Swarm-Hit": "true",
+                    "X-OmniCache-Origin-Agent": str(s_meta.get("origin_agent_id")),
+                    "X-OmniCache-Swarm-ID": swarm_id,
+                    **cors_headers
+                }
+                if is_stream:
+                    return StreamingResponse(
+                        StreamReplayer.replay_cached_anthropic_stream(rehydrated, tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC),
+                        media_type="text/event-stream",
+                        headers={
+                            **resp_headers,
+                            "Cache-Control": "no-cache, no-transform",
+                            "Connection": "keep-alive",
+                            "X-Accel-Buffering": "no"
+                        }
+                    )
+                else:
+                    return JSONResponse(rehydrated, headers=resp_headers)
+
         status, entry, similarity, decision_reason = cache_instance.lookup(normalized_payload, org_id=org_id)
         if entry is None and messages:
             is_radix_hit, radix_completion, matched_turns, radix_node = radix_tree.lookup_conversation(
@@ -1284,6 +1432,15 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     if extracted_audio:
                         for aud_h, p_txt, _ in extracted_audio:
                             audio_cache.store_audio(aud_h, p_txt, cacheable_res_payload)
+                    if swarm_id:
+                        swarm_bus.record_shared_result(
+                            swarm_id=swarm_id,
+                            agent_id=agent_id,
+                            task_type="anthropic_messages",
+                            payload=normalized_payload,
+                            result_payload=cacheable_res_payload,
+                            tokens_saved=tokens_used
+                        )
                 elif full_text_accum and not stream_cleanly_completed:
                     print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ Stream aborted ({len(full_text_accum)} chunks received) - discarding partial response from cache.", flush=True)
 
@@ -1367,6 +1524,16 @@ async def handle_anthropic_messages(request: Request) -> Response:
             if extracted_audio:
                 for aud_h, p_txt, _ in extracted_audio:
                     audio_cache.store_audio(aud_h, p_txt, anthropic_res)
+
+            if swarm_id:
+                swarm_bus.record_shared_result(
+                    swarm_id=swarm_id,
+                    agent_id=agent_id,
+                    task_type="anthropic_messages",
+                    payload=normalized_payload,
+                    result_payload=anthropic_res,
+                    tokens_saved=tokens_used
+                )
 
         rehydrated = privacy_shield.rehydrate_response(anthropic_res, pii_token_map)
         cache_status_header = "MISS" if is_leader else "HIT_SINGLEFLIGHT"
@@ -1465,8 +1632,32 @@ async def handle_tool_replay(request: Request) -> Response:
         action = body.get("action", "").strip().lower()
         ttl_seconds = body.get("ttl_seconds", None)
         env_fp = f"{org_id}:{raw_fp}"
+
+        swarm_id = (request.headers.get("x-omnicache-swarm-id") or body.get("swarm_id") or "").strip()
+        agent_id = (request.headers.get("x-omnicache-agent-id") or request.headers.get("x-omnicache-subagent-id") or body.get("agent_id") or "lead").strip()
+        parent_agent = (request.headers.get("x-omnicache-parent-agent") or body.get("parent_agent") or "").strip()
+
+        if swarm_id and parent_agent:
+            swarm_bus.record_delegation(swarm_id, parent_agent, agent_id, task_prompt=str(arguments))
     except Exception:
         return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
+
+    # 0. Mutation Guard for Store / Record Path on Mutative Tools
+    if (action in ("store", "record") or "output" in body) and not tool_policy_manager.is_cacheable(tool_name) and ttl_seconds is None:
+        emit_telemetry_event("mutation_blocked", {
+            "tool_name": tool_name,
+            "status": "REJECTED",
+            "reason": "Non-cacheable mutation guard"
+        })
+        if swarm_id:
+            invalidated = swarm_bus.invalidate_on_mutation(swarm_id, agent_id, mutated_resource=ws_dir)
+            METRICS_LEDGER["swarm_mutations_invalidated"] += invalidated
+        return JSONResponse({
+            "status": "REJECTED",
+            "tool_name": tool_name,
+            "cached": False,
+            "reason": f"Tool '{tool_name}' is non-cacheable according to active policy."
+        }, status_code=200, headers=cors_headers)
 
     # 1. Store / Record Path
     if "output" in body or action in ("store", "record"):
@@ -1486,12 +1677,26 @@ async def handle_tool_replay(request: Request) -> Response:
                 "status": "REJECTED",
                 "reason": "Non-cacheable mutation guard"
             })
+            if swarm_id:
+                invalidated = swarm_bus.invalidate_on_mutation(swarm_id, agent_id, mutated_resource=ws_dir)
+                METRICS_LEDGER["swarm_mutations_invalidated"] += invalidated
             return JSONResponse({
                 "status": "REJECTED",
                 "tool_name": tool_name,
                 "cached": False,
                 "reason": f"Tool '{tool_name}' is non-cacheable according to active policy."
             }, status_code=200, headers=cors_headers)
+
+        if swarm_id:
+            swarm_bus.record_shared_result(
+                swarm_id=swarm_id,
+                agent_id=agent_id,
+                task_type=tool_name,
+                payload={"arguments": arguments, "workspace_fingerprint": env_fp},
+                result_payload=output_content,
+                tokens_saved=max(1, len(output_content.split())),
+                affected_resources=[ws_dir] if ws_dir else []
+            )
 
         effective_ttl = ttl_seconds if ttl_seconds is not None else tool_policy_manager.get_ttl(tool_name)
         emit_telemetry_event("tool_recorded", {
@@ -1508,14 +1713,52 @@ async def handle_tool_replay(request: Request) -> Response:
             "ttl_seconds": effective_ttl
         }, headers=cors_headers)
 
-    # 2. Lookup Path
-    is_hit, output, tool_key = tool_cache.lookup_tool_call(
-        tool_name, arguments, workspace_fingerprint=env_fp, workspace_state=ws_state, workspace_dir=ws_dir
-    )
-    if not is_hit and (org_id == "default" or raw_fp == "default"):
-        is_hit, output, tool_key = tool_cache.lookup_tool_call(
-            tool_name, arguments, workspace_fingerprint=raw_fp, workspace_state=ws_state, workspace_dir=ws_dir
+    # 2. Lookup Path: Check Swarm Bus first if swarm_id is present
+    if not tool_policy_manager.is_cacheable(tool_name) and ttl_seconds is None:
+        if swarm_id:
+            invalidated = swarm_bus.invalidate_on_mutation(swarm_id, agent_id, mutated_resource=ws_dir)
+            METRICS_LEDGER["swarm_mutations_invalidated"] += invalidated
+        return JSONResponse({
+            "status": "MISS",
+            "tool_name": tool_name,
+            "cached": False,
+            "reason": f"Tool '{tool_name}' is non-cacheable according to active policy."
+        }, status_code=200, headers=cors_headers)
+
+    swarm_hit = False
+    origin_agent = None
+    if swarm_id:
+        is_swarm_hit, swarm_out, swarm_meta = swarm_bus.lookup_shared_result(
+            swarm_id=swarm_id,
+            agent_id=agent_id,
+            task_type=tool_name,
+            payload={"arguments": arguments, "workspace_fingerprint": env_fp}
         )
+        if is_swarm_hit and swarm_out is not None:
+            is_hit = True
+            output = swarm_out
+            tool_key = f"swarm::{swarm_id}::{tool_name}"
+            swarm_hit = True
+            origin_agent = swarm_meta.get("origin_agent_id")
+            METRICS_LEDGER["swarm_cross_agent_hits"] += 1
+            emit_telemetry_event("swarm_hit", {
+                "swarm_id": swarm_id,
+                "tool_name": tool_name,
+                "origin_agent": origin_agent,
+                "requesting_agent": agent_id
+            })
+        else:
+            is_hit = False
+            output = None
+            tool_key = ""
+    else:
+        is_hit, output, tool_key = tool_cache.lookup_tool_call(
+            tool_name, arguments, workspace_fingerprint=env_fp, workspace_state=ws_state, workspace_dir=ws_dir
+        )
+        if not is_hit and (org_id == "default" or raw_fp == "default"):
+            is_hit, output, tool_key = tool_cache.lookup_tool_call(
+                tool_name, arguments, workspace_fingerprint=raw_fp, workspace_state=ws_state, workspace_dir=ws_dir
+            )
 
     if is_hit:
         METRICS_LEDGER["agent_tool_hits"] += 1
@@ -1524,13 +1767,21 @@ async def handle_tool_replay(request: Request) -> Response:
             "status": "HIT",
             "cached": True
         })
+        resp_headers = dict(cors_headers)
+        if swarm_hit:
+            resp_headers["X-OmniCache-Swarm-Hit"] = "true"
+            resp_headers["X-OmniCache-Origin-Agent"] = str(origin_agent or "peer")
+            resp_headers["X-OmniCache-Swarm-ID"] = swarm_id
+
         return JSONResponse({
             "status": "HIT",
             "tool_name": tool_name,
             "tool_key": tool_key,
             "output": output,
-            "cached": True
-        }, headers=cors_headers)
+            "cached": True,
+            "swarm_hit": swarm_hit,
+            "origin_agent": origin_agent
+        }, headers=resp_headers)
     
     return JSONResponse({
         "status": "MISS",
@@ -1856,6 +2107,11 @@ async def handle_stats(request: Request) -> Response:
             "agent_tool_replays": METRICS_LEDGER["agent_tool_hits"],
             "agent_tools_recorded": METRICS_LEDGER.get("agent_tool_recorded_count", 0),
             "agent_tokens_compacted": METRICS_LEDGER.get("agent_tool_compacted_tokens", 0),
+            "swarm_stats": swarm_bus.get_stats(),
+            "swarm_requests_processed": METRICS_LEDGER.get("swarm_requests_processed", 0),
+            "swarm_cross_agent_hits": METRICS_LEDGER.get("swarm_cross_agent_hits", 0),
+            "swarm_tokens_saved": METRICS_LEDGER.get("swarm_tokens_saved", 0),
+            "swarm_mutations_invalidated": METRICS_LEDGER.get("swarm_mutations_invalidated", 0),
             "telephony_requests": METRICS_LEDGER.get("telephony_requests_processed", 0),
             "telephony_fillers_stripped": METRICS_LEDGER.get("telephony_fillers_stripped", 0),
             "telephony_tokens_saved": METRICS_LEDGER.get("telephony_tokens_saved", 0),
@@ -1875,12 +2131,75 @@ async def handle_stats(request: Request) -> Response:
             "recent_upstream_failures": failover_engine.get_recent_failures(10)
         },
         "system_info": {
-            "version": getattr(config, "VERSION", "2.9.8"),
+            "version": getattr(config, "VERSION", "2.9.9"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
             "port": config.PORT
         }
+    }, headers=cors_headers)
+
+
+async def handle_swarm_topology(request: Request) -> Response:
+    """Introspect delegation hierarchy tree and active task cache for a swarm session."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+    swarm_id = request.query_params.get("swarm_id", "").strip()
+    if not swarm_id:
+        return JSONResponse({"error": "Query parameter 'swarm_id' is required"}, status_code=400, headers=cors_headers)
+    topology = swarm_bus.get_swarm_topology(swarm_id)
+    return JSONResponse(topology, headers=cors_headers)
+
+
+async def handle_swarm_stats(request: Request) -> Response:
+    """Return aggregated swarm bus telemetry across all multi-agent swarms."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+    stats = swarm_bus.get_stats()
+    return JSONResponse({
+        "status": "success",
+        "swarm_stats": stats,
+        "metrics_ledger": {
+            "swarm_requests_processed": METRICS_LEDGER.get("swarm_requests_processed", 0),
+            "swarm_cross_agent_hits": METRICS_LEDGER.get("swarm_cross_agent_hits", 0),
+            "swarm_tokens_saved": METRICS_LEDGER.get("swarm_tokens_saved", 0),
+            "swarm_mutations_invalidated": METRICS_LEDGER.get("swarm_mutations_invalidated", 0)
+        }
+    }, headers=cors_headers)
+
+
+async def handle_swarm_delegate(request: Request) -> Response:
+    """Explicitly register a subagent delegation edge with prompt and lineage."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
+    swarm_id = (body.get("swarm_id") or "").strip()
+    parent_agent = (body.get("parent_agent") or "").strip()
+    subagent_id = (body.get("subagent_id") or body.get("agent_id") or "").strip()
+    task_prompt = body.get("task_prompt", "")
+    metadata = body.get("metadata", {})
+    if not swarm_id or not parent_agent or not subagent_id:
+        return JSONResponse({"error": "swarm_id, parent_agent, and subagent_id/agent_id are required"}, status_code=400, headers=cors_headers)
+    node = swarm_bus.record_delegation(swarm_id, parent_agent, subagent_id, task_prompt=task_prompt, metadata=metadata)
+    return JSONResponse({
+        "status": "success",
+        "message": f"Delegation recorded: {parent_agent} -> {subagent_id}",
+        "node": node
     }, headers=cors_headers)
 
 
@@ -2041,7 +2360,19 @@ async def handle_prometheus_metrics(request: Request) -> Response:
         f"omnicache_cascade_arbitrage_savings_usd {cascade_router.arbitrage_savings_usd:.6f}",
         "# HELP omnicache_cascade_tokens_diverted_total Prompt tokens diverted to economy models",
         "# TYPE omnicache_cascade_tokens_diverted_total counter",
-        f"omnicache_cascade_tokens_diverted_total {cascade_router.tokens_diverted_to_economy}"
+        f"omnicache_cascade_tokens_diverted_total {cascade_router.tokens_diverted_to_economy}",
+        "# HELP omnicache_swarm_requests_total Multi-agent swarm requests processed",
+        "# TYPE omnicache_swarm_requests_total counter",
+        f"omnicache_swarm_requests_total {METRICS_LEDGER.get('swarm_requests_processed', 0)}",
+        "# HELP omnicache_swarm_cross_agent_hits_total Cross-agent memory hits",
+        "# TYPE omnicache_swarm_cross_agent_hits_total counter",
+        f"omnicache_swarm_cross_agent_hits_total {METRICS_LEDGER.get('swarm_cross_agent_hits', 0)}",
+        "# HELP omnicache_swarm_tokens_saved_total Tokens saved via swarm delegation bus",
+        "# TYPE omnicache_swarm_tokens_saved_total counter",
+        f"omnicache_swarm_tokens_saved_total {METRICS_LEDGER.get('swarm_tokens_saved', 0)}",
+        "# HELP omnicache_swarm_mutations_invalidated_total Cross-agent read invalidations triggered by mutations",
+        "# TYPE omnicache_swarm_mutations_invalidated_total counter",
+        f"omnicache_swarm_mutations_invalidated_total {METRICS_LEDGER.get('swarm_mutations_invalidated', 0)}"
     ]
     return Response(content="\n".join(metrics) + "\n", media_type="text/plain; version=0.0.4", headers=cors_headers)
 
@@ -2050,7 +2381,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "2.9.8"),
+        "version": getattr(config, "VERSION", "2.9.9"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -2072,7 +2403,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.8"),
+        "version": getattr(config, "VERSION", "2.9.9"),
         "dashboard": "/dashboard",
         "endpoints": {
             "dashboard": "/dashboard",
@@ -2148,7 +2479,7 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "2.9.8"),
+        "version": getattr(config, "VERSION", "2.9.9"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
@@ -2162,7 +2493,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "2.9.8"),
+            "version": getattr(config, "VERSION", "2.9.9"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })
@@ -2218,6 +2549,9 @@ routes = [
     Route("/v1/agent/tools/record", handle_tool_replay, methods=["POST", "OPTIONS"]),
     Route("/v1/agent/tools/policies", handle_tool_policies, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/agent/tool_policies", handle_tool_policies, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+    Route("/v1/swarm/topology", handle_swarm_topology, methods=["GET", "OPTIONS"]),
+    Route("/v1/swarm/stats", handle_swarm_stats, methods=["GET", "OPTIONS"]),
+    Route("/v1/swarm/delegate", handle_swarm_delegate, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/warm", handle_workspace_warm, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/sync/export", handle_workspace_sync_export, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/workspace/sync/import", handle_workspace_sync_import, methods=["POST", "OPTIONS"]),

@@ -293,6 +293,8 @@ def run_stats():
         cascade_downgrades = cascade_stats.get("downgraded_count", 0) or ee.get("cascade_downgrades_total", 0)
         if cascade_downgrades > 0 or cascade_savings > 0:
             print(f"  Model Cascade Savings:   ${cascade_savings:.4f} USD ({cascade_downgrades:,} queries cascaded to economy tier)")
+        if ee.get("swarm_cross_agent_hits", 0) > 0 or ee.get("swarm_requests_processed", 0) > 0:
+            print(f"  Swarm Cross-Agent Hits:  {ee.get('swarm_cross_agent_hits', 0):,} ({ee.get('swarm_tokens_saved', 0):,} tok saved, {ee.get('swarm_mutations_invalidated', 0):,} mutations purged)")
         print(f"  PII Items Redacted:      {ee.get('privacy_redactions_total', 0):,}")
         print(f"  Vision Cache Hits:       {ee.get('vision_cache_hits', 0):,}")
         print(f"  Multi-turn Bypasses:     {cs.get('bypasses', 0):,} (Intent & Multi-Turn Isolation)")
@@ -377,6 +379,8 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         cascade_stats = ee.get("cascade_stats", {})
         cascade_savings = fm.get("arbitrage_savings_usd", 0.0) or cascade_stats.get("arbitrage_savings_usd", 0.0)
         cascade_downgrades = cascade_stats.get("downgraded_count", 0) or ee.get("cascade_downgrades_total", 0)
+        swarm_hits = ee.get("swarm_cross_agent_hits", 0)
+        swarm_tokens = ee.get("swarm_tokens_saved", 0)
         daemon_status = f"Live Daemon (v{ver})"
     else:
         stats = cache_instance.get_stats()
@@ -394,6 +398,8 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
         from server.cascade_router import cascade_router
         cascade_savings = cascade_router.arbitrage_savings_usd
         cascade_downgrades = cascade_router.downgraded_count
+        swarm_hits = METRICS_LEDGER.get("swarm_cross_agent_hits", 0)
+        swarm_tokens = METRICS_LEDGER.get("swarm_tokens_saved", 0)
         daemon_status = f"Local Store (v{ver})"
 
     md_lines = [
@@ -411,6 +417,8 @@ def run_ci_summary(output_path: Optional[str] = None) -> str:
     ]
     if cascade_downgrades > 0 or cascade_savings > 0:
         md_lines.append(f"| **Model Cascade Savings** | **${cascade_savings:.4f} USD** | 🔀 Smart Shannon entropy downgrade ({cascade_downgrades:,} queries) |")
+    if swarm_hits > 0:
+        md_lines.append(f"| **Swarm Cross-Agent Hits** | **{swarm_hits:,} hits** | 🐝 Inter-agent shared cache ({swarm_tokens:,} tokens saved) |")
     if telephony_calls > 0:
         md_lines.append(f"| **Voice Telephony Calls** | **{telephony_calls:,} calls** | 🎙️ STT filler normalization & fast-path hits |")
     if audio_hits > 0:
@@ -695,7 +703,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Voice & Telephony Agents (LiveKit / Twilio / Vapi) ---\033[0m")
             print(json.dumps({
                 "omnicache": {
-                    "version": "2.9.8",
+                    "version": getattr(config, "VERSION", "2.9.9"),
                     "voice_mode": True,
                     "strip_fillers": True,
                     "canonicalize_telephony_metadata": True,
@@ -714,7 +722,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Multimodal Raw Audio Agents (OpenAI Realtime & GPT-4o Audio) ---\033[0m")
             print(json.dumps({
                 "omnicache": {
-                    "version": "2.9.8",
+                    "version": getattr(config, "VERSION", "2.9.9"),
                     "audio_cache": True,
                     "spectral_subband_hasher": "aHash-64",
                     "vad_silence_trimming": True,
@@ -732,7 +740,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             print("\033[1;33m--- Smart Model Cascading & Automated Cost Arbiter ---\033[0m")
             print(json.dumps({
                 "omnicache": {
-                    "version": "2.9.8",
+                    "version": getattr(config, "VERSION", "2.9.9"),
                     "model_cascading": True,
                     "policy": "auto",
                     "shannon_entropy_routing": True,
@@ -748,6 +756,30 @@ def run_init(agent: str = "all", show_only: bool = False):
                 }
             }, indent=2))
             print(f'Cascade Opt-In Header: X-OmniCache-Model-Cascade: allow\n')
+
+        if clean_agent in ("all", "swarm"):
+            print("\033[1;33m--- Multi-Agent Swarm & Subagent Delegation Bus (v2.9.9) ---\033[0m")
+            print(json.dumps({
+                "omnicache": {
+                    "version": getattr(config, "VERSION", "2.9.9"),
+                    "swarm_bus": True,
+                    "swarm_ttl_seconds": 86400,
+                    "cross_agent_memory": True,
+                    "mutation_invalidation": True,
+                    "proxy_url": f"http://127.0.0.1:{port}/v1"
+                },
+                "headers": {
+                    "X-OmniCache-Swarm-ID": "swarm-alpha",
+                    "X-OmniCache-Agent-ID": "worker-1",
+                    "X-OmniCache-Parent-Agent": "lead"
+                },
+                "endpoints": {
+                    "topology": f"http://127.0.0.1:{port}/v1/swarm/topology",
+                    "stats": f"http://127.0.0.1:{port}/v1/swarm/stats",
+                    "delegate": f"http://127.0.0.1:{port}/v1/swarm/delegate"
+                }
+            }, indent=2))
+            print(f'Swarm Headers: X-OmniCache-Swarm-ID, X-OmniCache-Agent-ID, X-OmniCache-Parent-Agent\n')
 
         print("\033[1;36m==========================================================================================\033[0m\n")
         return
@@ -919,7 +951,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             with open(audio_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "omnicache": {
-                        "version": "2.9.8",
+                        "version": getattr(config, "VERSION", "2.9.9"),
                         "audio_cache": True,
                         "spectral_subband_hasher": "aHash-64",
                         "vad_silence_trimming": True,
@@ -942,7 +974,7 @@ def run_init(agent: str = "all", show_only: bool = False):
             with open(cascade_path, "w", encoding="utf-8") as f:
                 json.dump({
                     "omnicache": {
-                        "version": "2.9.8",
+                        "version": getattr(config, "VERSION", "2.9.9"),
                         "model_cascading": True,
                         "policy": "auto",
                         "shannon_entropy_routing": True,
@@ -955,6 +987,30 @@ def run_init(agent: str = "all", show_only: bool = False):
                     }
                 }, f, indent=2)
             configured_items.append(f"Model Cascade Config: {cascade_path}")
+        except Exception:
+            pass
+
+    # 9. Multi-Agent Swarm & Delegation Bus
+    if clean_agent in ("all", "swarm"):
+        swarm_path = os.path.join(os.getcwd(), ".omnicache-swarm.json")
+        try:
+            with open(swarm_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "omnicache": {
+                        "version": getattr(config, "VERSION", "2.9.9"),
+                        "swarm_bus": True,
+                        "swarm_ttl_seconds": 86400,
+                        "cross_agent_memory": True,
+                        "mutation_invalidation": True,
+                        "proxy_url": f"http://127.0.0.1:{port}/v1"
+                    },
+                    "headers": {
+                        "X-OmniCache-Swarm-ID": "swarm-alpha",
+                        "X-OmniCache-Agent-ID": "worker-1",
+                        "X-OmniCache-Parent-Agent": "lead"
+                    }
+                }, f, indent=2)
+            configured_items.append(f"Multi-Agent Swarm Config: {swarm_path}")
         except Exception:
             pass
 
@@ -1089,7 +1145,7 @@ def main():
     parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
-    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal", "cascade", "arbiter"], help="Target agent preset for init (default: all)")
+    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal", "cascade", "arbiter", "swarm"], help="Target agent preset for init (default: all)")
     parser.add_argument("--show", action="store_true", help="Display agent configuration presets without writing to disk")
     parser.add_argument("--markdown", action="store_true", help="Output telemetry metrics formatted as GitHub Flavored Markdown")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")

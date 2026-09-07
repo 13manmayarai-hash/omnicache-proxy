@@ -245,7 +245,7 @@ class TestCostArbiterCascading(unittest.TestCase):
         self.assertIn("cascade_stats", ee)
         self.assertIn("cascade_routes_total", ee)
         self.assertIn("cascade_policy", ee)
-        self.assertEqual(data.get("system_info", {}).get("version"), "2.9.8")
+        self.assertEqual(data.get("system_info", {}).get("version"), config.VERSION)
 
         # 2. /metrics (Prometheus)
         res_metrics = self.client.get("/metrics")

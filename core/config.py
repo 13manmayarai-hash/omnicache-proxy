@@ -79,7 +79,7 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 
 class ProxyConfig:
     SERVICE_NAME: str = "OmniCache AI Proxy"
-    VERSION: str = "2.9.8"
+    VERSION: str = "2.9.9"
     PORT: int = int(os.getenv("PORT", os.getenv("OMNICACHE_PORT", "8000")))
     # Default host strictly bound to localhost
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
@@ -179,6 +179,11 @@ class ProxyConfig:
     CASCADE_THRESHOLD_ECONOMY: float = float(os.getenv("OMNICACHE_CASCADE_THRESHOLD_ECONOMY", "0.35"))
     CASCADE_THRESHOLD_BALANCED: float = float(os.getenv("OMNICACHE_CASCADE_THRESHOLD_BALANCED", "0.60"))
     CASCADE_MAX_SPEND_PER_DAY: float = float(os.getenv("OMNICACHE_CASCADE_MAX_SPEND_PER_DAY", "0.0"))
+
+    # Multi-Agent Swarm & Subagent Delegation Bus
+    SWARM_BUS_ENABLED: bool = os.getenv("OMNICACHE_SWARM_BUS_ENABLED", "true").lower() in ("true", "1")
+    SWARM_CACHE_TTL_SECONDS: int = int(os.getenv("OMNICACHE_SWARM_CACHE_TTL_SECONDS", "3600"))
+    SWARM_MAX_ENTRIES_PER_SWARM: int = int(os.getenv("OMNICACHE_SWARM_MAX_ENTRIES_PER_SWARM", "1000"))
 
 
 def validate_startup_security_invariants(host: str = None):

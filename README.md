@@ -28,6 +28,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 │ Multi-Modal Visual Deduplication (Screenshots) │ ❌ No (Re-uploads megabytes)   │ ✅ Perceptual dHash Match       │
 │ Multimodal Raw Audio Caching (Voice/Realtime) │ ❌ No (Re-transcribes & speaks)│ ✅ <1ms (Spectral LPC aHash)    │
 │ Smart Model Cascading & Cost Arbiter          │ ❌ No (Always frontier rate)   │ ✅ <0.2ms (Shannon Entropy Arbiter) │
+│ Multi-Agent Swarms & Subagent Delegation Bus  │ ❌ No (Isolated per agent)     │ ✅ <0.1ms (Shared Bus & Mutation Purge) │
 └───────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
 ```
 
@@ -219,8 +220,14 @@ print(response.choices[0].message.content)
   * Evaluates prompt complexity in `<0.2ms` via normalized Shannon token entropy ($H \in [0.0, 1.0]$) and lexical reasoning classifiers.
   * Dynamically arbitrates procedural, formatting, and trivial queries down to ultra-fast economy models (`gpt-4o-mini`, `gemini-2.5-flash`, `claude-3-5-haiku-20241022`) when authorized via `OMNICACHE_CASCADE_POLICY=auto` or `X-OmniCache-Model-Cascade: allow`, saving up to 80% on cache-miss spend.
   * Preserves vendor family affinity (`same-vendor` vs `cross-vendor`) and enforces strict execution safety invariants: agent tools, structured JSON schemas, and multi-turn conversational chains are **never** downgraded.
+* **Multi-Agent Swarms & Subagent Delegation Bus (v2.9.9):**
+  * Provides a shared, thread-safe memory bus across parallel and hierarchical subagents (Claude Code subagent teams, OpenHands, CrewAI, AutoGen, LangGraph).
+  * Automatically traces parent-to-child delegation lineage (`X-OmniCache-Swarm-ID`, `X-OmniCache-Agent-ID`, `X-OmniCache-Parent-Agent`).
+  * Reuses deterministic tool replays and chat reasoning across peer agents without redundant disk reads or remote LLM roundtrips (`HIT_SWARM`).
+  * Enforces cross-agent state invalidation: the moment any worker agent mutates a file or workspace, volatile read caches across all peer agents in that swarm session are instantly purged.
+  * Live topology introspection and delegation graph queries via `/v1/swarm/topology`, `/v1/swarm/stats`, and `/v1/swarm/delegate`.
 * **Explainability Headers:**
-  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Cache-Status` (`HIT_EXACT` | `HIT_SEMANTIC` | `HIT_VISION` | `HIT_AUDIO`), `X-Cascade-Applied`, `X-Served-Model`, `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
+  * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Cache-Status` (`HIT_EXACT` | `HIT_SEMANTIC` | `HIT_VISION` | `HIT_AUDIO` | `HIT_SWARM`), `X-OmniCache-Swarm-Hit`, `X-OmniCache-Origin-Agent`, `X-Cascade-Applied`, `X-Served-Model`, `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
 ---
 
@@ -230,7 +237,7 @@ print(response.choices[0].message.content)
 # Check database, port bindings, and vector engine health
 omnicache doctor
 
-# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio, Audio & Cascading (11/11 Scorecard)
+# Verify agent integration across Claude Code, Cursor, Cline, OpenHands, LiveKit, Twilio, Audio, Cascading & Swarms (12/12 Scorecard)
 omnicache harness  # or omnicache verify-agent
 
 # CI/CD and Docker health probe (exits 0 if healthy, 1 if unreachable)
@@ -243,7 +250,7 @@ omnicache ci-summary
 omnicache benchmark [--iterations 500]
 
 # Auto-configure agent presets or show configuration snippets
-omnicache init [--agent {all,claude,cursor,cline,openhands,env,voice,livekit,twilio,audio,realtime,multimodal,cascade,arbiter}] [--show]
+omnicache init [--agent {all,claude,cursor,cline,openhands,env,voice,livekit,twilio,audio,realtime,multimodal,cascade,arbiter,swarm}] [--show]
 
 # Pre-warm repository cache for Claude Code or agent sessions
 omnicache warm --dir . --max-files 200

@@ -49,7 +49,7 @@
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v2.9.8 ACTIVE</span></h1>
+          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v2.9.9 ACTIVE</span></h1>
           <p style="font-size: 0.75rem; color: #94a3b8;">Radix Multi-Turn • Agent Tool Accelerator • Model Cascade • Prometheus Export</p>
         </div>
       </div>
@@ -749,6 +749,18 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         badgeColor = '#f59e0b';
         badgeLabel = '📁 WARMED';
         detail = `${d.files_warmed || 0} files in ${d.duration_ms || 0}ms`;
+      } else if (t === 'swarm_hit') {
+        badgeColor = '#eab308';
+        badgeLabel = '🐝 SWARM HIT';
+        detail = `${d.origin_agent || 'agent'} ➔ ${d.requesting_agent || 'subagent'} (+${d.tokens_saved || 0} tok)`;
+      } else if (t === 'swarm_delegation') {
+        badgeColor = '#f59e0b';
+        badgeLabel = '🐝 DELEGATED';
+        detail = `${d.parent_agent || 'lead'} ➔ ${d.subagent_id || 'subagent'}`;
+      } else if (t === 'swarm_invalidation') {
+        badgeColor = '#ef4444';
+        badgeLabel = '🐝 SWARM PURGE';
+        detail = `mutated: ${d.mutated_resource || 'workspace'}`;
       } else if (t === 'model_cascaded') {
         badgeColor = '#f59e0b';
         badgeLabel = '🔀 CASCADED';

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "2.9.8"
-description = "Local acceleration sidecar, Git-aware tool replayer, and smart model cascading cost arbiter for AI agents."
+version = "2.9.9"
+description = "Local acceleration sidecar, multi-agent swarm delegation bus, Git-aware tool replayer, and cost arbiter for AI agents."
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"

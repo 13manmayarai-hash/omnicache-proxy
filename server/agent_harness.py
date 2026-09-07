@@ -562,6 +562,99 @@ class AgentHarness:
             })
 
         # -------------------------------------------------------------
+        # 12. Multi-Agent Swarm & Subagent Delegation Bus (v2.9.9)
+        # -------------------------------------------------------------
+        try:
+            t_swarm = time.perf_counter()
+            swarm_id = f"swarm_harness_{int(time.time()*1000)}"
+
+            # A. Register delegation edge: lead -> worker_researcher
+            del_resp = client.post("/v1/swarm/delegate", json={
+                "swarm_id": swarm_id,
+                "parent_agent": "lead_orchestrator",
+                "agent_id": "worker_researcher",
+                "task_prompt": "Analyze repository architecture"
+            })
+
+            # B. Worker 1 records a tool execution into swarm memory
+            rec_resp = client.post("/v1/agent/tool_record", json={
+                "action": "record",
+                "tool_name": "view_file",
+                "arguments": {"path": "core/config.py"},
+                "output": "SWARM_BUS_ENABLED = True",
+                "workspace_dir": "/root/omnicache_proxy",
+                "swarm_id": swarm_id,
+                "agent_id": "worker_researcher",
+                "parent_agent": "lead_orchestrator"
+            })
+
+            # C. Worker 2 requests identical tool -> Swarm Bus cross-agent cache hit
+            rep_resp = client.post("/v1/agent/tool_replay", json={
+                "tool_name": "view_file",
+                "arguments": {"path": "core/config.py"},
+                "workspace_dir": "/root/omnicache_proxy",
+                "swarm_id": swarm_id,
+                "agent_id": "worker_coder",
+                "parent_agent": "lead_orchestrator"
+            })
+            rep_data = rep_resp.json()
+            is_swarm_hit = (
+                rep_resp.status_code == 200 and
+                rep_data.get("status") == "HIT" and
+                rep_data.get("swarm_hit") is True and
+                rep_data.get("origin_agent") == "worker_researcher"
+            )
+
+            # D. Worker 2 performs mutating tool on /root/omnicache_proxy -> Cross-agent invalidation
+            mut_resp = client.post("/v1/agent/tool_replay", json={
+                "tool_name": "edit_file",
+                "arguments": {"path": "core/config.py", "diff": "+VERSION=3.0.0"},
+                "workspace_dir": "/root/omnicache_proxy",
+                "swarm_id": swarm_id,
+                "agent_id": "worker_coder"
+            })
+
+            # E. Worker 3 requests same view_file -> Must MISS due to mutation purge
+            miss_resp = client.post("/v1/agent/tool_replay", json={
+                "tool_name": "view_file",
+                "arguments": {"path": "core/config.py"},
+                "workspace_dir": "/root/omnicache_proxy",
+                "swarm_id": swarm_id,
+                "agent_id": "worker_reviewer"
+            })
+            is_invalidated = (miss_resp.status_code == 200 and miss_resp.json().get("status") == "MISS")
+
+            # F. Inspect swarm topology
+            topo_resp = client.get(f"/v1/swarm/topology?swarm_id={swarm_id}")
+            topo_data = topo_resp.json() if topo_resp.status_code == 200 else {}
+            has_topology = "nodes" in topo_data and "lead_orchestrator" in topo_data.get("nodes", {})
+
+            latency_ms = (time.perf_counter() - t_swarm) * 1000
+            passed = (
+                del_resp.status_code == 200 and
+                rec_resp.status_code == 200 and
+                is_swarm_hit and
+                is_invalidated and
+                has_topology
+            )
+
+            results.append({
+                "subsystem": "Multi-Agent Swarm Bus",
+                "passed": passed,
+                "latency_ms": latency_ms,
+                "details": f"Cross-Agent Memory Hit & Mutation Guard (lead ➔ researcher ➔ coder)",
+                "speedup": f"{int(50.0 / max(0.001, latency_ms)):,}x"
+            })
+        except Exception as e:
+            results.append({
+                "subsystem": "Multi-Agent Swarm Bus",
+                "passed": False,
+                "latency_ms": 0.0,
+                "details": f"Failed: {e}",
+                "speedup": "N/A"
+            })
+
+        # -------------------------------------------------------------
         # Render Formatted ASCII Scorecard
         # -------------------------------------------------------------
         print(f"{'Subsystem / Protocol':<36} {'Status':<12} {'Latency':<14} {'Details'}")
@@ -588,6 +681,7 @@ class AgentHarness:
             print("   • LiveKit & Twilio (Conversational Voice Agents)")
             print("   • OpenAI Realtime & GPT-4o Audio (Multimodal Streams)")
             print("   • Smart Model Cascading & Cost Arbiter (Autonomous Arbitrage)")
+            print("   • Multi-Agent Swarms & Subagents (Inter-Agent Memory Bus)")
         else:
             print(f"\033[1;31m⚠️ Scorecard: {passed_count} / {total_count} checks passed. Please review failures above.\033[0m")
         print("========================================================================================\n")

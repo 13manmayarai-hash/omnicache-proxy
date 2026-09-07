@@ -55,16 +55,18 @@ docker compose up -d
 
 ## Zero-Config Quickstart (`omnicache run`)
 
-The easiest way to use OmniCache is the zero-config `run` wrapper. It automatically launches the background proxy, injects provider environment variables (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`), and displays a session savings ledger when finished:
+The easiest way to use OmniCache is the zero-config `run` wrapper. It automatically launches the background proxy, injects provider environment variables (`ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL`, `LLM_BASE_URL`), and displays a session savings ledger when finished:
 
 ### 1. Launch Claude Code
 ```bash
 omnicache run claude
 ```
 
-### 2. Launch Cursor / VS Code / Other Agent Scripts
+### 2. Launch Cursor IDE / OpenHands / Cline / Aider
 ```bash
 omnicache run cursor .
+omnicache run openhands
+omnicache run aider
 # or custom Python agent scripts:
 omnicache run python my_coding_agent.py
 ```
@@ -77,6 +79,64 @@ When you exit your session, OmniCache outputs a clean summary:
 │  - Avoided Cost:    $ 0.0142 USD                 │
 │  - Tool Replays:          14 cached tool calls   │
 ╰──────────────────────────────────────────────────╯
+```
+
+---
+
+## 🤖 Drop-In Agent Setup (`omnicache init`)
+
+OmniCache automatically configures presets for all your favorite AI coding tools:
+
+```bash
+# Auto-configure Claude Code, Cursor, Cline, and OpenHands
+omnicache init
+
+# Or preview configuration JSON / TOML snippets without touching disk
+omnicache init --show
+
+# Target a specific assistant
+omnicache init --agent claude
+omnicache init --agent cursor
+omnicache init --agent cline
+omnicache init --agent openhands
+```
+
+### Verify Agent Acceleration (`omnicache harness`)
+Run the built-in end-to-end verification harness to guarantee sub-millisecond response across all agent protocols:
+
+```text
+========================================================================================
+🎯 OmniCache Live Agent Integration Harness
+========================================================================================
+Subsystem / Protocol                 Status       Latency        Details
+----------------------------------------------------------------------------------------
+Claude Code (Boilerplate Stripper)   ✔ PASSED     0.038 ms       L1 Exact Hit on dynamic time
+Cursor & OpenAI SDK Gateway          ✔ PASSED     0.041 ms       Standard /v1/chat/completions
+L2 FastHash Semantic Vector Engine   ✔ PASSED     0.985 ms       Cosine similarity >= 0.68 threshold
+Agent Tool Replayer (Git-Aware)      ✔ PASSED     0.192 ms       Sub-ms deterministic tool replay
+Mutation Guard Safety Policy         ✔ PASSED     0.015 ms       Blocked mutative tool caching
+Workspace CI/CD Cache Warming        ✔ PASSED     14.20 ms       Indexed files into tool store
+MCP Server Protocol (stdio/JSON-RPC) ✔ PASSED     0.018 ms       Discovered 9 MCP tools
+----------------------------------------------------------------------------------------
+🎉 Scorecard: 7 / 7 checks PASSED (100% Ready)
+========================================================================================
+```
+
+---
+
+## ⚡ Live Performance Benchmarks (`omnicache benchmark`)
+
+OmniCache includes an automated multi-subsystem benchmarking engine:
+
+```text
+------------------------------------------------------------------------------------------
+Engine Subsystem                 Cold Turn        OmniCache Replay   Speedup    Benefit
+------------------------------------------------------------------------------------------
+L1 Exact Request Cache           ~450.00 ms       0.0348 ms          12,914x    100% Token Savings (505 tok)
+L2 FastHash Semantic Vector      ~450.00 ms       0.9954 ms          452x       90%+ Cosine Replay
+Agent Tool Replayer (Business)   ~1,200.00 ms     0.2044 ms          5,870x     $0.00 Disk Thrashing
+Workspace CI/CD Pre-Warming      Cold Repo Scan   2714.74 ms         7 f/s      Pre-warmed 20 files
+==========================================================================================
 ```
 
 ---
@@ -135,8 +195,8 @@ print(response.choices[0].message.content)
 * **Configurable Business Tool Policies & Mutation Guard:**
   * Define per-tool dynamic TTLs (`tool_policies_records`), auto-detect idempotent prefixes (`read`, `view`, `get`, `query`, `check`), and strictly block non-idempotent mutation tools (`write`, `delete`, `pay`, `charge`, `execute`).
 * **Multi-Agent Workspace Sync & CI/CD Cache Warming:**
-  * Pre-warm workspace repository structures, files, git status, and diffs during CI/CD before coding agent loops run.
-  * Export, import, and sync cache snapshots across team members and multi-agent sessions via portable JSON archives or Redis.
+  * Pre-warm workspace repository structures, files, git status, and diffs during CI/CD before coding agent loops run (`omnicache warm`).
+  * Export, import, and sync cache snapshots across team members and multi-agent sessions via portable JSON archives or Redis (`omnicache sync`).
 * **Explainability Headers:**
   * Transparent `X-OmniCache-Decision` (`HIT` | `MISS`), `X-Tokens-Saved`, and `X-Cost-Avoided-USD` response headers.
 
@@ -148,11 +208,17 @@ print(response.choices[0].message.content)
 # Check database, port bindings, and vector engine health
 omnicache doctor
 
+# Verify agent integration across Claude Code, Cursor, Cline, OpenHands
+omnicache harness
+
 # Run high-speed micro-benchmarks on your machine
-omnicache benchmark
+omnicache benchmark [--iterations 500]
+
+# Auto-configure agent presets or show configuration snippets
+omnicache init [--agent {all,claude,cursor,cline,openhands,env}] [--show]
 
 # Pre-warm repository cache for Claude Code or agent sessions
-omnicache warm --dir . --max-files 100
+omnicache warm --dir . --max-files 200
 
 # Multi-agent team sync: export, import, push, pull, or check sync status
 omnicache sync status
@@ -169,7 +235,7 @@ omnicache stats
 
 ## Observability & Diagnostics
 
-* **Web Dashboard & Visualizer:** `http://localhost:8000/dashboard` (features real-time savings velocity timeline and resolution distribution charts powered by Chart.js)
+* **Web Dashboard & Visualizer:** `http://localhost:8000/dashboard` (features real-time savings velocity timeline, resolution distribution charts, and Workspace Sync & Tool Policies management)
 * **Prometheus Metrics:** `http://localhost:8000/metrics`
 * **Cache Statistics:** `http://localhost:8000/v1/cache/stats`
 * **CSV Export:** `http://localhost:8000/v1/cache/export`
@@ -178,6 +244,7 @@ omnicache stats
 
 ## Documentation
 
+* [AI Coding Agent Integrations (Claude Code, Cursor, Cline, OpenHands)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/AGENT_INTEGRATIONS.md)
 * [API Reference](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/API_REFERENCE.md)
 * [Architecture Overview](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/ARCHITECTURE.md)
 * [Quickstart Guide](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md)

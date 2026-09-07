@@ -4,6 +4,12 @@ OmniCache command-line interface.
 
 import sys
 import os
+
+# Ensure package root is always resolvable across environments
+_PKG_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _PKG_ROOT not in sys.path:
+    sys.path.insert(0, _PKG_ROOT)
+
 import time
 import socket
 import argparse
@@ -404,10 +410,26 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
     env["ANTHROPIC_BASE_URL"] = proxy_url
     env["OPENAI_BASE_URL"] = proxy_v1
     env["OPENAI_API_BASE"] = proxy_v1
+    env["LLM_BASE_URL"] = proxy_v1
+    env["OMNICACHE_ACCELERATED"] = "1"
+    env["OMNICACHE_PORT"] = str(port)
+
+    # Workspace status hint
+    try:
+        from server.workspace_sync import workspace_sync_manager
+        ws_stat = workspace_sync_manager.get_sync_status(os.getcwd())
+        active_tools = ws_stat.get("active_tool_records", 0)
+        if active_tools > 0:
+            print(f"📦 Workspace Cache: {active_tools} pre-warmed tool records ready")
+        else:
+            print(f"💡 Tip: Run 'omnicache warm' to pre-index repository files for instant tool replays")
+    except Exception:
+        pass
 
     print(f"🎯 Injected proxy environment:")
     print(f"   ANTHROPIC_BASE_URL = {proxy_url}")
     print(f"   OPENAI_BASE_URL    = {proxy_v1}")
+    print(f"   LLM_BASE_URL       = {proxy_v1}")
     print(f"\n▶ Executing agent command: {' '.join(cmd_args)}\n{'='*60}\n")
 
     exit_code = 0
@@ -450,96 +472,240 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
 
     sys.exit(exit_code)
 
-def run_init():
+def run_init(agent: str = "all", show_only: bool = False):
     """
-    One-click automated setup for Claude Code, Cursor, and IDE environments.
-    Configures ~/.claude.json, ~/.cursor/mcp.json, and environment exports.
+    Automated drop-in setup and profile generator for AI coding agents:
+    Claude Code, Cursor, Cline, OpenHands, and Shell environments.
     """
+    import json
+    clean_agent = (agent or "all").lower().strip()
+    port = config.PORT
+    python_bin = sys.executable
+
+    claude_mcp = {
+        "mcpServers": {
+            "omnicache": {
+                "command": python_bin,
+                "args": ["-m", "mcp.server"],
+                "env": {
+                    "OMNICACHE_PORT": str(port)
+                }
+            }
+        }
+    }
+
+    cursor_mcp = {
+        "mcpServers": {
+            "omnicache": {
+                "command": python_bin,
+                "args": ["-m", "mcp.server"],
+                "env": {
+                    "OMNICACHE_PORT": str(port)
+                }
+            }
+        }
+    }
+
+    cline_mcp = {
+        "mcpServers": {
+            "omnicache": {
+                "command": python_bin,
+                "args": ["-m", "mcp.server"],
+                "env": {
+                    "OMNICACHE_PORT": str(port)
+                },
+                "disabled": False,
+                "autoApprove": []
+            }
+        }
+    }
+
+    openhands_toml = (
+        f'# OpenHands Configuration for OmniCache AI Proxy\n'
+        f'[llm]\n'
+        f'model = "anthropic/claude-3-5-sonnet-20241022"\n'
+        f'base_url = "http://127.0.0.1:{port}"\n'
+        f'api_key = "dummy"\n'
+        f'# Alternative OpenAI setup:\n'
+        f'# model = "openai/gpt-4o"\n'
+        f'# base_url = "http://127.0.0.1:{port}/v1"\n'
+    )
+
+    env_sh = (
+        f'# OmniCache AI Coding Agent Environment Exports\n'
+        f'export ANTHROPIC_BASE_URL="http://127.0.0.1:{port}"\n'
+        f'export OPENAI_BASE_URL="http://127.0.0.1:{port}/v1"\n'
+        f'export OPENAI_API_BASE="http://127.0.0.1:{port}/v1"\n'
+        f'export LLM_BASE_URL="http://127.0.0.1:{port}/v1"\n'
+        f'export OMNICACHE_ACCELERATED="1"\n'
+        f'export OMNICACHE_PORT="{port}"\n'
+    )
+
+    if show_only:
+        print(f"\n\033[1;36m==========================================================================================")
+        print(f"📋 OmniCache Agent Configuration Presets (Target: {clean_agent.upper()})")
+        print(f"==========================================================================================\033[0m\n")
+
+        if clean_agent in ("all", "claude"):
+            print("\033[1;33m--- Claude Code (~/.claude.json / ~/.claude/settings.json) ---\033[0m")
+            print(json.dumps(claude_mcp, indent=2))
+            print(f'CLI Environment: export ANTHROPIC_BASE_URL="http://127.0.0.1:{port}"\n')
+
+        if clean_agent in ("all", "cursor"):
+            print("\033[1;33m--- Cursor IDE (.cursor/mcp.json) ---\033[0m")
+            print(json.dumps(cursor_mcp, indent=2))
+            print(f'Cursor AI Settings -> OpenAI Base URL: http://127.0.0.1:{port}/v1\n')
+
+        if clean_agent in ("all", "cline"):
+            print("\033[1;33m--- Cline (cline_mcp_settings.json) ---\033[0m")
+            print(json.dumps(cline_mcp, indent=2))
+            print(f'Cline API Provider: Custom OpenAI-compatible -> Base URL: http://127.0.0.1:{port}/v1\n')
+
+        if clean_agent in ("all", "openhands"):
+            print("\033[1;33m--- OpenHands (config.toml) ---\033[0m")
+            print(openhands_toml)
+            print(f'Docker Run flag: -e LLM_BASE_URL="http://host.docker.internal:{port}/v1"\n')
+
+        if clean_agent in ("all", "env"):
+            print("\033[1;33m--- Shell Environment (~/.omnicache/env.sh) ---\033[0m")
+            print(env_sh)
+
+        print("\033[1;36m==========================================================================================\033[0m\n")
+        return
+
     print("\n\033[1;36m╭───────────────────────────────────────────────────╮")
-    print("│ ⚙️  OmniCache One-Click Auto-Setup & Integration   │")
+    print("│ ⚙️  OmniCache Drop-In Agent Auto-Configuration     │")
     print("╰───────────────────────────────────────────────────╯\033[0m\n")
 
-    import json
     configured_items = []
 
-    # 1. Claude Code (~/.claude.json & ~/.claude/settings.json)
-    claude_paths = [
-        os.path.expanduser("~/.claude.json"),
-        os.path.expanduser("~/.claude/settings.json")
-    ]
-    for cp in claude_paths:
-        try:
-            os.makedirs(os.path.dirname(cp), exist_ok=True)
-            data = {}
-            if os.path.exists(cp):
-                try:
-                    with open(cp, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except Exception:
-                    data = {}
-            
-            if "mcpServers" not in data:
-                data["mcpServers"] = {}
-            
-            data["mcpServers"]["omnicache"] = {
-                "command": sys.executable,
-                "args": ["-m", "mcp.server"],
-                "env": {
-                    "OMNICACHE_PORT": str(config.PORT)
+    # 1. Claude Code
+    if clean_agent in ("all", "claude"):
+        claude_paths = [
+            os.path.expanduser("~/.claude.json"),
+            os.path.expanduser("~/.claude/settings.json")
+        ]
+        for cp in claude_paths:
+            try:
+                os.makedirs(os.path.dirname(cp), exist_ok=True)
+                data = {}
+                if os.path.exists(cp):
+                    try:
+                        with open(cp, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    except Exception:
+                        data = {}
+                if "mcpServers" not in data:
+                    data["mcpServers"] = {}
+                data["mcpServers"]["omnicache"] = {
+                    "command": python_bin,
+                    "args": ["-m", "mcp.server"],
+                    "env": {"OMNICACHE_PORT": str(port)}
                 }
-            }
-            with open(cp, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            configured_items.append(f"Claude Code MCP Config: {cp}")
+                with open(cp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                configured_items.append(f"Claude Code Config:     {cp}")
+            except Exception:
+                pass
+
+    # 2. Cursor MCP
+    if clean_agent in ("all", "cursor"):
+        cursor_paths = [
+            os.path.expanduser("~/.cursor/mcp.json"),
+            os.path.join(os.getcwd(), ".cursor", "mcp.json")
+        ]
+        for curp in cursor_paths:
+            try:
+                os.makedirs(os.path.dirname(curp), exist_ok=True)
+                data = {}
+                if os.path.exists(curp):
+                    try:
+                        with open(curp, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    except Exception:
+                        data = {}
+                if "mcpServers" not in data:
+                    data["mcpServers"] = {}
+                data["mcpServers"]["omnicache"] = {
+                    "command": python_bin,
+                    "args": ["-m", "mcp.server"],
+                    "env": {"OMNICACHE_PORT": str(port)}
+                }
+                with open(curp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                configured_items.append(f"Cursor MCP Config:      {curp}")
+            except Exception:
+                pass
+
+    # 3. Cline (VS Code & Cursor extension)
+    if clean_agent in ("all", "cline"):
+        cline_paths = [
+            os.path.expanduser("~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
+            os.path.expanduser("~/.config/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"),
+            os.path.join(os.getcwd(), ".vscode", "cline_mcp_settings.json")
+        ]
+        for clp in cline_paths:
+            try:
+                os.makedirs(os.path.dirname(clp), exist_ok=True)
+                data = {}
+                if os.path.exists(clp):
+                    try:
+                        with open(clp, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                    except Exception:
+                        data = {}
+                if "mcpServers" not in data:
+                    data["mcpServers"] = {}
+                data["mcpServers"]["omnicache"] = {
+                    "command": python_bin,
+                    "args": ["-m", "mcp.server"],
+                    "env": {"OMNICACHE_PORT": str(port)},
+                    "disabled": False,
+                    "autoApprove": []
+                }
+                with open(clp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                configured_items.append(f"Cline MCP Config:       {clp}")
+            except Exception:
+                pass
+
+    # 4. OpenHands
+    if clean_agent in ("all", "openhands"):
+        openhands_paths = [
+            os.path.join(os.getcwd(), "config.toml"),
+            os.path.expanduser("~/.openhands/config.toml")
+        ]
+        for ohp in openhands_paths:
+            try:
+                os.makedirs(os.path.dirname(ohp), exist_ok=True)
+                if not os.path.exists(ohp):
+                    with open(ohp, "w", encoding="utf-8") as f:
+                        f.write(openhands_toml)
+                    configured_items.append(f"OpenHands Config:       {ohp}")
+                else:
+                    configured_items.append(f"OpenHands Config Exists:{ohp}")
+            except Exception:
+                pass
+
+    # 5. Shell Profile Helper
+    if clean_agent in ("all", "env"):
+        env_sh_path = os.path.expanduser("~/.omnicache/env.sh")
+        try:
+            os.makedirs(os.path.dirname(env_sh_path), exist_ok=True)
+            with open(env_sh_path, "w", encoding="utf-8") as f:
+                f.write(env_sh)
+            configured_items.append(f"Shell Env Helper:       {env_sh_path}")
         except Exception:
             pass
-
-    # 2. Cursor MCP (~/.cursor/mcp.json or project .cursor/mcp.json)
-    cursor_paths = [
-        os.path.expanduser("~/.cursor/mcp.json"),
-        os.path.join(os.getcwd(), ".cursor", "mcp.json")
-    ]
-    for curp in cursor_paths:
-        try:
-            os.makedirs(os.path.dirname(curp), exist_ok=True)
-            data = {}
-            if os.path.exists(curp):
-                try:
-                    with open(curp, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                except Exception:
-                    data = {}
-            if "mcpServers" not in data:
-                data["mcpServers"] = {}
-            data["mcpServers"]["omnicache"] = {
-                "command": sys.executable,
-                "args": ["-m", "mcp.server"],
-                "env": {
-                    "OMNICACHE_PORT": str(config.PORT)
-                }
-            }
-            with open(curp, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            configured_items.append(f"Cursor MCP Config:      {curp}")
-        except Exception:
-            pass
-
-    # 3. Shell Profile Export Helper (~/.omnicache/env.sh)
-    env_sh_path = os.path.expanduser("~/.omnicache/env.sh")
-    try:
-        os.makedirs(os.path.dirname(env_sh_path), exist_ok=True)
-        with open(env_sh_path, "w", encoding="utf-8") as f:
-            f.write(f'# OmniCache Shell Environment Exports\nexport ANTHROPIC_BASE_URL="http://127.0.0.1:{config.PORT}"\nexport OPENAI_BASE_URL="http://127.0.0.1:{config.PORT}/v1"\nexport OPENAI_API_BASE="http://127.0.0.1:{config.PORT}/v1"\n')
-        configured_items.append(f"Shell Env Helper:       {env_sh_path}")
-    except Exception:
-        pass
 
     for item in configured_items:
         print(f"\033[1;32m  ✔ {item}\033[0m")
 
     print(f"\n\033[1;37m🎉 Setup complete! You can now run:\033[0m")
-    print(f"   \033[1;36momnicache run claude\033[0m  (for Claude Code)")
-    print(f"   \033[1;36momnicache run cursor .\033[0m  (for Cursor IDE)\n")
+    print(f"   \033[1;36momnicache run claude\033[0m       (for Claude Code)")
+    print(f"   \033[1;36momnicache run cursor .\033[0m       (for Cursor IDE)")
+    print(f"   \033[1;36momnicache run openhands\033[0m    (for OpenHands)")
+    print(f"   \033[1;36momnicache harness\033[0m          (to verify live integration health)\n")
 
 def run_warm(workspace_dir: Optional[str] = None, ref: str = "HEAD", max_files: int = 200):
     from server.workspace_sync import workspace_warmer
@@ -660,9 +826,11 @@ def main():
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "stats", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "stats", "reset-circuit", "version", "warm", "sync"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
+    parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env"], help="Target agent preset for init (default: all)")
+    parser.add_argument("--show", action="store_true", help="Display agent configuration presets without writing to disk")
     parser.add_argument("--provider", type=str, default=None, help="Target provider for reset-circuit (openai, anthropic, google)")
     parser.add_argument("--dir", type=str, default=None, help="Target workspace directory for warm or sync")
     parser.add_argument("--ref", type=str, default="HEAD", help="Git reference for warm (default: HEAD)")
@@ -677,8 +845,12 @@ def main():
     args = parser.parse_args()
 
     if args.command == "init":
-        run_init()
+        run_init(agent=args.agent, show_only=args.show)
         sys.exit(0)
+    elif args.command == "harness":
+        from server.agent_harness import AgentHarness
+        success = AgentHarness.run(host=args.host, port=args.port, verbose=args.verbose)
+        sys.exit(0 if success else 1)
     elif args.command == "doctor":
         run_doctor()
         sys.exit(0)

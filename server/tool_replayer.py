@@ -54,7 +54,9 @@ DEFAULT_BUILTIN_POLICIES: Dict[str, Dict[str, Any]] = {
     # 6. Non-Cacheable Mutating Tools
     "run_command": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
     "write_file": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
+    "write_to_file": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
     "replace_file_content": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
+    "execute_command": {"type": "mutation", "ttl_seconds": 0, "cacheable": False, "deduplicate_history": False},
 }
 
 TOOL_POLICIES: Dict[str, Dict[str, Any]] = dict(DEFAULT_BUILTIN_POLICIES)
@@ -168,6 +170,22 @@ def extract_candidate_path(
     return target_dir, target_file
 
 
+_GIT_STATE_CACHE: Dict[str, Tuple[float, str]] = {}
+_GIT_CACHE_TTL: float = 0.50  # 500ms debounce to eliminate subprocess thrashing in large monorepos
+
+
+def invalidate_git_state_cache(target_dir: Optional[str] = None) -> None:
+    """Explicitly purges git state debounce cache on mutations or file writes."""
+    global _GIT_STATE_CACHE
+    if target_dir:
+        norm = os.path.abspath(target_dir)
+        to_del = [k for k in _GIT_STATE_CACHE if k.startswith(target_dir) or k.startswith(norm)]
+        for k in to_del:
+            _GIT_STATE_CACHE.pop(k, None)
+    else:
+        _GIT_STATE_CACHE.clear()
+
+
 def get_git_workspace_state(
     workspace_dir: Optional[str] = None,
     arguments: Optional[Dict[str, Any]] = None,
@@ -177,8 +195,8 @@ def get_git_workspace_state(
     """
     Computes a fine-grained cryptographic fingerprint of the workspace state.
     - target_file policy: Fingerprints ONLY the specific target file (editing docs won't invalidate code files!).
-    - scoped_git_workspace policy: Fingerprints Git status scoped only to the target subdirectory.
-    - git_workspace policy: Fingerprints full repository Git HEAD + porcelain dirty status.
+    - scoped_git_workspace policy: Fingerprints Git status scoped only to the target subdirectory (including all untracked files).
+    - git_workspace policy: Fingerprints full repository Git HEAD + porcelain dirty status (with -uall).
     - Non-git fallback: Fingerprints directory mtime/size.
     """
     target_dir, target_file = extract_candidate_path(workspace_dir, arguments, workspace_fingerprint)
@@ -190,37 +208,47 @@ def get_git_workspace_state(
             return f"target_file:{target_file}:{file_fp}"
         return f"target_file_missing:{target_file}"
 
-    # 2. Check git state for target_dir
+    # 2. Check git state for target_dir with micro-cache debouncing
     git_state = None
-    try:
-        is_git = subprocess.run(
-            ["git", "-C", target_dir, "rev-parse", "--is-inside-work-tree"],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
-        )
-        if is_git.returncode == 0 and is_git.stdout.strip() == "true":
-            head_res = subprocess.run(
-                ["git", "-C", target_dir, "rev-parse", "HEAD"],
+    now = time.time()
+    cache_key = f"{target_dir}:{policy_type}"
+    # Debounce scoped_git_workspace (used by read-tools: grep, list_dir, find, etc.)
+    # to eliminate subprocess fork thrashing (>85ms per tool) in monorepos.
+    # For global git_workspace (e.g. direct git_status/diff), evaluate fresh to detect direct disk edits.
+    cached = _GIT_STATE_CACHE.get(cache_key) if policy_type == "scoped_git_workspace" else None
+    if cached is not None and (now - cached[0]) < _GIT_CACHE_TTL:
+        git_state = cached[1]
+    else:
+        try:
+            is_git = subprocess.run(
+                ["git", "-C", target_dir, "rev-parse", "--is-inside-work-tree"],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
             )
-            head_sha = head_res.stdout.strip() if head_res.returncode == 0 else "unknown_head"
-
-            # Scoped status for directory-specific searches
-            if policy_type == "scoped_git_workspace":
-                status_res = subprocess.run(
-                    ["git", "-C", target_dir, "status", "--porcelain", "."],
+            if is_git.returncode == 0 and is_git.stdout.strip() == "true":
+                head_res = subprocess.run(
+                    ["git", "-C", target_dir, "rev-parse", "HEAD"],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
                 )
-            else:
-                status_res = subprocess.run(
-                    ["git", "-C", target_dir, "status", "--porcelain"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
-                )
+                head_sha = head_res.stdout.strip() if head_res.returncode == 0 else "unknown_head"
 
-            status_raw = status_res.stdout if status_res.returncode == 0 else ""
-            status_hash = hashlib.sha256(status_raw.encode("utf-8")).hexdigest()[:16]
-            git_state = f"{head_sha}:{status_hash}"
-    except Exception:
-        pass
+                # Scoped status for directory-specific searches with -uall (captures all untracked files)
+                if policy_type == "scoped_git_workspace":
+                    status_res = subprocess.run(
+                        ["git", "-C", target_dir, "status", "--porcelain", "-uall", "."],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
+                    )
+                else:
+                    status_res = subprocess.run(
+                        ["git", "-C", target_dir, "status", "--porcelain", "-uall"],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
+                    )
+
+                status_raw = status_res.stdout if status_res.returncode == 0 else ""
+                status_hash = hashlib.sha256(status_raw.encode("utf-8")).hexdigest()[:16]
+                git_state = f"{head_sha}:{status_hash}"
+                _GIT_STATE_CACHE[cache_key] = (now, git_state)
+        except Exception:
+            pass
 
     # Combine file fingerprint and git state
     if file_fp and git_state:
@@ -423,6 +451,10 @@ class ToolPolicyManager:
 
     def is_cacheable(self, tool_name: str) -> bool:
         return bool(self.get_policy(tool_name).get("cacheable", False))
+
+    def is_mutation(self, tool_name: str) -> bool:
+        pol = self.get_policy(tool_name)
+        return pol.get("type") == "mutation" or not pol.get("cacheable", False)
 
     def should_deduplicate(self, tool_name: str) -> bool:
         return bool(self.get_policy(tool_name).get("deduplicate_history", False))
@@ -711,8 +743,39 @@ class ToolExecutionCache:
                 conn.close()
         return len(expired_keys)
 
+    def invalidate_workspace(self, workspace_dir: Optional[str] = None) -> int:
+        """Evicts cached tool executions for a specific workspace and busts git state debounce cache."""
+        invalidate_git_state_cache(workspace_dir)
+        evicted = 0
+        if workspace_dir:
+            norm_ws = os.path.abspath(workspace_dir)
+            to_del = [
+                k for k, v in self._cache.items()
+                if norm_ws in str(k) or norm_ws in str(v.get("workspace_state", ""))
+            ]
+            for k in to_del:
+                del self._cache[k]
+                evicted += 1
+            conn = _get_tool_db_conn()
+            if conn:
+                try:
+                    with conn:
+                        conn.execute(
+                            "DELETE FROM tool_call_records WHERE workspace_fingerprint = ? OR workspace_state LIKE ?",
+                            (workspace_dir, f"%{norm_ws}%")
+                        )
+                except Exception:
+                    pass
+                finally:
+                    conn.close()
+        else:
+            evicted = len(self._cache)
+            self.clear()
+        return evicted
+
     def clear(self) -> None:
-        """Clears all in-memory and durable SQLite tool records."""
+        """Clears all in-memory and durable SQLite tool records and debounced git state."""
+        invalidate_git_state_cache()
         self._cache.clear()
         conn = _get_tool_db_conn()
         if conn:
@@ -840,6 +903,9 @@ def compact_and_record_agent_tools(
                         else:
                             output_str = str(b_content or "")
 
+                        if tool_policy_manager.is_mutation(t_name):
+                            invalidate_git_state_cache(workspace_dir)
+
                         if not is_error and output_str.strip() and tool_policy_manager.is_cacheable(t_name):
                             try:
                                 stored_key = tool_cache.store_tool_call(
@@ -874,6 +940,9 @@ def compact_and_record_agent_tools(
                 t_name = meta["name"]
                 t_input = meta["input"]
                 output_str = str(content or "")
+
+                if tool_policy_manager.is_mutation(t_name):
+                    invalidate_git_state_cache(workspace_dir)
 
                 if output_str.strip() and tool_policy_manager.is_cacheable(t_name):
                     try:

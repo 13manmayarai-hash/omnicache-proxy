@@ -23,6 +23,21 @@ TRIVIAL_PATTERNS = re.compile(
     re.IGNORECASE
 )
 
+# Code & Systems Syntax Patterns (AST and token heuristics for C/C++, Rust, Go, Python, TS, SQL)
+CODE_SYNTAX_PATTERNS = re.compile(
+    r"(\b(typedef\s+struct|typedef\s+enum|uint[0-9]+_t|int[0-9]+_t|size_t|ssize_t|char\s*\*|void\s*\*|const\s+char\s*\*|"
+    r"#include\s*[<\"].+[>\"]|#define\s+\w+|#ifdef|extern\s+\"C\"|malloc\s*\(|free\s*\(|memcpy\s*\(|sizeof\s*\(|"
+    r"template\s*<|std::\w+|fn\s+\w+|impl\s+\w+|pub\s+fn|unsafe\s*\{|func\s+\w+|interface\{\}|package\s+\w+|"
+    r"def\s+\w+\(|class\s+\w+[:\(]|async\s+def|interface\s+\w+|type\s+\w+\s*=|export\s+(default\s+)?(class|function|const)|"
+    r"SELECT\s+.+\s+FROM|INSERT\s+INTO|CREATE\s+TABLE)\b|->|::|=>|```)",
+    re.IGNORECASE
+)
+
+SYSTEMS_CODE_PATTERNS = re.compile(
+    r"(\b(typedef\s+struct|uint[0-9]+_t|int[0-9]+_t|size_t|char\s*\*|void\s*\*|#include|malloc|free|memcpy|sizeof|unsafe\s*\{)\b|->)",
+    re.IGNORECASE
+)
+
 MODEL_TIERS = {
     "tier_1_economy": {
         "models": ["gemini-2.5-flash", "llama-3.3-70b", "mistral-small", "gpt-4o-mini"],
@@ -106,8 +121,14 @@ class CascadeRouter:
         if deep_matches > 0:
             score += min(0.65, 0.40 + (deep_matches * 0.10))
 
-        # Code detection heuristics
-        if "```" in full_text or "def " in full_text or "class " in full_text or "SELECT " in full_text:
+        # Code detection heuristics with syntax & operator awareness
+        code_matches = len(CODE_SYNTAX_PATTERNS.findall(full_text))
+        is_structured_code = code_matches > 0 or "```" in full_text or "def " in full_text or "class " in full_text or "SELECT " in full_text
+        is_dense_systems_code = len(SYSTEMS_CODE_PATTERNS.findall(full_text)) >= 2
+
+        if is_dense_systems_code:
+            score += 0.45
+        elif is_structured_code:
             score += 0.25
 
         # Structured schema or tool calls
@@ -118,14 +139,20 @@ class CascadeRouter:
         if len(messages) > 2:
             score += 0.15
 
-        # Shannon Entropy weighting: low entropy (repetitive/boilerplate) pulls score down,
-        # high entropy (varied information density) reinforces complex reasoning.
+        # Shannon Entropy weighting:
+        # Repetitive boilerplate pulls score down ONLY when text is NOT structured code.
+        # Structured code (C/C++ headers, ASTs, structs) intrinsically contains low-entropy token
+        # repetition (e.g. repeated uint32_t, types, semicolons) which must NOT be penalized!
         if word_count > 6:
             entropy = compute_shannon_entropy(full_text)
-            if entropy < 0.65:
+            if not is_structured_code and entropy < 0.65:
                 score -= 0.10
-            elif entropy > 0.92 and deep_matches > 0:
+            elif entropy > 0.92 and (deep_matches > 0 or is_structured_code):
                 score += 0.10
+
+        # Protect dense systems/code from accidental down-routing
+        if is_dense_systems_code:
+            score = max(0.65, score)
 
         # Clamp between 0.05 and 0.99
         return max(0.05, min(0.99, score))

@@ -30,14 +30,60 @@ def _generate_node_id() -> str:
     return f"{hostname}-{uuid.uuid4().hex[:8]}"
 
 
+class HybridLogicalClock:
+    """
+    Hybrid Logical Clock (HLC) implementation (Kulkarni et al.).
+    Guarantees strict causal monotonicity and physical time tracking across distributed nodes
+    even in the presence of multi-second physical wall-clock drift or non-synchronized NTP.
+    """
+    __slots__ = ("node_id", "l", "c", "_lock")
+
+    def __init__(self, node_id: str = ""):
+        self.node_id = str(node_id or "")
+        self.l: int = int(time.time() * 1000)
+        self.c: int = 0
+        self._lock = threading.Lock()
+
+    def now(self) -> Tuple[int, int]:
+        """Advances HLC on local event and returns (l, c)."""
+        with self._lock:
+            pt = int(time.time() * 1000)
+            l_prime = max(self.l, pt)
+            if l_prime == self.l:
+                self.c += 1
+            else:
+                self.l = l_prime
+                self.c = 0
+            return self.l, self.c
+
+    def update(self, remote_l: int, remote_c: int) -> Tuple[int, int]:
+        """Advances HLC on receiving remote event with (remote_l, remote_c)."""
+        with self._lock:
+            pt = int(time.time() * 1000)
+            r_l = int(remote_l or 0)
+            r_c = int(remote_c or 0)
+            l_prime = max(self.l, r_l, pt)
+            if l_prime == self.l and l_prime == r_l:
+                self.c = max(self.c, r_c) + 1
+            elif l_prime == self.l:
+                self.c += 1
+            elif l_prime == r_l:
+                self.c = r_c + 1
+            else:
+                self.c = 0
+            self.l = l_prime
+            return self.l, self.c
+
+
 class CRDTTombstone:
     """
     Conflict-Free Replicated Data Type (CRDT) Tombstone.
-    Implements Last-Write-Wins (LWW-Element-Set) semantics with Lamport logical clock
-    and physical wall-clock timestamp tie-breaking for deterministic convergence.
+    Implements Last-Write-Wins (LWW-Element-Set) semantics backed by Hybrid Logical Clocks (HLC)
+    to guarantee causal monotonicity and deterministic convergence despite NTP clock skew.
     """
     __slots__ = (
-        "resource_id", "timestamp", "lamport_clock", "node_id", "reason", "metadata"
+        "resource_id", "timestamp", "lamport_clock", "node_id", "reason", "metadata",
+        "hlc_l", "hlc_c"
     )
 
     def __init__(
@@ -47,26 +93,44 @@ class CRDTTombstone:
         lamport_clock: int = 1,
         node_id: str = "",
         reason: str = "mutation",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        hlc_l: Optional[int] = None,
+        hlc_c: Optional[int] = None
     ):
         self.resource_id = str(resource_id).strip()
-        self.timestamp = float(timestamp if timestamp is not None else time.time())
-        self.lamport_clock = int(lamport_clock)
         self.node_id = str(node_id).strip()
         self.reason = str(reason).strip()
         self.metadata = metadata or {}
 
+        self.lamport_clock = int(lamport_clock)
+        if hlc_l is not None:
+            self.hlc_l = int(hlc_l)
+            self.hlc_c = int(hlc_c or 0)
+            self.timestamp = float(timestamp if timestamp is not None else (self.hlc_l / 1000.0))
+        else:
+            self.timestamp = float(timestamp if timestamp is not None else time.time())
+            self.hlc_l = int(self.timestamp * 1000)
+            self.hlc_c = int(lamport_clock if lamport_clock > 0 else 0)
+
     def is_newer_than(self, other: "CRDTTombstone") -> bool:
         """
-        Total ordering evaluation:
-        1. Compare Lamport logical clock (causal precedence)
-        2. Compare physical wall clock timestamp
-        3. Lexicographical tie-break on node_id
+        Total ordering evaluation via Hybrid Logical Clock (HLC):
+        1. Compare physical millisecond epoch (hlc_l)
+        2. Compare logical tick counter (hlc_c)
+        3. Preserve Lamport causality ordering if explicit
+        4. Lexicographical tie-break on node_id
         """
+        if self.hlc_l != other.hlc_l:
+            if self.lamport_clock != other.lamport_clock and (
+                (self.lamport_clock > other.lamport_clock and self.hlc_l < other.hlc_l) or
+                (self.lamport_clock < other.lamport_clock and self.hlc_l > other.hlc_l)
+            ):
+                return self.lamport_clock > other.lamport_clock
+            return self.hlc_l > other.hlc_l
+        if self.hlc_c != other.hlc_c:
+            return self.hlc_c > other.hlc_c
         if self.lamport_clock != other.lamport_clock:
             return self.lamport_clock > other.lamport_clock
-        if abs(self.timestamp - other.timestamp) > 0.0001:
-            return self.timestamp > other.timestamp
         return self.node_id > other.node_id
 
     def to_dict(self) -> Dict[str, Any]:
@@ -76,7 +140,9 @@ class CRDTTombstone:
             "lamport_clock": self.lamport_clock,
             "node_id": self.node_id,
             "reason": self.reason,
-            "metadata": self.metadata
+            "metadata": self.metadata,
+            "hlc_l": self.hlc_l,
+            "hlc_c": self.hlc_c
         }
 
     @classmethod
@@ -87,11 +153,13 @@ class CRDTTombstone:
             lamport_clock=data.get("lamport_clock", 1),
             node_id=data.get("node_id", ""),
             reason=data.get("reason", "mutation"),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
+            hlc_l=data.get("hlc_l"),
+            hlc_c=data.get("hlc_c")
         )
 
     def __repr__(self) -> str:
-        return f"<CRDTTombstone id={self.resource_id} lclock={self.lamport_clock} node={self.node_id}>"
+        return f"<CRDTTombstone id={self.resource_id} hlc=({self.hlc_l},{self.hlc_c}) node={self.node_id}>"
 
 
 class PeerNode:
@@ -183,6 +251,7 @@ class P2PMesh:
         # Vector clock: node_id -> sequence number
         self._vector_clock: Dict[str, int] = {self.node_id: 0}
         self._lamport_clock: int = 0
+        self.hlc: HybridLogicalClock = HybridLogicalClock(self.node_id)
 
         # CRDT Tombstone registry: resource_id -> CRDTTombstone
         self._tombstones: Dict[str, CRDTTombstone] = {}
@@ -229,61 +298,75 @@ class P2PMesh:
             return None
 
         with self._lock:
-            existing_id = self._endpoint_to_node.get(norm_endpoint)
-            effective_id = node_id or existing_id
+            # Check existing by endpoint
+            existing_node_id = self._endpoint_to_node.get(norm_endpoint)
+            peer = self._peers.get(existing_node_id) if existing_node_id else None
 
-            if effective_id and effective_id in self._peers:
-                peer = self._peers[effective_id]
+            if not peer and node_id:
+                peer = self._peers.get(node_id)
+
+            if peer:
                 peer.endpoint = norm_endpoint
                 peer.mark_seen()
                 if metadata:
                     peer.metadata.update(metadata)
-                self._endpoint_to_node[norm_endpoint] = effective_id
+                self._endpoint_to_node[norm_endpoint] = peer.node_id
                 return peer
 
-            peer = PeerNode(
+            # Register new peer
+            new_peer = PeerNode(
                 endpoint=norm_endpoint,
                 node_id=node_id,
                 status="alive",
-                metadata=metadata or {}
+                metadata=metadata
             )
-            self._peers[peer.node_id] = peer
-            self._endpoint_to_node[norm_endpoint] = peer.node_id
-            return peer
+            self._peers[new_peer.node_id] = new_peer
+            self._endpoint_to_node[norm_endpoint] = new_peer.node_id
+            return new_peer
 
-    def unregister_peer(self, identifier: str) -> bool:
-        """Unregisters a peer by node_id or endpoint."""
+    def unregister_peer(self, node_id_or_endpoint: str) -> bool:
+        """Removes a peer node from the mesh."""
         with self._lock:
-            target_id = identifier
-            if identifier in self._endpoint_to_node:
-                target_id = self._endpoint_to_node[identifier]
+            clean = node_id_or_endpoint.strip().rstrip("/")
+            peer = self._peers.pop(clean, None)
+            if not peer and clean in self._endpoint_to_node:
+                nid = self._endpoint_to_node.pop(clean)
+                peer = self._peers.pop(nid, None)
 
-            if target_id in self._peers:
-                peer = self._peers.pop(target_id)
+            if peer:
                 self._endpoint_to_node.pop(peer.endpoint, None)
                 return True
             return False
 
-    def list_peers(self, active_only: bool = False) -> List[Dict[str, Any]]:
+    def list_peers(self, active_only: bool = False, only_alive: Optional[bool] = None) -> List[Dict[str, Any]]:
         with self._lock:
-            res = []
-            for p in self._peers.values():
-                is_alive = p.is_alive(self.heartbeat_timeout)
-                if not is_alive and p.status == "alive":
-                    p.mark_suspect()
-                if active_only and not is_alive:
-                    continue
-                res.append(p.to_dict())
-            return res
+            filter_alive = active_only if only_alive is None else only_alive
+            peers = list(self._peers.values())
+            if filter_alive:
+                peers = [p for p in peers if p.is_alive(self.heartbeat_timeout)]
+            return [p.to_dict() for p in peers]
 
-    def get_peer(self, identifier: str) -> Optional[PeerNode]:
+    def get_peer(self, node_id_or_endpoint: str) -> Optional[PeerNode]:
         with self._lock:
-            if identifier in self._peers:
-                return self._peers[identifier]
-            node_id = self._endpoint_to_node.get(identifier.rstrip("/"))
-            if node_id and node_id in self._peers:
-                return self._peers[node_id]
-            return None
+            clean = node_id_or_endpoint.strip().rstrip("/")
+            if clean in self._peers:
+                return self._peers[clean]
+            nid = self._endpoint_to_node.get(clean)
+            return self._peers.get(nid) if nid else None
+
+    def prune_dead_peers(self) -> int:
+        """Marks peers timed out as suspect or offline."""
+        with self._lock:
+            now = time.time()
+            dead_count = 0
+            for p in self._peers.values():
+                age = now - p.last_seen
+                if age > (self.heartbeat_timeout * 3):
+                    p.mark_offline()
+                    dead_count += 1
+                elif age > self.heartbeat_timeout:
+                    p.mark_suspect()
+            return dead_count
 
     # -------------------------------------------------------------
     # Vector Clock & Causality
@@ -297,6 +380,7 @@ class P2PMesh:
             return self._lamport_clock
 
     def increment_clock(self) -> Tuple[int, Dict[str, int]]:
+        """Increments Lamport logical clock and local vector clock."""
         with self._lock:
             self._lamport_clock += 1
             self._vector_clock[self.node_id] = self._vector_clock.get(self.node_id, 0) + 1
@@ -330,17 +414,20 @@ class P2PMesh:
     ) -> CRDTTombstone:
         """
         Records a local cache or resource mutation.
-        Creates a CRDTTombstone with monotonic Lamport clock and updates local vector clock.
+        Creates a CRDTTombstone with monotonic HLC and updates local vector clock.
         """
         with self._lock:
+            hlc_l, hlc_c = self.hlc.now()
             lamport, _ = self.increment_clock()
             tombstone = CRDTTombstone(
                 resource_id=resource_id,
-                timestamp=time.time(),
+                timestamp=hlc_l / 1000.0,
                 lamport_clock=lamport,
                 node_id=self.node_id,
                 reason=reason,
-                metadata=metadata or {}
+                metadata=metadata or {},
+                hlc_l=hlc_l,
+                hlc_c=hlc_c
             )
             self._tombstones[resource_id] = tombstone
 
@@ -358,7 +445,7 @@ class P2PMesh:
         """
         Applies an incoming CRDT tombstone from a peer node using LWW semantics.
         If accepted:
-          - Advances local Lamport clock
+          - Advances local HLC and Lamport clock
           - Updates tombstone registry
           - Invokes all registered local cache invalidation handlers
         """
@@ -372,6 +459,7 @@ class P2PMesh:
             return False, "empty_resource_id"
 
         with self._lock:
+            self.hlc.update(tombstone.hlc_l, tombstone.hlc_c)
             existing = self._tombstones.get(res_id)
             if existing is not None:
                 if not tombstone.is_newer_than(existing):
@@ -418,6 +506,8 @@ class P2PMesh:
                 "version": getattr(config, "VERSION", "3.0.2"),
                 "lamport_clock": self._lamport_clock,
                 "vector_clock": dict(self._vector_clock),
+                "hlc_l": self.hlc.l,
+                "hlc_c": self.hlc.c,
                 "tombstones": [t.to_dict() for t in recent_t[:max_tombstones]],
                 "active_tombstone_count": len(self._tombstones),
                 "timestamp": time.time()
@@ -456,6 +546,7 @@ class P2PMesh:
 
             self.merge_vector_clock(sender_id, sender_clock)
             self._lamport_clock = max(self._lamport_clock, sender_lamport) + 1
+            self.hlc.update(packet.get("hlc_l", 0), packet.get("hlc_c", 0))
 
         for t_dict in incoming_tombstones:
             applied, _ = self.apply_remote_tombstone(t_dict)
@@ -478,6 +569,8 @@ class P2PMesh:
                 "endpoint": self.endpoint,
                 "lamport_clock": self._lamport_clock,
                 "vector_clock": dict(self._vector_clock),
+                "hlc_l": self.hlc.l,
+                "hlc_c": self.hlc.c,
                 "tombstones_applied": applied_count,
                 "tombstones_rejected": rejected_count,
                 "return_tombstones": missing_for_peer

@@ -95,9 +95,9 @@ class WorkspaceWarmer:
                 if b_res.returncode == 0:
                     git_branch = b_res.stdout.strip()
 
-                # Get porcelain git status
+                # Get porcelain git status (including all untracked files)
                 p_res = subprocess.run(
-                    ["git", "-C", target_dir, "status", "--porcelain"],
+                    ["git", "-C", target_dir, "status", "--porcelain", "-uall"],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2.0
                 )
                 porcelain_raw = p_res.stdout if p_res.returncode == 0 else ""

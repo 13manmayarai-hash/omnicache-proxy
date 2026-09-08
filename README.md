@@ -306,6 +306,7 @@ omnicache stats [--markdown]
 * [Architecture Overview](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/ARCHITECTURE.md)
 * [Quickstart Guide](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md)
 * [Troubleshooting & FAQ](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/TROUBLESHOOTING_AND_FAQ.md)
+* [Independent Empirical Audit Report](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/EMPIRICAL_AUDIT_REPORT.md)
 
 ---
 

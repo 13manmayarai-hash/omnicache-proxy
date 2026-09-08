@@ -683,7 +683,7 @@ class AgentHarness:
             sync_packet = {
                 "node_id": peer_id,
                 "endpoint": peer_ep,
-                "version": "3.0.1",
+                "version": "3.0.2",
                 "lamport_clock": 42,
                 "vector_clock": {peer_id: 16},
                 "tombstones": [

@@ -309,7 +309,7 @@ class QuantizedEmbedder(BaseEmbedder):
             avg_lat = (self.total_time_ms / max(1, self.total_embeddings))
             return {
                 "engine": "QuantizedEmbedder",
-                "version": "3.0.1",
+                "version": "3.0.2",
                 "dimensions": self._dimensions,
                 "quantization_bits": self.QUANT_BITS,
                 "compression_ratio": "4.0x (int8) / 8.0x (packed int4)",

@@ -177,7 +177,7 @@ def test_v1_embeddings_validation(client):
 def test_embedder_stats_and_metrics():
     stats = quantized_embedder.stats()
     assert stats["engine"] == "QuantizedEmbedder"
-    assert stats["version"] == "3.0.1"
+    assert stats["version"] == "3.0.2"
     assert stats["dimensions"] == 256
     assert stats["quantization_bits"] == 8
     assert stats["offline_airgapped"] is True

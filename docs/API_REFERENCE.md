@@ -117,5 +117,5 @@ Returns runtime JSON metrics including total requests, exact hits, semantic hits
 ### 10. Health Check
 `GET /healthz`
 
-Returns `{"status": "ok", "version": "2.5.6"}`.
+Returns `{"status": "ok", "version": "3.0.5"}`.
 

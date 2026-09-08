@@ -7,10 +7,11 @@ for edge devices, ARM64/Termux nodes, and offline/air-gapped agent deployments.
 import math
 import time
 import re
+import array
 import hashlib
 import platform
 import threading
-from typing import List, Dict, Tuple, Optional, Union, Any
+from typing import List, Dict, Tuple, Optional, Union, Any, Sequence
 
 from core.config import config
 from core.embeddings import BaseEmbedder
@@ -108,7 +109,7 @@ class QuantizedEmbedder(BaseEmbedder):
         else:
             self.hardware_mode = "simd_int8_accelerated"
 
-        # Generate deterministic int8 orthogonal projection matrix
+        # Generate deterministic int8 orthogonal projection matrix packed in native C bytes
         self._weights = self._generate_int8_weights(self._vocab_buckets, self._dimensions)
 
     @classmethod
@@ -119,22 +120,24 @@ class QuantizedEmbedder(BaseEmbedder):
             return cls._singleton_instance
 
     @staticmethod
-    def _generate_int8_weights(vocab_size: int, dims: int) -> List[List[int]]:
+    def _generate_int8_weights(vocab_size: int, dims: int) -> List[array.array]:
         """
-        Generates deterministic orthogonal random projection weights in int8 [-128, 127].
+        Generates deterministic orthogonal random projection weights packed in native int8 signed bytes.
         Uses a cryptographic SHA-256 PRNG sequence to guarantee identical weights
-        across all nodes and edge runners without external downloads.
+        across all nodes and edge runners without external downloads, fitting in exactly 512KB RAM.
         """
-        weights: List[List[int]] = []
+        weights: List[array.array] = []
         seed = b"omnicache_quantized_embedder_weights_v3_seed"
         chunks_needed = (dims + 31) // 32
 
         for i in range(vocab_size):
-            row: List[int] = []
+            row_bytes = bytearray()
             for c in range(chunks_needed):
                 h = hashlib.sha256(seed + i.to_bytes(4, "big") + c.to_bytes(2, "big")).digest()
-                row.extend((b - 128) for b in h)
-            weights.append(row[:dims])
+                row_bytes.extend(h)
+            row_arr = array.array("b")
+            row_arr.frombytes(bytes((b - 128) & 0xFF for b in row_bytes[:dims]))
+            weights.append(row_arr)
         return weights
 
     @property
@@ -307,16 +310,18 @@ class QuantizedEmbedder(BaseEmbedder):
     def stats(self) -> Dict[str, Any]:
         with self._lock:
             avg_lat = (self.total_time_ms / max(1, self.total_embeddings))
+            # Calculate actual heap memory allocated for packed weights buffer
+            weight_bytes = sum(a.buffer_info()[1] * a.itemsize for a in self._weights)
             return {
                 "engine": "QuantizedEmbedder",
-                "version": getattr(config, "VERSION", "3.0.3"),
+                "version": getattr(config, "VERSION", "3.0.4"),
                 "dimensions": self._dimensions,
                 "quantization_bits": self.QUANT_BITS,
                 "compression_ratio": "4.0x (int8) / 8.0x (packed int4)",
                 "hardware_mode": self.hardware_mode,
                 "offline_airgapped": True,
                 "zero_external_api": True,
-                "memory_footprint_kb": round((self._vocab_buckets * self._dimensions) / 1024, 1),
+                "memory_footprint_kb": round(weight_bytes / 1024, 1),
                 "embeddings_generated": self.total_embeddings,
                 "avg_latency_ms": round(avg_lat, 4)
             }

@@ -1,3 +1,4 @@
+import os
 import pytest
 from starlette.testclient import TestClient
 from server.gateway import app
@@ -176,3 +177,35 @@ class TestToolReplayAndVersionE2E:
             res_after_mod = client.post("/v1/agent/tool_replay", json=payload)
             assert res_after_mod.status_code == 200
             assert res_after_mod.json().get("status") == "MISS", "Failed: Stale git_status HIT returned after workspace file modification!"
+
+    def test_04_argument_key_normalization_candidate_paths(self):
+        """Verify candidate path extraction correctly normalizes varied agent argument schemas."""
+        from server.tool_replayer import extract_candidate_path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            test_file = os.path.join(tmp_dir, "test.txt")
+            with open(test_file, "w") as f:
+                f.write("test content")
+
+            # 1. SearchPath
+            d1, _ = extract_candidate_path(arguments={"SearchPath": tmp_dir})
+            assert d1 == tmp_dir
+
+            # 2. folder
+            d2, _ = extract_candidate_path(arguments={"folder": tmp_dir})
+            assert d2 == tmp_dir
+
+            # 3. project_root
+            d3, _ = extract_candidate_path(arguments={"project_root": tmp_dir})
+            assert d3 == tmp_dir
+
+            # 4. Normalized mixed-case and underscores
+            d4, f4 = extract_candidate_path(arguments={"Target_File": test_file})
+            assert f4 == test_file
+            assert d4 == tmp_dir
+
+            # 5. SearchDirectory
+            d5, _ = extract_candidate_path(arguments={"search_directory": tmp_dir})
+            assert d5 == tmp_dir
+

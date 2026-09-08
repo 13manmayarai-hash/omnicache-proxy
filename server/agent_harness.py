@@ -704,11 +704,13 @@ class AgentHarness:
                 sync_data.get("tombstones_applied", 0) >= 1
             )
 
-            # D. Outbound broadcast endpoint test
-            bcast_resp = client.post("/v1/mesh/broadcast", json={
-                "resource_id": "file:/workspace/mesh_test.py",
-                "reason": "agent_mutation"
-            })
+            # D. Outbound broadcast endpoint test (mock peer transport so harness doesn't block 2s on unreachable IP)
+            with patch.object(mesh_bus, "_post_to_peer", new_callable=AsyncMock) as mock_post:
+                mock_post.return_value = {"status": "synchronized", "tombstones_applied": 1}
+                bcast_resp = client.post("/v1/mesh/broadcast", json={
+                    "resource_id": "file:/workspace/mesh_test.py",
+                    "reason": "agent_mutation"
+                })
             bcast_ok = (bcast_resp.status_code == 200 and bcast_resp.json().get("status") == "success")
 
             # E. Mesh topology introspection
@@ -719,6 +721,9 @@ class AgentHarness:
                 topo_data.get("mesh_enabled") is True and
                 topo_data.get("peer_summary", {}).get("total", 0) >= 1
             )
+
+            # Cleanup peer node to prevent state leakage
+            mesh_bus.unregister_peer(peer_id)
 
             latency_ms = (time.perf_counter() - t_mesh) * 1000
             passed = reg_ok and hb_ok and sync_ok and bcast_ok and topo_ok

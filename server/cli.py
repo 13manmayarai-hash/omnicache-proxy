@@ -14,6 +14,7 @@ import time
 import socket
 import argparse
 import uvicorn
+from typing import Optional, List, Dict, Any, Tuple, Union
 from core.config import config, validate_startup_security_invariants
 from server.gateway import app, cache_instance, METRICS_LEDGER
 from persistence.snapshot_store import snapshot_store
@@ -245,7 +246,7 @@ def run_benchmark(iterations: int = 500):
     )
     warm_ms = (time.perf_counter() - warm_t0) * 1000
     files_warmed = warm_res.get("files_warmed", 0)
-    entries_recorded = warm_res.get("entries_recorded", 0)
+    entries_recorded = warm_res.get("tools_recorded", warm_res.get("entries_recorded", 0))
     warm_rate = files_warmed / max(0.0001, warm_ms / 1000.0)
 
     # Detailed Subsystem Breakdown
@@ -260,22 +261,24 @@ def run_benchmark(iterations: int = 500):
     print(f"3. Agent Tool Replayer (Git-Aware Memory):")
     print(f"   Business API Tool Replay: P50: {p50_biz:.4f} ms | P95: {p95_biz:.4f} ms (~{int(1000 / max(0.001, p50_biz)):,} QPS)")
     print(f"   Git/File Tool Replay:     P50: {p50_file:.4f} ms (Staleness Verified)")
-    print(f"   Remote Agent Turn Cold:   ~1,200.00 ms (API Roundtrip + Disk)")
-    print(f"   Speedup Factor:           ~{int(1200.0 / max(0.001, p50_biz)):,}x acceleration ($0.00 spend)\n")
+    print(f"   Est. Cloud Agent Turn:    ~1,200.00 ms (Upstream Network API + Inference)")
+    print(f"   Local Speedup vs Cloud:   ~{int(1200.0 / max(0.001, p50_biz)):,}x acceleration ($0.00 spend)\n")
 
     print(f"4. Workspace Pre-Warming (CI/CD Ingestion):")
     print(f"   Warmed: {files_warmed} files ({entries_recorded} tool signatures) in {warm_ms:.2f} ms")
     print(f"   Ingestion Velocity: ~{warm_rate:.0f} files/sec\n")
 
-    # Beautiful Visual Summary Box
-    print("------------------------------------------------------------------------------------------")
-    print(f"{'Engine Subsystem':<32} {'Cold Turn':<16} {'OmniCache Replay':<18} {'Speedup':<10} {'Benefit'}")
-    print("------------------------------------------------------------------------------------------")
-    print(f"{'L1 Exact Request Cache':<32} {'~450.00 ms':<16} {f'{p50_l1:.4f} ms':<18} {f'{int(450.0 / max(0.001, p50_l1)):,}x':<10} 100% Token Savings (505 tok)")
-    print(f"{'L2 FastHash Semantic Vector':<32} {'~450.00 ms':<16} {f'{p50_l2:.4f} ms':<18} {f'{int(450.0 / max(0.001, p50_l2)):,}x':<10} 90%+ Cosine Replay")
-    print(f"{'Agent Tool Replayer (Business)':<32} {'~1,200.00 ms':<16} {f'{p50_biz:.4f} ms':<18} {f'{int(1200.0 / max(0.001, p50_biz)):,}x':<10} $0.00 Disk Thrashing")
-    print(f"{'Workspace CI/CD Pre-Warming':<32} {'Cold Repo Scan':<16} {f'{warm_ms:.2f} ms':<18} {f'{warm_rate:.0f} f/s':<10} Pre-warmed {files_warmed} files")
-    print("==========================================================================================\n")
+    # Transparent Visual Summary Box
+    print("--------------------------------------------------------------------------------------------------")
+    print(f"{'Engine Subsystem':<32} {'Est. Upstream Turn':<20} {'OmniCache Replay':<18} {'Speedup':<10} {'Benefit'}")
+    print("--------------------------------------------------------------------------------------------------")
+    print(f"{'L1 Exact Request Cache':<32} {'~450.00 ms (Est.)':<20} {f'{p50_l1:.4f} ms':<18} {f'{int(450.0 / max(0.001, p50_l1)):,}x':<10} 100% Token Savings (505 tok)")
+    print(f"{'L2 FastHash Semantic Vector':<32} {'~450.00 ms (Est.)':<20} {f'{p50_l2:.4f} ms':<18} {f'{int(450.0 / max(0.001, p50_l2)):,}x':<10} 90%+ Cosine Replay")
+    print(f"{'Agent Tool Replayer (Business)':<32} {'~1,200.00 ms (Est.)':<20} {f'{p50_biz:.4f} ms':<18} {f'{int(1200.0 / max(0.001, p50_biz)):,}x':<10} $0.00 Disk Thrashing")
+    print(f"{'Workspace CI/CD Pre-Warming':<32} {'Cold Repo Scan':<20} {f'{warm_ms:.2f} ms':<18} {f'{warm_rate:.0f} f/s':<10} Pre-warmed {files_warmed} files")
+    print("==================================================================================================")
+    print("  * Est. Upstream Turn represents typical remote cloud LLM network roundtrips for comparison.")
+    print("    OmniCache Replay columns represent actual locally measured micro-benchmarks on this hardware.\n")
 
 def run_stats():
     target_host = "127.0.0.1" if config.HOST in ("0.0.0.0", "", "::1") else config.HOST

@@ -3,7 +3,7 @@ Adaptive Cost Arbitrage & Speculative Model Cascade Router (v2.9.8).
 Analyzes prompt complexity in <0.2ms via Shannon Token Entropy & Lexical Reasoning Classifiers.
 Dynamically routes simple procedural queries to ultra-fast, economical models (gpt-4o-mini,
 gemini-2.5-flash, claude-3-5-haiku) when authorized via policy or 'X-OmniCache-Model-Cascade: allow',
-saving up to 80% on cache-miss token spend.
+saving up to 73.3% on Anthropic Claude cascades (Sonnet -> Haiku) and up to 95% on OpenAI/Gemini cross-vendor cascades.
 """
 
 import collections

@@ -101,10 +101,12 @@ def extract_candidate_path(
 
     # 2. Check arguments dictionary for explicit directory or file paths
     if arguments and isinstance(arguments, dict):
-        # Check explicit directory keys first (e.g. for git_status, git_diff, ls)
+        # Check explicit directory keys first (e.g. for git_status, git_diff, ls, search)
         for key in (
             "cwd", "workspace_dir", "repo_path", "working_directory", "dir",
-            "root_dir", "directory", "SearchDirectory", "DirectoryPath"
+            "root_dir", "directory", "SearchDirectory", "DirectoryPath",
+            "folder", "base_dir", "project_root", "dir_path", "search_path",
+            "SearchPath", "search_directory", "directory_path", "workdir", "repo_dir"
         ):
             val = arguments.get(key)
             if isinstance(val, str) and val.strip():
@@ -114,6 +116,10 @@ def extract_candidate_path(
                     if pystat.S_ISDIR(st.st_mode):
                         target_dir = c_dir
                         break
+                    elif pystat.S_ISREG(st.st_mode) and not target_file:
+                        target_dir = os.path.dirname(c_dir)
+                        target_file = c_dir
+                        break
                 except OSError:
                     if not os.path.isabs(c_dir) and target_dir:
                         joined = os.path.join(target_dir, c_dir)
@@ -122,13 +128,19 @@ def extract_candidate_path(
                             if pystat.S_ISDIR(st.st_mode):
                                 target_dir = joined
                                 break
+                            elif pystat.S_ISREG(st.st_mode) and not target_file:
+                                target_dir = os.path.dirname(joined)
+                                target_file = joined
+                                break
                         except OSError:
                             pass
 
-        # Check explicit file keys (e.g. for read_file, view_file, cat)
+        # Check explicit file keys (e.g. for read_file, view_file, cat, edit)
         for key in (
             "file", "filepath", "path", "target", "filename", "file_path",
-            "target_file", "AbsolutePath", "TargetFile"
+            "target_file", "AbsolutePath", "TargetFile", "uri", "source_file",
+            "destination_file", "dest_file", "src_file", "target_path", "file_name",
+            "relative_path", "relative_file_path", "SourceFile", "DestinationFile"
         ):
             val = arguments.get(key)
             if isinstance(val, str) and val.strip():
@@ -148,6 +160,60 @@ def extract_candidate_path(
                 except OSError:
                     pass
                 break
+
+        # Case-insensitive / normalized key lookup fallback if neither matched
+        if not target_dir and not target_file:
+            norm_map = {
+                k.lower().replace("_", "").replace("-", ""): (k, v)
+                for k, v in arguments.items()
+                if isinstance(v, str) and v.strip()
+            }
+            # Normalized directory keys
+            for norm_key in (
+                "cwd", "workspacedir", "repopath", "workingdirectory", "dir",
+                "rootdir", "directory", "searchdirectory", "directorypath",
+                "folder", "basedir", "projectroot", "dirpath", "searchpath",
+                "workdir", "repodir"
+            ):
+                if norm_key in norm_map:
+                    val = norm_map[norm_key][1]
+                    c_dir = os.path.expanduser(val.strip())
+                    try:
+                        st = os.stat(c_dir)
+                        if pystat.S_ISDIR(st.st_mode):
+                            target_dir = c_dir
+                            break
+                        elif pystat.S_ISREG(st.st_mode):
+                            target_dir = os.path.dirname(c_dir)
+                            target_file = c_dir
+                            break
+                    except OSError:
+                        pass
+            # Normalized file keys
+            if not target_file:
+                for norm_key in (
+                    "file", "filepath", "path", "target", "filename",
+                    "targetfile", "absolutepath", "uri", "sourcefile",
+                    "destinationfile", "destfile", "srcfile", "targetpath",
+                    "filename", "relativepath", "relativefilepath"
+                ):
+                    if norm_key in norm_map:
+                        val = norm_map[norm_key][1]
+                        c_file = os.path.expanduser(val.strip())
+                        if not os.path.isabs(c_file) and target_dir:
+                            c_file = os.path.join(target_dir, c_file)
+                        elif not os.path.isabs(c_file):
+                            c_file = os.path.join(os.getcwd(), c_file)
+                        target_file = c_file
+                        try:
+                            st = os.stat(c_file)
+                            if pystat.S_ISREG(st.st_mode):
+                                target_dir = os.path.dirname(c_file)
+                            elif pystat.S_ISDIR(st.st_mode):
+                                target_dir = c_file
+                        except OSError:
+                            pass
+                        break
 
     # 3. Check workspace_fingerprint if target_dir not yet resolved to an existing disk path
     if (not target_dir or not os.path.exists(target_dir)) and workspace_fingerprint and isinstance(workspace_fingerprint, str):

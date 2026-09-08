@@ -49,7 +49,7 @@
       <div style="display: flex; align-items: center; gap: 0.75rem;">
         <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v3.0.3 ACTIVE</span></h1>
+          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v3.0.4 ACTIVE</span></h1>
           <p style="font-size: 0.75rem; color: #94a3b8;">Quantized Local Embedder • P2P Edge Mesh Sync • Multi-Agent Swarm Bus • Radix Multi-Turn • Model Cascade</p>
         </div>
       </div>
@@ -93,7 +93,7 @@
       </div>
 
       <div class="card">
-        <div class="kpi-title">Vision Cache Hits</div>
+        <div class="kpi-title">Vision Cache Hits <span style="font-size: 0.6rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 1px 4px; border-radius: 3px; font-weight: 600; margin-left: 4px;">BETA</span></div>
         <div class="kpi-value text-amber" id="stat-vision-hits">0</div>
         <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem;">🖼️ 64-bit pHash match</div>
       </div>
@@ -742,15 +742,15 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         detail = `-${d.tokens_compacted || 0} prompt tokens`;
       } else if (t === 'telephony_filtered') {
         badgeColor = '#06b6d4';
-        badgeLabel = '🎙️ VOICE FILTER';
+        badgeLabel = '🎙️ VOICE [BETA]';
         detail = `-${d.fillers_stripped || 0} fillers, +${d.tokens_saved || 0} tok saved`;
       } else if (t === 'telephony_fast_path') {
         badgeColor = '#38bdf8';
-        badgeLabel = '⚡ VOICE FAST';
+        badgeLabel = '⚡ VOICE FAST [BETA]';
         detail = `${(d.reply || '').slice(0, 32)}... (<0.2ms)`;
       } else if (t === 'audio_cache_hit') {
         badgeColor = '#e879f9';
-        badgeLabel = '🎵 AUDIO HIT';
+        badgeLabel = '🎵 AUDIO [BETA]';
         detail = `aHash ${(d.audio_hash || '').slice(0, 8)}... (${d.distance || 0}/64 dist, ${d.latency_ms || 0.3}ms)`;
       } else if (t === 'tool_recorded') {
         badgeColor = '#60a5fa';

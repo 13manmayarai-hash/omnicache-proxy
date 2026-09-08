@@ -20,13 +20,13 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 │ Capability                                    │ Native Provider Caching       │ OmniCache Acceleration Sidecar  │
 ├───────────────────────────────────────────────┼───────────────────────────────┼─────────────────────────────────┤
 │ In-Session Prefix Input Token Discount        │ ✅ 90% (Anthropic ephemeral)  │ ✅ Supported (Passthrough)      │
-│ Redundant Disk Tool Replay (git/grep/read)    │ ❌ No (Hits disk & LLM every turn) │ ✅ <0.3ms (Git-state hashed)    │
+│ Redundant Disk Tool Replay (git/grep/read)    │ ❌ No (Hits disk & LLM every turn) │ ✅ <0.1ms reads (~5ms git)      │
 │ Context Window Compaction (Deep Agent Loops)  │ ❌ No (Unbounded token growth)│ ✅ Adaptive Head/Tail Pruning   │
 │ Cross-Session Memory (New CLI sessions)       │ ❌ 0% (Expires in 5 minutes)   │ ✅ Persistent (SQLite / Redis)  │
 │ Cross-Teammate Knowledge Sharing              │ ❌ 0% (Isolated per session)  │ ✅ Shared Team Redis Store      │
 │ Terminal SSE Stream Jitter Replay             │ ❌ No                         │ ✅ ~65 tok/s (Glitch-free CLI)  │
-│ Multi-Modal Visual Deduplication (Screenshots) │ ❌ No (Re-uploads megabytes)   │ ✅ Perceptual dHash Match       │
-│ Multimodal Raw Audio Caching (Voice/Realtime) │ ❌ No (Re-transcribes & speaks)│ ✅ <1ms (Spectral LPC aHash)    │
+│ Multi-Modal Visual Deduplication [Beta]       │ ❌ No (Re-uploads megabytes)   │ ✅ Perceptual dHash Match       │
+│ Multimodal Raw Audio Caching [Beta]           │ ❌ No (Re-transcribes & speaks)│ ✅ <1ms (Spectral LPC aHash)    │
 │ Smart Model Cascading & Cost Arbiter          │ ❌ No (Always frontier rate)   │ ✅ <0.2ms (Shannon Entropy Arbiter) │
 │ Multi-Agent Swarms & Subagent Delegation Bus  │ ❌ No (Isolated per agent)     │ ✅ <0.1ms (Shared Bus & Mutation Purge) │
 │ Distributed P2P / Edge Mesh State Sync        │ ❌ No (Requires external DB)   │ ✅ <0.5ms (CRDT Vector Clock Sync) │
@@ -34,7 +34,7 @@ Anthropic’s native prompt caching is great at discounting prefix tokens within
 └───────────────────────────────────────────────┴───────────────────────────────┴─────────────────────────────────┘
 ```
 
-1. **Tool-Call Acceleration:** When Claude Code repeatedly calls `git_status`, `grep_search`, or `read_file`, native caching still runs the tool on disk and pays for the network roundtrip. OmniCache cryptographically hashes your Git working tree state (`HEAD` commit + `git status --porcelain`). If files haven't changed, tool calls return in **`<0.3ms`** with **$0.00** spent. The moment you edit a file, the cache instantly invalidates.
+1. **Tool-Call Acceleration:** When Claude Code repeatedly calls `git_status`, `grep_search`, or `read_file`, native caching still runs the tool on disk and pays for the network roundtrip. OmniCache cryptographically hashes your Git working tree state (`HEAD` commit + `git status --porcelain`). If files haven't changed, tool calls return in **`<0.1ms`** for cached file reads and scoped queries (~5ms when verifying live dirty git state) with **$0.00** spent. The moment you edit a file, the cache instantly invalidates.
 2. **Persistent Cross-Session & Team Memory:** Native prompt cache is ephemeral (5-minute TTL). OmniCache stores answers in an embedded SQLite WAL database or shared Redis, so opening a new session or having a teammate ask a similar architecture question reuses existing answers.
 3. **Smooth CLI Stream Replaying:** Returning a 4,000-token cached completion instantaneously in 0ms can cause buffer overflows and terminal glitches in interactive CLIs. OmniCache emulates natural token-streaming (~65 tokens/sec with subtle stochastic jitter).
 4. **Adaptive Context Compaction & Token Pruning:** Deep multi-turn agent conversations (15–30+ turns) accumulate bulky file dumps and historical search outputs. OmniCache maintains an active lookback horizon while safely pruning intermediate lines of older tool results (preserving head/tail syntax and full archive in cache), slashing historical prompt tokens by 60–90%.
@@ -211,19 +211,19 @@ print(response.choices[0].message.content)
 * **Multi-Agent Workspace Sync & CI/CD Cache Warming:**
   * Pre-warm workspace repository structures, files, git status, and diffs during CI/CD before coding agent loops run (`omnicache warm`).
   * Export, import, and sync cache snapshots across team members and multi-agent sessions via portable JSON archives or Redis (`omnicache sync`).
-* **Conversational Voice & Telephony Agent Adapter (v2.9.6):**
+* **Conversational Voice & Telephony Agent Adapter [Beta] (v2.9.6):**
   * Built for real-time calling agents (LiveKit, Twilio Media Streams, Daily, Vapi, Retell, Pipecat).
   * Automatically strips Speech-to-Text disfluencies and acoustic artifacts ("uh", "um", "err", stutter syllables, `[pause]`, `[clears throat]`).
   * Canonicalizes dynamic caller session metadata (`<CALL_SID>`, `<CALLER_PHONE>`, `<TIMESTAMP>`, `<SESSION_ID>`) in system prompts to trigger instant prompt cache hits across callers.
   * Sub-millisecond fast-path intent matching (<0.2ms) for telephony checks ("can you hear me?", "hold on", "repeat that").
-* **Multimodal Raw Audio Perception Caching Engine (v2.9.7):**
+* **Multimodal Raw Audio Perception Caching Engine [Beta] (v2.9.7):**
   * Built for raw voice audio streams (OpenAI Realtime API `gpt-4o-realtime-preview`, GPT-4o Audio `input_audio`, Gemini Live, and Anthropic audio blocks).
   * Pure-Python, zero-dependency 64-bit spectral aHash with multi-lag autocorrelation (LPC-inspired) and VAD silence trimming (<1.5ms).
   * Invariant to microphone distance/gain and ambient room noise, allowing repeated spoken queries to hit cache directly at the acoustic waveform level.
   * Eliminates both upstream LLM reasoning cost ($40/1M audio in, $80/1M audio out) AND text-to-speech audio synthesis latency.
 * **Smart Model Cascading & Automated Cost Arbiter (v2.9.8):**
   * Evaluates prompt complexity in `<0.2ms` via normalized Shannon token entropy ($H \in [0.0, 1.0]$) and lexical reasoning classifiers.
-  * Dynamically arbitrates procedural, formatting, and trivial queries down to ultra-fast economy models (`gpt-4o-mini`, `gemini-2.5-flash`, `claude-3-5-haiku-20241022`) when authorized via `OMNICACHE_CASCADE_POLICY=auto` or `X-OmniCache-Model-Cascade: allow`, saving up to 80% on cache-miss spend.
+  * Dynamically arbitrates procedural, formatting, and trivial queries down to ultra-fast economy models (`gpt-4o-mini`, `gemini-2.5-flash`, `claude-3-5-haiku-20241022`) when authorized via `OMNICACHE_CASCADE_POLICY=auto` or `X-OmniCache-Model-Cascade: allow`, saving up to 73.3% on Anthropic Claude cascades (Sonnet ➔ Haiku) and up to 95% on OpenAI/Gemini cross-vendor cascades.
   * Preserves vendor family affinity (`same-vendor` vs `cross-vendor`) and enforces strict execution safety invariants: agent tools, structured JSON schemas, and multi-turn conversational chains are **never** downgraded.
 * **Multi-Agent Swarms & Subagent Delegation Bus (v2.9.9):**
   * Provides a shared, thread-safe memory bus across parallel and hierarchical subagents (Claude Code subagent teams, OpenHands, CrewAI, AutoGen, LangGraph).

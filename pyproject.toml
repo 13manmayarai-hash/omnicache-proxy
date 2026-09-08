@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omnicache-proxy"
-version = "3.0.4"
+version = "3.0.5"
 description = "Local acceleration sidecar, hardware-accelerated quantized embedder, distributed P2P edge mesh sync, multi-agent swarm delegation bus, Git-aware tool replayer, and cost arbiter for AI agents."
 readme = "README.md"
 requires-python = ">=3.9"
-license = "MIT"
+license = "FSL-1.1-MIT"
 authors = [
-    { name = "13manmayarai", email = "13manmayarai@gmail.com" }
+    { name = "Rajiv Prasad", email = "13manmayarai@gmail.com" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

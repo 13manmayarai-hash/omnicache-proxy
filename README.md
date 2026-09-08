@@ -1,7 +1,7 @@
 # OmniCache
 
 [![PyPI version](https://img.shields.io/pypi/v/omnicache-proxy.svg)](https://pypi.org/project/omnicache-proxy/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE)
+[![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-blue.svg)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE)
 
 **OmniCache is a local acceleration sidecar for AI coding agents (Claude Code, Cursor, Aider, and custom LLM workflows).**
 
@@ -308,5 +308,5 @@ omnicache stats [--markdown]
 ---
 
 ## License
-
-MIT License. See [LICENSE](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE) for details.
+ 
+Functional Source License, Version 1.1 (FSL-1.1-MIT). Copyright (c) 2026 Rajiv Prasad. Free for developers and internal organizational use; legally prevents competing commercial hosting/proxy services; automatically converts to standard MIT after two years. See [LICENSE](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE) for details.

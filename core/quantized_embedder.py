@@ -314,7 +314,7 @@ class QuantizedEmbedder(BaseEmbedder):
             weight_bytes = sum(a.buffer_info()[1] * a.itemsize for a in self._weights)
             return {
                 "engine": "QuantizedEmbedder",
-                "version": getattr(config, "VERSION", "3.0.4"),
+                "version": getattr(config, "VERSION", "3.0.5"),
                 "dimensions": self._dimensions,
                 "quantization_bits": self.QUANT_BITS,
                 "compression_ratio": "4.0x (int8) / 8.0x (packed int4)",

@@ -1,21 +1,38 @@
-MIT License
+Functional Source License, Version 1.1, MIT Future License
+(FSL-1.1-MIT)
 
-Copyright (c) 2026 OmniCache Team
+Copyright (c) 2026 Rajiv Prasad
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+1. Definitions
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+"Change Date" means the date two years after the date the Licensor publishes or releases the Software or, if earlier, the date the Licensor makes available an updated version of the Software under a different license.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+"Change License" means the MIT License, as published by the Open Source Initiative.
+
+"Licensor" means Rajiv Prasad.
+
+"Software" means the computer software distributed under this License.
+
+"Use" means any use, reproduction, copying, modification, or distribution of the Software, in whole or in part, in source or binary form.
+
+2. Grant of License
+
+Subject to Section 3 (Limitations) and Section 4 (Attribution), the Licensor grants you a non-exclusive, worldwide, royalty-free copyright license to Use the Software until the Change Date.
+
+3. Limitations
+
+You may not Use the Software to provide a Competing Use to third parties.
+
+A "Competing Use" means using the Software to provide a product or service that competes with the Software or with another product or service that the Licensor provides using the Software.
+
+4. Attribution
+
+You must reproduce this License and the copyright notice above on all copies of the Software, including copies of substantial portions of the Software.
+
+5. Change License
+
+On the Change Date, this License converts to the Change License with respect to the Software.
+
+6. DISCLAIMER OF WARRANTIES AND LIMITATION OF LIABILITY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -113,7 +113,7 @@ Run the built-in end-to-end verification harness to guarantee sub-millisecond re
 
 ```text
 ========================================================================================
-🎯 OmniCache Live Agent Integration Harness (v3.0.1)
+🎯 OmniCache Live Agent Integration Harness (v3.0.5)
 ========================================================================================
 Subsystem / Protocol                 Status       Latency        Details
 ----------------------------------------------------------------------------------------
@@ -143,14 +143,16 @@ Quantized Local Embedder             ✔ PASSED     0.416 ms       256-d Int8/In
 OmniCache includes an automated multi-subsystem benchmarking engine:
 
 ```text
-------------------------------------------------------------------------------------------
-Engine Subsystem                 Cold Turn        OmniCache Replay   Speedup    Benefit
-------------------------------------------------------------------------------------------
-L1 Exact Request Cache           ~450.00 ms       0.0348 ms          12,914x    100% Token Savings (505 tok)
-L2 FastHash Semantic Vector      ~450.00 ms       0.9954 ms          452x       90%+ Cosine Replay
-Agent Tool Replayer (Business)   ~1,200.00 ms     0.2044 ms          5,870x     $0.00 Disk Thrashing
-Workspace CI/CD Pre-Warming      Cold Repo Scan   2714.74 ms         7 f/s      Pre-warmed 20 files
-==========================================================================================
+--------------------------------------------------------------------------------------------------
+Engine Subsystem                 Est. Upstream Turn   OmniCache Replay   Speedup    Benefit
+--------------------------------------------------------------------------------------------------
+L1 Exact Request Cache           ~450.00 ms (Est.)    0.0515 ms          8,744x     100% Token Savings (505 tok)
+L2 FastHash Semantic Vector      ~450.00 ms (Est.)    0.9566 ms          470x       90%+ Cosine Replay
+Agent Tool Replayer (Business)   ~1,200.00 ms (Est.)  0.0388 ms          30,967x    $0.00 Disk Thrashing
+Workspace CI/CD Pre-Warming      Cold Repo Scan       1002.22 ms         5 f/s      Pre-warmed 5 files
+==================================================================================================
+  * Est. Upstream Turn represents typical remote cloud LLM network roundtrips for comparison.
+    OmniCache Replay columns represent actual locally measured micro-benchmarks on this hardware.
 ```
 
 ---

@@ -1,281 +1,711 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OmniCache AI Proxy - Enterprise AI Gateway & Intelligence</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>OmniCache — AI Agent Caching Sidecar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    :root {
+      --bg-canvas: #090a0f;
+      --glass-bg: rgba(17, 20, 29, 0.65);
+      --glass-bg-subtle: rgba(255, 255, 255, 0.02);
+      --glass-bg-hover: rgba(255, 255, 255, 0.05);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-border-hover: rgba(255, 255, 255, 0.16);
+      --glass-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+      --accent-emerald: #10b981;
+      --accent-emerald-subtle: rgba(16, 185, 129, 0.12);
+      --accent-sky: #38bdf8;
+      --accent-sky-subtle: rgba(56, 189, 248, 0.12);
+      --accent-violet: #818cf8;
+      --accent-violet-subtle: rgba(129, 140, 248, 0.12);
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background-color: #0b0f19; color: #f8fafc; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 1rem; line-height: 1.5; }
-    .max-w-7xl { max-width: 80rem; margin-left: auto; margin-right: auto; }
-    .card { background: #131b2e; border: 1px solid #232f48; border-radius: 1rem; padding: 1.25rem; }
-    .grid-kpi { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
-    .grid-charts { display: grid; grid-template-columns: 1.35fr 0.65fr; gap: 1.25rem; margin-bottom: 1.5rem; }
-    .grid-main { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1.25rem; }
-    @media (max-width: 850px) { .grid-main, .grid-charts { grid-template-columns: 1fr; } }
-    .btn { background: #2563eb; color: white; padding: 0.6rem 1.2rem; border-radius: 0.5rem; border: none; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
-    .btn:hover { background: #1d4ed8; }
-    .btn-emerald { background: #059669; }
-    .btn-emerald:hover { background: #047857; }
-    .btn-purple { background: #7c3aed; }
-    .btn-purple:hover { background: #6d28d9; }
-    .input-box { background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.6rem 0.75rem; color: #f8fafc; width: 100%; font-size: 0.875rem; }
-    .input-box:focus { outline: none; border-color: #06b6d4; }
-    .kpi-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 600; margin-bottom: 0.25rem; }
-    .kpi-value { font-size: 1.4rem; font-weight: 800; font-family: ui-monospace, monospace; }
-    .text-emerald { color: #10b981; }
-    .text-cyan { color: #06b6d4; }
-    .text-purple { color: #c084fc; }
-    .text-amber { color: #fbbf24; }
-    .text-rose { color: #f43f5e; }
-    .progress-track { background: #1e293b; border-radius: 9999px; height: 0.4rem; width: 100%; margin-top: 0.25rem; overflow: hidden; }
-    .progress-bar { height: 100%; border-radius: 9999px; transition: width 0.3s ease; }
-    pre { background: #080c14; border: 1px solid #1e293b; padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; color: #34d399; font-family: monospace; font-size: 0.8rem; }
-    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem; }
-    .badge { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; font-family: monospace; }
-    .tab-btn { padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
-    .tab-active { background: #0284c7; color: white; border-color: #38bdf8; }
-    .tab-inactive { background: #1e293b; color: #94a3b8; }
-    .stat-chip { background: #0f172a; padding: 0.4rem 0.6rem; border-radius: 0.4rem; border: 1px solid #1e293b; font-family: monospace; font-size: 0.75rem; }
+    
+    body {
+      background-color: var(--bg-canvas);
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 0% 50%, rgba(129, 140, 248, 0.03) 0%, transparent 50%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 1.5rem 1rem;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    /* Glassmorphism Containers */
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--glass-glow);
+      padding: 1.25rem;
+      position: relative;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .glass-card:hover {
+      border-color: var(--glass-border-hover);
+    }
+
+    /* Header */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 2.25rem;
+      height: 2.25rem;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(56, 189, 248, 0.2));
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+    }
+
+    .brand-h1 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .brand-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      font-weight: 400;
+      margin-top: 0.1rem;
+    }
+
+    /* Badges & Pills */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: var(--glass-bg-subtle);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+    }
+
+    .badge-emerald {
+      background: var(--accent-emerald-subtle);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.25);
+    }
+
+    .badge-sky {
+      background: var(--accent-sky-subtle);
+      color: #7dd3fc;
+      border-color: rgba(56, 189, 248, 0.25);
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Action Buttons */
+    .btn-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.85rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.18s ease;
+      border: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--text-muted);
+      backdrop-filter: blur(10px);
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--glass-border-hover);
+      color: var(--text-main);
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.85) 0%, rgba(5, 150, 105, 0.95) 100%);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+      box-shadow: 0 2px 12px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(180deg, rgba(16, 185, 129, 1) 0%, rgba(5, 150, 105, 1) 100%);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-secondary {
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0.8) 0%, rgba(79, 70, 229, 0.9) 100%);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+      box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0.95) 0%, rgba(79, 70, 229, 1) 100%);
+      color: #ffffff;
+    }
+
+    /* Metric Grids */
+    .grid-kpi {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .kpi-card {
+      padding: 1.1rem 1.15rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .kpi-label {
+      font-size: 0.68rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .kpi-val {
+      font-size: 1.45rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.03em;
+      margin: 0.35rem 0 0.2rem 0;
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kpi-hint {
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      font-weight: 400;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+
+    .text-emerald { color: #34d399 !important; }
+    .text-sky { color: #38bdf8 !important; }
+    .text-violet { color: #a78bfa !important; }
+    .text-amber { color: #fbbf24 !important; }
+    .text-rose { color: #fb7185 !important; }
+
+    /* Layout Grids */
+    .grid-charts {
+      display: grid;
+      grid-template-columns: 1.4fr 0.85fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .grid-main {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 900px) {
+      .grid-charts, .grid-main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Section Headers */
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .card-title {
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    /* Inputs & Forms */
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .input-label {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .input-box {
+      background: rgba(10, 13, 20, 0.75);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 0.55rem 0.75rem;
+      color: var(--text-main);
+      width: 100%;
+      font-size: 0.8rem;
+      font-family: inherit;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    .input-box:focus {
+      border-color: rgba(56, 189, 248, 0.4);
+      background: rgba(10, 13, 20, 0.95);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
+    }
+
+    select.input-box {
+      cursor: pointer;
+    }
+
+    /* Segmented Control Tabs */
+    .tabs-segmented {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border);
+    }
+
+    .tab-btn {
+      padding: 0.3rem 0.65rem;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      transition: all 0.15s ease;
+    }
+
+    .tab-active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .tab-inactive:hover {
+      color: var(--text-muted);
+    }
+
+    /* Response & Pre Blocks */
+    pre, code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .code-glass {
+      background: rgba(8, 10, 15, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      padding: 0.75rem;
+      color: #7dd3fc;
+      font-size: 0.75rem;
+      overflow-x: auto;
+    }
+
+    /* Status Micro-Chips */
+    .stat-chip {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: var(--radius-sm);
+      padding: 0.5rem 0.65rem;
+    }
+
+    /* Activity Feed Items */
+    .feed-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 0.55rem;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 6px;
+      transition: background 0.15s ease;
+    }
+
+    .feed-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
   </style>
 </head>
 <body>
 
-  <div class="max-w-7xl">
-    <!-- Header -->
-    <div class="header-bar">
-      <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <div style="width: 2.25rem; height: 2.25rem; background: linear-gradient(135deg, #10b981, #06b6d4); border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: bold; color: white;">⚡</div>
+  <div class="container">
+    
+    <!-- Top Navigation / Brand Bar -->
+    <header class="header-bar">
+      <div class="brand-title">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
         <div>
-          <h1 style="font-size: 1.25rem; font-weight: 700;">OmniCache Enterprise AI Gateway <span class="badge" id="version-badge">v3.0.5 ACTIVE</span></h1>
-          <p style="font-size: 0.75rem; color: #94a3b8;">Quantized Local Embedder • P2P Edge Mesh Sync • Multi-Agent Swarm Bus • Radix Multi-Turn • Model Cascade</p>
+          <h1 class="brand-h1">
+            OmniCache
+            <span class="badge badge-emerald" id="version-badge">
+              <span class="pulse-dot"></span>
+              v3.0.5 ACTIVE
+            </span>
+          </h1>
+          <p class="brand-sub">Git-Aware Local Tool Replay & Zero-Latency AI Acceleration Gateway</p>
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-        <a href="/v1/cache/export" download class="btn" style="background: #047857; padding: 0.4rem 0.8rem; font-size: 0.75rem; text-decoration: none; display: inline-block;">📥 Export CSV</a>
-        <a href="/metrics" target="_blank" class="btn" style="background: #4338ca; padding: 0.4rem 0.8rem; font-size: 0.75rem; text-decoration: none; display: inline-block;">📈 Prometheus /metrics</a>
-        <button onclick="refreshData()" class="btn" style="background: #1e293b; padding: 0.4rem 0.8rem; font-size: 0.75rem; border: 1px solid #334155;">🔄 Refresh</button>
-      </div>
-    </div>
 
-    <!-- Top KPI Grid: 6 Live Financial & Performance Metrics -->
-    <div class="grid-kpi">
-      <div class="card" style="box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.2);">
-        <div class="kpi-title">Total Cost Avoided</div>
-        <div class="kpi-value text-emerald" id="stat-savings">$0.0000</div>
-        <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem;">💰 Avoided API Spend</div>
+      <div class="btn-group">
+        <a href="/v1/cache/export" download class="btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Export CSV
+        </a>
+        <a href="/metrics" target="_blank" class="btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          Prometheus
+        </a>
+        <button onclick="refreshData()" class="btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          Refresh
+        </button>
       </div>
+    </header>
 
-      <div class="card">
-        <div class="kpi-title">Tokens Saved (Avoided)</div>
-        <div class="kpi-value text-emerald" id="stat-tok-saved">0</div>
-        <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem;">100% avoided remote tokens</div>
-      </div>
-
-      <div class="card" style="border: 1px solid #7c3aed;">
-        <div class="kpi-title">Agent Tool Hits</div>
-        <div class="kpi-value text-purple" id="stat-tool-hits">0</div>
-        <div style="font-size: 0.7rem; color: #c084fc; margin-top: 0.25rem;">⚡ Claude/Cursor loops</div>
-      </div>
-
-      <div class="card" style="border: 1px solid #0284c7;">
-        <div class="kpi-title">Context Tokens Pruned</div>
-        <div class="kpi-value text-cyan" id="stat-pruned-tok">0</div>
-        <div style="font-size: 0.7rem; color: #38bdf8; margin-top: 0.25rem;">✂️ Deep agent turns</div>
-      </div>
-
-      <div class="card" style="border: 1px solid #059669;">
-        <div class="kpi-title">PII Redacted Items</div>
-        <div class="kpi-value text-cyan" id="stat-pii-scrubbed">0</div>
-        <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem;">🛡️ PII Redaction Assistance</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-title">Vision Cache Hits <span style="font-size: 0.6rem; background: rgba(245, 158, 11, 0.2); color: #f59e0b; padding: 1px 4px; border-radius: 3px; font-weight: 600; margin-left: 4px;">BETA</span></div>
-        <div class="kpi-value text-amber" id="stat-vision-hits">0</div>
-        <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem;">🖼️ 64-bit pHash match</div>
-      </div>
-
-      <div class="card">
-        <div class="kpi-title">Cache Hit Rate</div>
-        <div class="kpi-value text-cyan" id="stat-hitrate">0.0%</div>
-        <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem;"><span id="stat-total-hits">0</span> hits / <span id="stat-total-reqs">0</span> reqs</div>
-      </div>
-    </div>
-
-    <!-- Visual Analytics & Charts Section -->
-    <div class="grid-charts">
-      <div class="card" style="border: 1px solid #1e3a8a; box-shadow: 0 0 15px -3px rgba(30, 58, 138, 0.3);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-          <h2 style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: #60a5fa; display: flex; align-items: center; gap: 0.5rem;">
-            <span>📈 Live Cost & Token Savings Velocity</span>
-            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-          </h2>
-          <span style="font-size: 0.7rem; color: #94a3b8; font-family: monospace;" id="chart-update-time">Streaming telemetry</span>
+    <!-- Top KPI Grid: Financial & Performance Overview -->
+    <section class="grid-kpi">
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Cost Avoided</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
-        <div style="position: relative; height: 210px; width: 100%;">
+        <div class="kpi-val text-emerald" id="stat-savings">$0.0000</div>
+        <div class="kpi-hint">Avoided upstream API spend</div>
+      </div>
+
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Tokens Saved</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+        </div>
+        <div class="kpi-val text-sky" id="stat-tok-saved">0</div>
+        <div class="kpi-hint">100% avoided upstream tokens</div>
+      </div>
+
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Agent Tool Hits</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-violet"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+        </div>
+        <div class="kpi-val text-violet" id="stat-tool-hits">0</div>
+        <div class="kpi-hint">Claude & Cursor replays</div>
+      </div>
+
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Context Pruned</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+        </div>
+        <div class="kpi-val text-sky" id="stat-pruned-tok">0</div>
+        <div class="kpi-hint">Compacted prompt tokens</div>
+      </div>
+
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Privacy Redactions</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        </div>
+        <div class="kpi-val text-emerald" id="stat-pii-scrubbed">0</div>
+        <div class="kpi-hint">Salted HMAC PII scrubbed</div>
+      </div>
+
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Vision Matches</span>
+          <span class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">BETA</span>
+        </div>
+        <div class="kpi-val text-amber" id="stat-vision-hits">0</div>
+        <div class="kpi-hint">64-bit pHash image dedup</div>
+      </div>
+
+      <div class="glass-card kpi-card">
+        <div class="kpi-label">
+          <span>Hit Rate</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        </div>
+        <div class="kpi-val text-sky" id="stat-hitrate">0.0%</div>
+        <div class="kpi-hint"><span id="stat-total-hits">0</span> hits / <span id="stat-total-reqs">0</span> requests</div>
+      </div>
+    </section>
+
+    <!-- Visual Telemetry & Velocity Charts -->
+    <section class="grid-charts">
+      <div class="glass-card">
+        <div class="card-title-row">
+          <div class="card-title">
+            <span class="pulse-dot"></span>
+            Savings & Ingestion Velocity
+          </div>
+          <span style="font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
+        </div>
+        <div style="position: relative; height: 215px; width: 100%;">
           <canvas id="savingsTimelineChart"></canvas>
         </div>
       </div>
 
-      <div class="card" style="border: 1px solid #065f46; box-shadow: 0 0 15px -3px rgba(6, 95, 70, 0.3);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-          <h2 style="font-size: 0.85rem; font-weight: 700; text-transform: uppercase; color: #34d399;">
-            🍩 Resolution Distribution
-          </h2>
-          <span style="font-size: 0.7rem; color: #94a3b8; font-family: monospace;" id="chart-total-count">0 events</span>
+      <div class="glass-card">
+        <div class="card-title-row">
+          <div class="card-title">Resolution Distribution</div>
+          <span style="font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
         </div>
-        <div style="position: relative; height: 210px; width: 100%; display: flex; align-items: center; justify-content: center;">
+        <div style="position: relative; height: 215px; width: 100%; display: flex; align-items: center; justify-content: center;">
           <canvas id="distributionDoughnutChart"></canvas>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Main Grid -->
-    <div class="grid-main">
+    <!-- Main Working Grid -->
+    <section class="grid-main">
       
       <!-- Left Column: Interactive Multi-Feature Test Console -->
-      <div class="card" style="border: 1px solid #0284c7; box-shadow: 0 0 20px -5px rgba(2, 132, 199, 0.25);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-          <h2 style="font-size: 0.875rem; font-weight: 700; text-transform: uppercase; color: #38bdf8;">🧪 Live Gateway Test Console</h2>
-          <div style="display: flex; gap: 0.25rem;">
+      <div class="glass-card">
+        <div class="card-title-row">
+          <div class="card-title">Gateway Sandbox Console</div>
+          <div class="tabs-segmented">
             <button id="tab-claude" onclick="setApiMode('claude')" class="tab-btn tab-active">Claude Messages</button>
             <button id="tab-openai" onclick="setApiMode('openai')" class="tab-btn tab-inactive">OpenAI Completions</button>
           </div>
         </div>
 
-        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <div>
-            <label style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Model</label>
-            <select id="model-select" class="input-box" style="margin-top: 0.25rem;">
-              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Live Anthropic)</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
-              <option value="gpt-4o">gpt-4o (Frontier)</option>
-              <option value="gemini-2.5-flash">gemini-2.5-flash (Economy)</option>
-            </select>
+        <div class="input-group">
+          <label class="input-label">Target Model</label>
+          <select id="model-select" class="input-box">
+            <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Live Anthropic)</option>
+            <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
+            <option value="gpt-4o">gpt-4o (Frontier)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (Economy)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <div class="input-label">
+            <span>Client API Key (Optional)</span>
+            <span style="color: var(--accent-emerald); font-size: 0.68rem;">Sandbox active if empty</span>
+          </div>
+          <input type="password" id="playground-api-key" class="input-box" style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;" placeholder="sk-ant-... or sk-... (stored locally in browser)" onchange="localStorage.setItem('omnicache_key', this.value)" />
+        </div>
+
+        <div class="input-group">
+          <div class="input-label">
+            <span>Test Prompt</span>
+            <span style="color: var(--accent-sky); cursor: pointer; text-decoration: underline;" onclick="loadPIIExample()">Insert Synthetic PII</span>
+          </div>
+          <textarea id="prompt-input" rows="3" class="input-box" style="resize: none;" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-top: 0.4rem;">
+          <button onclick="sendTestPrompt()" class="btn btn-primary" style="justify-content: center;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            Send via Proxy
+          </button>
+          <button onclick="sendRephrasedTest()" class="btn btn-secondary" style="justify-content: center;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+            Test Rephrasing
+          </button>
+        </div>
+
+        <!-- Live Result Box -->
+        <div id="test-result-container" class="glass-card" style="margin-top: 1rem; padding: 0.85rem; display: none; background: rgba(8, 10, 15, 0.8);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;">
+            <span id="res-status-badge" class="badge">STATUS</span>
+            <span id="res-latency" style="color: var(--accent-violet);">0.00 ms</span>
+            <span id="res-sim" style="color: var(--accent-sky);">Sim: 1.0000</span>
           </div>
 
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <label style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Upstream API Key (Optional)</label>
-              <span style="font-size: 0.65rem; color: #10b981;">⚡ Sandbox Demo enabled if blank</span>
-            </div>
-            <input type="password" id="playground-api-key" class="input-box" style="margin-top: 0.25rem; font-family: monospace; font-size: 0.75rem;" placeholder="sk-ant-... or sk-... (saved locally in browser)" onchange="localStorage.setItem('omnicache_key', this.value)" />
-          </div>
-
-          <div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <label style="font-size: 0.75rem; color: #94a3b8; font-weight: 600;">Test Prompt</label>
-              <span style="font-size: 0.7rem; color: #38bdf8; cursor: pointer;" onclick="loadPIIExample()">🛡️ Insert Test PII</span>
-            </div>
-            <textarea id="prompt-input" rows="3" class="input-box" style="margin-top: 0.25rem; font-family: sans-serif; resize: none;" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
-          </div>
-
-          <div style="display: flex; gap: 0.5rem;">
-            <button onclick="sendTestPrompt()" class="btn btn-emerald" style="flex: 1; padding: 0.6rem;">🚀 Send via OmniCache</button>
-            <button onclick="sendRephrasedTest()" class="btn btn-purple" style="flex: 1; padding: 0.6rem;">🔁 Test Rephrasing</button>
-          </div>
-
-          <!-- Live Result Box -->
-          <div id="test-result-container" style="background: #080c14; border: 1px solid #1e293b; border-radius: 0.5rem; padding: 0.75rem; margin-top: 0.5rem; display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-family: monospace; font-size: 0.75rem;">
-              <span id="res-status-badge" class="badge">STATUS</span>
-              <span id="res-latency" style="color: #c084fc;">0.00 ms</span>
-              <span id="res-sim" style="color: #38bdf8;">Sim: 1.0000</span>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
-              <div class="stat-chip" style="border-left: 3px solid #10b981;">
-                <div style="color: #94a3b8; font-size: 0.65rem;">TOKENS SAVED</div>
-                <div class="text-emerald" style="font-weight: 700; font-size: 0.9rem;" id="res-tokens-saved">0 tokens</div>
-                <div style="color: #10b981; font-size: 0.65rem;" id="res-saved-usd">$0.0000 saved</div>
-              </div>
-
-              <div class="stat-chip" style="border-left: 3px solid #f59e0b;">
-                <div style="color: #94a3b8; font-size: 0.65rem;">TOKENS USED (BILLED)</div>
-                <div class="text-amber" style="font-weight: 700; font-size: 0.9rem;" id="res-tokens-used">0 tokens</div>
-                <div style="color: #94a3b8; font-size: 0.65rem;">Routed: <span id="res-routed">Normal</span></div>
-              </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.65rem;">
+            <div class="stat-chip" style="border-left: 2px solid var(--accent-emerald);">
+              <div style="color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase;">Tokens Saved</div>
+              <div class="text-emerald" style="font-weight: 600; font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-saved">0 tokens</div>
+              <div style="color: var(--accent-emerald); font-size: 0.65rem;" id="res-saved-usd">$0.0000 saved</div>
             </div>
 
-            <pre id="res-content" style="white-space: pre-wrap; font-size: 0.75rem; max-height: 160px; overflow-y: auto;"></pre>
+            <div class="stat-chip" style="border-left: 2px solid var(--accent-amber);">
+              <div style="color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase;">Tokens Billed</div>
+              <div class="text-amber" style="font-weight: 600; font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-used">0 tokens</div>
+              <div style="color: var(--text-dim); font-size: 0.65rem;">Routed: <span id="res-routed" style="color: var(--text-muted);">Normal</span></div>
+            </div>
           </div>
+
+          <pre id="res-content" class="code-glass" style="white-space: pre-wrap; max-height: 150px; overflow-y: auto;"></pre>
         </div>
       </div>
 
-      <!-- Right Column: Quotas & Integration -->
-      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+      <!-- Right Column: Quotas, Workspace & Live Event Stream -->
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
         
         <!-- Virtual Key Quotas -->
-        <div class="card">
-          <h2 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 0.5rem;">🔑 Team Quotas & Spending</h2>
-          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.75rem;">
-            <div style="display: flex; justify-content: space-between; padding: 0.4rem; background: #0f172a; border-radius: 0.4rem;">
-              <span>Default Team</span>
-              <span class="text-emerald">$0.00 / $1000.00 (0%)</span>
+        <div class="glass-card">
+          <div class="card-title-row">
+            <div class="card-title">Tenant Quotas & Spend</div>
+          </div>
+          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.75rem;">
+            <div style="display: flex; justify-content: space-between; padding: 0.45rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+              <span style="color: var(--text-muted);">Default Team</span>
+              <span class="text-emerald" style="font-family: 'JetBrains Mono', monospace;">$0.00 / $1000.00 (0%)</span>
             </div>
           </div>
         </div>
 
         <!-- Workspace & Business Tool Policies -->
-        <div class="card" style="border: 1px solid #059669; box-shadow: 0 0 15px -3px rgba(5, 150, 105, 0.25);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <h2 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #34d399;">⚡ Workspace Sync & Policies</h2>
-            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn" style="background: #059669; padding: 0.25rem 0.6rem; font-size: 0.7rem; border-radius: 0.3rem;">⚡ Pre-Warm</button>
+        <div class="glass-card">
+          <div class="card-title-row">
+            <div class="card-title">Workspace Sync & Git Memory</div>
+            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn" style="padding: 0.25rem 0.55rem; font-size: 0.7rem;">Pre-Warm</button>
           </div>
-          <div style="font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.4rem;">
-            <div style="display: flex; justify-content: space-between; padding: 0.35rem 0.5rem; background: #0f172a; border-radius: 0.4rem;">
-              <span style="color: #94a3b8;">Git Ref / Status:</span>
-              <span><code id="ws-git-ref" style="color: #38bdf8;">HEAD</code> <span id="ws-dirty-badge" class="badge" style="background: rgba(16,185,129,0.2); color: #34d399; font-size: 0.65rem;">CLEAN</span></span>
+          
+          <div style="font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem;">
+            <div style="display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+              <span style="color: var(--text-dim);">Git Ref / Status</span>
+              <span><code id="ws-git-ref" style="color: var(--accent-sky);">HEAD</code> <span id="ws-dirty-badge" class="badge badge-emerald" style="font-size: 0.65rem;">CLEAN</span></span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.35rem 0.5rem; background: #0f172a; border-radius: 0.4rem;">
-              <span style="color: #94a3b8;">Active Cached Tools:</span>
-              <span class="text-purple" style="font-weight: 700;" id="ws-active-tools">0 records</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+              <span style="color: var(--text-dim);">Active Cached Tool Signatures</span>
+              <span class="text-violet" style="font-weight: 600; font-family: 'JetBrains Mono', monospace;" id="ws-active-tools">0 records</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.35rem 0.5rem; background: #0f172a; border-radius: 0.4rem;">
-              <span style="color: #94a3b8;">Workspace Token Potential:</span>
-              <span class="text-emerald" style="font-weight: 700;" id="ws-token-potential">0 tokens</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+              <span style="color: var(--text-dim);">Workspace Avoided Tokens</span>
+              <span class="text-emerald" style="font-weight: 600; font-family: 'JetBrains Mono', monospace;" id="ws-token-potential">0 tokens</span>
             </div>
           </div>
-          <div style="margin-top: 0.6rem; border-top: 1px solid #1e293b; padding-top: 0.5rem;">
-            <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 600; margin-bottom: 0.3rem;">🛡️ ACTIVE BUSINESS TOOL POLICIES</div>
-            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.25rem; max-height: 100px; overflow-y: auto; font-size: 0.7rem; font-family: monospace;">
-              <div style="color: #64748b;">Loading policies...</div>
-            </div>
-        </div>
 
-        <!-- Live WebSocket Activity Ticker & Pruner Feed -->
-        <div class="card" style="border: 1px solid #3b82f6; box-shadow: 0 0 15px -3px rgba(59, 130, 246, 0.25);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span id="ws-indicator" style="display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #10b981; box-shadow: 0 0 8px #10b981;"></span>
-              <h2 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #60a5fa;">⚡ Live Event Stream</h2>
+          <div style="margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">
+            <div style="font-size: 0.68rem; color: var(--text-dim); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.4rem;">Business Tool Caching Policies</div>
+            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.25rem; max-height: 95px; overflow-y: auto; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace;">
+              <div style="color: var(--text-dim);">Loading policies...</div>
             </div>
-            <div style="display: flex; gap: 0.35rem; align-items: center;">
-              <span id="ws-status-text" style="font-size: 0.65rem; color: #34d399; font-family: monospace;">CONNECTED</span>
-              <button onclick="clearEventFeed()" class="btn" style="background: #1e293b; padding: 0.15rem 0.45rem; font-size: 0.65rem; border-radius: 0.25rem; border: 1px solid #334155;">Clear</button>
-            </div>
-          </div>
-          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 180px; overflow-y: auto; font-size: 0.7rem; font-family: monospace;">
-            <div style="color: #64748b; font-style: italic;">Listening for live cache, tool replay & context pruning events...</div>
           </div>
         </div>
 
-        <!-- Claude Code / Cursor Quickstart -->
-        <div class="card">
-          <h2 style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-bottom: 0.5rem;">🤖 Claude Code & Cursor Setup</h2>
-          <pre><code># 1-Line Claude Code Integration
-export ANTHROPIC_BASE_URL="http://localhost:8000/v1"
+        <!-- Live WebSocket Activity Ticker -->
+        <div class="glass-card">
+          <div class="card-title-row">
+            <div class="card-title">
+              <span id="ws-indicator" class="pulse-dot"></span>
+              Live Telemetry Stream
+            </div>
+            <div style="display: flex; gap: 0.4rem; align-items: center;">
+              <span id="ws-status-text" class="badge badge-emerald" style="font-size: 0.65rem;">CONNECTED</span>
+              <button onclick="clearEventFeed()" class="btn" style="padding: 0.2rem 0.45rem; font-size: 0.65rem;">Clear</button>
+            </div>
+          </div>
+          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 175px; overflow-y: auto; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace;">
+            <div style="color: var(--text-dim); font-style: italic;">Listening for live cache, tool replay & context pruning events...</div>
+          </div>
+        </div>
 
-# 1-Line OpenAI / Cursor Integration
-export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
+        <!-- Claude Code & Cursor Setup Quickstart -->
+        <div class="glass-card">
+          <div class="card-title-row">
+            <div class="card-title">Zero-Config Agent Hook</div>
+          </div>
+          <pre class="code-glass"><code># 1-Line Claude Code Execution
+omnicache run claude
+
+# Cursor / Custom Agents (Loopback)
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8000"
+export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         </div>
 
       </div>
 
-    </div>
+    </section>
   </div>
 
   <script>
@@ -352,11 +782,12 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         const badge = document.getElementById('res-status-badge');
         badge.textContent = cacheStatus;
         if (cacheStatus.includes('HIT')) {
-          badge.style.background = 'rgba(16, 185, 129, 0.2)';
-          badge.style.color = '#34d399';
+          badge.className = 'badge badge-emerald';
         } else {
-          badge.style.background = 'rgba(244, 63, 94, 0.2)';
+          badge.className = 'badge';
+          badge.style.borderColor = 'rgba(244, 63, 94, 0.3)';
           badge.style.color = '#fb7185';
+          badge.style.background = 'rgba(244, 63, 94, 0.1)';
         }
 
         document.getElementById('res-latency').textContent = `${dt} ms`;
@@ -391,11 +822,15 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
     function initCharts() {
       if (typeof Chart === 'undefined') return;
 
-      Chart.defaults.color = '#94a3b8';
-      Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
+      Chart.defaults.color = '#64748b';
+      Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
 
       const ctxTimeline = document.getElementById('savingsTimelineChart')?.getContext('2d');
       if (ctxTimeline) {
+        const gradientCost = ctxTimeline.createLinearGradient(0, 0, 0, 200);
+        gradientCost.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
+        gradientCost.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+
         timelineChart = new Chart(ctxTimeline, {
           type: 'line',
           data: {
@@ -405,23 +840,27 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
                 label: 'Cost Saved ($ USD)',
                 data: timelineCostData,
                 borderColor: '#10b981',
-                backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                borderWidth: 2,
+                backgroundColor: gradientCost,
                 fill: true,
                 tension: 0.35,
                 yAxisID: 'yCost',
-                pointRadius: 3,
-                pointHoverRadius: 5
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                pointBackgroundColor: '#10b981'
               },
               {
                 label: 'Tokens Avoided',
                 data: timelineTokenData,
-                borderColor: '#06b6d4',
+                borderColor: '#38bdf8',
+                borderWidth: 1.5,
                 backgroundColor: 'transparent',
-                borderDash: [4, 4],
+                borderDash: [3, 3],
                 tension: 0.35,
                 yAxisID: 'yTokens',
-                pointRadius: 3,
-                pointHoverRadius: 5
+                pointRadius: 2,
+                pointHoverRadius: 4,
+                pointBackgroundColor: '#38bdf8'
               }
             ]
           },
@@ -432,26 +871,29 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
             plugins: {
               legend: {
                 position: 'top',
-                labels: { boxWidth: 12, font: { size: 11 }, color: '#cbd5e1' }
+                labels: { boxWidth: 10, font: { size: 10 }, color: '#94a3b8' }
               },
               tooltip: {
-                backgroundColor: '#0f172a',
-                borderColor: '#334155',
-                borderWidth: 1
+                backgroundColor: 'rgba(10, 13, 20, 0.9)',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1,
+                padding: 8,
+                titleFont: { family: "'Inter', sans-serif", size: 11 },
+                bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
             scales: {
               x: {
-                grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                ticks: { font: { size: 10 }, color: '#94a3b8' }
+                grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#64748b' }
               },
               yCost: {
                 type: 'linear',
                 display: true,
                 position: 'left',
-                grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                grid: { color: 'rgba(255, 255, 255, 0.03)' },
                 ticks: {
-                  font: { size: 10 },
+                  font: { size: 9, family: "'JetBrains Mono', monospace" },
                   color: '#10b981',
                   callback: (val) => '$' + Number(val).toFixed(3)
                 }
@@ -461,7 +903,7 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
                 display: true,
                 position: 'right',
                 grid: { drawOnChartArea: false },
-                ticks: { font: { size: 10 }, color: '#06b6d4' }
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#38bdf8' }
               }
             }
           }
@@ -476,9 +918,9 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
             labels: ['L1 Exact', 'L2 Semantic', 'Agent Tools', 'Vision Hits', 'Misses'],
             datasets: [{
               data: [0, 0, 0, 0, 1],
-              backgroundColor: ['#10b981', '#06b6d4', '#c084fc', '#f59e0b', '#334155'],
-              borderColor: '#131b2e',
-              borderWidth: 2
+              backgroundColor: ['#10b981', '#38bdf8', '#818cf8', '#fbbf24', 'rgba(255, 255, 255, 0.08)'],
+              borderColor: '#090a0f',
+              borderWidth: 3
             }]
           },
           options: {
@@ -487,15 +929,16 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
             plugins: {
               legend: {
                 position: 'right',
-                labels: { boxWidth: 10, font: { size: 10 }, color: '#cbd5e1' }
+                labels: { boxWidth: 8, font: { size: 10 }, color: '#94a3b8' }
               },
               tooltip: {
-                backgroundColor: '#0f172a',
-                borderColor: '#334155',
-                borderWidth: 1
+                backgroundColor: 'rgba(10, 13, 20, 0.9)',
+                borderColor: 'rgba(255, 255, 255, 0.1)',
+                borderWidth: 1,
+                bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
-            cutout: '65%'
+            cutout: '74%'
           }
         });
       }
@@ -538,12 +981,11 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         const res = await fetch('/v1/cache/stats');
         const data = await res.json();
 
-        // Dynamically update Version Badge from backend system_info
         const sys = data.system_info || {};
         if (sys.version) {
           const versionBadge = document.getElementById('version-badge');
           if (versionBadge) {
-            versionBadge.textContent = `v${sys.version} ACTIVE`;
+            versionBadge.innerHTML = `<span class="pulse-dot"></span> v${sys.version} ACTIVE`;
           }
         }
 
@@ -571,7 +1013,6 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
         document.getElementById('stat-total-hits').textContent = exact + semantic;
         document.getElementById('stat-total-reqs').textContent = total;
 
-        // Update Charts
         updateCharts(totalSavedUsd, totalTokensSaved, exact + (ee.agent_tokens_compacted || 0), semantic, toolHits, visionHits, misses);
 
         // Quotas
@@ -582,21 +1023,20 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
           qContainer.innerHTML = '';
           for (const [k, v] of Object.entries(qData)) {
             qContainer.innerHTML += `
-              <div style="display: flex; justify-content: space-between; padding: 0.4rem; background: #0f172a; border-radius: 0.4rem; margin-bottom: 0.25rem;">
-                <span><strong>${v.team_name || k}</strong></span>
-                <span class="text-emerald">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+              <div style="display: flex; justify-content: space-between; padding: 0.45rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
+                <span style="color: var(--text-main); font-weight: 500;">${v.team_name || k}</span>
+                <span class="text-emerald" style="font-family: 'JetBrains Mono', monospace;">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
               </div>
             `;
           }
         }
-        // Workspace and Policy telemetry
         await refreshWorkspaceData();
       } catch (err) {}
     }
 
     async function triggerWarmWorkspace() {
       const btn = document.getElementById('btn-warm-ws');
-      if (btn) btn.textContent = '⏳ Warming...';
+      if (btn) btn.textContent = 'Warming...';
       try {
         const res = await fetch('/v1/workspace/warm', {
           method: 'POST',
@@ -604,15 +1044,15 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
           body: JSON.stringify({ directory: '.', max_files: 50 })
         });
         const data = await res.json();
-        if (btn) btn.textContent = '⚡ Pre-Warm';
+        if (btn) btn.textContent = 'Pre-Warm';
         if (data.status === 'ok') {
-          alert(`✅ Pre-warmed ${data.files_warmed} files and ${data.entries_recorded} tool signatures in ${data.duration_ms} ms!`);
+          alert(`Pre-warmed ${data.files_warmed} files and ${data.entries_recorded} tool signatures in ${data.duration_ms} ms.`);
           refreshWorkspaceData();
         } else {
           alert('Warm status: ' + JSON.stringify(data));
         }
       } catch (e) {
-        if (btn) btn.textContent = '⚡ Pre-Warm';
+        if (btn) btn.textContent = 'Pre-Warm';
         alert('Warm error: ' + e.message);
       }
     }
@@ -630,8 +1070,12 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
           if (refElem) refElem.textContent = (wsData.git_ref || 'HEAD').slice(0, 10);
           if (dirtyElem) {
             dirtyElem.textContent = wsData.dirty ? 'DIRTY' : 'CLEAN';
-            dirtyElem.style.background = wsData.dirty ? 'rgba(244, 63, 94, 0.2)' : 'rgba(16, 185, 129, 0.2)';
-            dirtyElem.style.color = wsData.dirty ? '#fb7185' : '#34d399';
+            dirtyElem.className = wsData.dirty ? 'badge' : 'badge badge-emerald';
+            if (wsData.dirty) {
+              dirtyElem.style.borderColor = 'rgba(244, 63, 94, 0.3)';
+              dirtyElem.style.color = '#fb7185';
+              dirtyElem.style.background = 'rgba(244, 63, 94, 0.1)';
+            }
           }
           if (toolsElem) toolsElem.textContent = `${wsData.active_tool_records || 0} records`;
           if (tokensElem) tokensElem.textContent = `${(wsData.estimated_tokens_saved || 0).toLocaleString()} tokens`;
@@ -644,12 +1088,12 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
           if (pList && Array.isArray(polData.policies)) {
             pList.innerHTML = '';
             for (const p of polData.policies) {
-              const badgeColor = p.is_idempotent ? '#34d399' : '#fb7185';
+              const badgeClass = p.is_idempotent ? 'text-emerald' : 'text-rose';
               const badgeText = p.is_idempotent ? `${p.ttl_seconds}s TTL` : 'BLOCKED';
               pList.innerHTML += `
-                <div style="display: flex; justify-content: space-between; padding: 0.2rem 0.4rem; background: #0f172a; border-radius: 0.25rem;">
-                  <span style="color: #cbd5e1;">${p.tool_name}</span>
-                  <span style="color: ${badgeColor}; font-weight: 600;">${badgeText}</span>
+                <div style="display: flex; justify-content: space-between; padding: 0.3rem 0.5rem; background: rgba(255, 255, 255, 0.02); border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.03);">
+                  <span style="color: var(--text-muted);">${p.tool_name}</span>
+                  <span class="${badgeClass}" style="font-weight: 500;">${badgeText}</span>
                 </div>
               `;
             }
@@ -674,12 +1118,12 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
           const ind = document.getElementById('ws-indicator');
           const txt = document.getElementById('ws-status-text');
           if (ind) {
-            ind.style.background = '#10b981';
-            ind.style.boxShadow = '0 0 8px #10b981';
+            ind.style.background = 'var(--accent-emerald)';
+            ind.style.boxShadow = '0 0 8px var(--accent-emerald)';
           }
           if (txt) {
             txt.textContent = 'CONNECTED';
-            txt.style.color = '#34d399';
+            txt.className = 'badge badge-emerald';
           }
         };
 
@@ -699,12 +1143,14 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
           const ind = document.getElementById('ws-indicator');
           const txt = document.getElementById('ws-status-text');
           if (ind) {
-            ind.style.background = '#f59e0b';
-            ind.style.boxShadow = '0 0 8px #f59e0b';
+            ind.style.background = 'var(--accent-amber)';
+            ind.style.boxShadow = '0 0 8px var(--accent-amber)';
           }
           if (txt) {
             txt.textContent = 'RECONNECTING';
+            txt.className = 'badge';
             txt.style.color = '#fbbf24';
+            txt.style.borderColor = 'rgba(245, 158, 11, 0.3)';
           }
           wsReconnectTimeout = setTimeout(initWebSocket, 3000);
         };
@@ -728,89 +1174,90 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
       const t = ev.event_type;
       const d = ev.data || {};
 
-      let badgeColor = '#38bdf8';
+      let badgeColor = 'var(--accent-sky)';
       let badgeLabel = (t || 'EVENT').toUpperCase();
       let detail = '';
 
       if (t === 'tool_replay' || t === 'tool_hit') {
-        badgeColor = '#c084fc';
-        badgeLabel = '⚡ TOOL HIT';
+        badgeColor = 'var(--accent-violet)';
+        badgeLabel = 'TOOL HIT';
         detail = `${d.tool_name || 'tool'} (${d.latency_ms || 0.2}ms)`;
       } else if (t === 'context_compacted' || t === 'context_pruned') {
-        badgeColor = '#34d399';
-        badgeLabel = '✂️ PRUNED';
+        badgeColor = 'var(--accent-emerald)';
+        badgeLabel = 'PRUNED';
         detail = `-${d.tokens_compacted || 0} prompt tokens`;
       } else if (t === 'telephony_filtered') {
-        badgeColor = '#06b6d4';
-        badgeLabel = '🎙️ VOICE [BETA]';
+        badgeColor = 'var(--accent-sky)';
+        badgeLabel = 'VOICE FILTER';
         detail = `-${d.fillers_stripped || 0} fillers, +${d.tokens_saved || 0} tok saved`;
       } else if (t === 'telephony_fast_path') {
-        badgeColor = '#38bdf8';
-        badgeLabel = '⚡ VOICE FAST [BETA]';
+        badgeColor = 'var(--accent-sky)';
+        badgeLabel = 'VOICE FAST';
         detail = `${(d.reply || '').slice(0, 32)}... (<0.2ms)`;
       } else if (t === 'audio_cache_hit') {
         badgeColor = '#e879f9';
-        badgeLabel = '🎵 AUDIO [BETA]';
+        badgeLabel = 'AUDIO HIT';
         detail = `aHash ${(d.audio_hash || '').slice(0, 8)}... (${d.distance || 0}/64 dist, ${d.latency_ms || 0.3}ms)`;
       } else if (t === 'tool_recorded') {
-        badgeColor = '#60a5fa';
-        badgeLabel = '📥 RECORDED';
+        badgeColor = 'var(--accent-sky)';
+        badgeLabel = 'RECORDED';
         detail = `${d.tool_name || 'tool'} (${d.ttl_seconds || 300}s TTL)`;
       } else if (t === 'mutation_blocked') {
-        badgeColor = '#fb7185';
-        badgeLabel = '🛡️ BLOCKED';
+        badgeColor = 'var(--accent-rose)';
+        badgeLabel = 'BLOCKED';
         detail = `${d.tool_name || 'mutative_tool'}`;
       } else if (t === 'cache_hit') {
-        badgeColor = '#10b981';
+        badgeColor = 'var(--accent-emerald)';
         badgeLabel = d.status || 'HIT';
         detail = `${d.model || ''} +${d.tokens_saved || 0} tok ($${d.savings_usd || '0.00'})`;
       } else if (t === 'workspace_warmed') {
-        badgeColor = '#f59e0b';
-        badgeLabel = '📁 WARMED';
+        badgeColor = 'var(--accent-amber)';
+        badgeLabel = 'WARMED';
         detail = `${d.files_warmed || 0} files in ${d.duration_ms || 0}ms`;
       } else if (t === 'swarm_hit') {
-        badgeColor = '#eab308';
-        badgeLabel = '🐝 SWARM HIT';
-        detail = `${d.origin_agent || 'agent'} ➔ ${d.requesting_agent || 'subagent'} (+${d.tokens_saved || 0} tok)`;
+        badgeColor = 'var(--accent-amber)';
+        badgeLabel = 'SWARM HIT';
+        detail = `${d.origin_agent || 'agent'} -> ${d.requesting_agent || 'subagent'} (+${d.tokens_saved || 0} tok)`;
       } else if (t === 'swarm_delegation') {
-        badgeColor = '#f59e0b';
-        badgeLabel = '🐝 DELEGATED';
-        detail = `${d.parent_agent || 'lead'} ➔ ${d.subagent_id || 'subagent'}`;
+        badgeColor = 'var(--accent-amber)';
+        badgeLabel = 'DELEGATED';
+        detail = `${d.parent_agent || 'lead'} -> ${d.subagent_id || 'subagent'}`;
       } else if (t === 'swarm_invalidation') {
-        badgeColor = '#ef4444';
-        badgeLabel = '🐝 SWARM PURGE';
+        badgeColor = 'var(--accent-rose)';
+        badgeLabel = 'SWARM PURGE';
         detail = `mutated: ${d.mutated_resource || 'workspace'}`;
       } else if (t === 'mesh_peer_registered') {
-        badgeColor = '#06b6d4';
-        badgeLabel = '🌐 MESH PEER';
+        badgeColor = 'var(--accent-sky)';
+        badgeLabel = 'MESH PEER';
         detail = `${d.endpoint || ''} (${d.node_id || ''})`;
       } else if (t === 'mesh_sync_processed') {
-        badgeColor = '#3b82f6';
-        badgeLabel = '🌐 MESH SYNC';
+        badgeColor = 'var(--accent-sky)';
+        badgeLabel = 'MESH SYNC';
         detail = `sync from ${d.remote_node_id || 'peer'} (+${d.tombstones_applied || 0} tombstones)`;
       } else if (t === 'mesh_tombstone_applied') {
         badgeColor = '#ec4899';
-        badgeLabel = '🌐 TOMBSTONE';
+        badgeLabel = 'TOMBSTONE';
         detail = `${d.resource_id || ''} (${d.reason || ''})`;
       } else if (t === 'model_cascaded') {
-        badgeColor = '#f59e0b';
-        badgeLabel = '🔀 CASCADED';
-        detail = `${d.requested_model} ➔ ${d.routed_model} (${d.tier}, comp: ${d.complexity})`;
+        badgeColor = 'var(--accent-amber)';
+        badgeLabel = 'CASCADED';
+        detail = `${d.requested_model} -> ${d.routed_model} (${d.tier})`;
       } else if (t === 'quantized_embeddings_generated' || t === 'quantized_embed') {
-        badgeColor = '#8b5cf6';
-        badgeLabel = '⚡ QUANT EMBED';
+        badgeColor = 'var(--accent-violet)';
+        badgeLabel = 'QUANT EMBED';
         detail = `${d.count || 1} text(s), ${d.dimensions || 256}d int8 (${d.duration_ms || 0.4}ms)`;
       } else {
         detail = JSON.stringify(d);
       }
 
       const item = document.createElement('div');
-      item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.25rem 0.4rem; background: #0f172a; border-radius: 0.3rem; border-left: 3px solid ' + badgeColor + ';';
+      item.className = 'feed-item';
+      item.style.borderLeft = '2px solid ' + badgeColor;
       item.innerHTML = `
-        <div style="display: flex; gap: 0.4rem; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          <span style="color: #64748b; font-size: 0.65rem;">${time}</span>
-          <span style="color: ${badgeColor}; font-weight: 700; font-size: 0.65rem;">${badgeLabel}</span>
-          <span style="color: #cbd5e1; font-size: 0.7rem;">${detail}</span>
+        <div style="display: flex; gap: 0.5rem; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span style="color: var(--text-dim); font-size: 0.65rem;">${time}</span>
+          <span style="color: ${badgeColor}; font-weight: 600; font-size: 0.65rem;">${badgeLabel}</span>
+          <span style="color: var(--text-muted); font-size: 0.7rem;">${detail}</span>
         </div>
       `;
 
@@ -823,7 +1270,7 @@ export OPENAI_BASE_URL="http://localhost:8000/v1"</code></pre>
     function clearEventFeed() {
       const feed = document.getElementById('live-event-feed');
       if (feed) {
-        feed.innerHTML = '<div style="color: #64748b; font-style: italic;">Feed cleared. Waiting for events...</div>';
+        feed.innerHTML = '<div style="color: var(--text-dim); font-style: italic;">Feed cleared. Waiting for events...</div>';
       }
     }
 

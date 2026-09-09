@@ -42,8 +42,20 @@ class UpstreamClient:
         return f"{config.OPENAI_BASE_URL}/chat/completions"
 
     @classmethod
+    def resolve_model_pricing(cls, model: str) -> Dict[str, float]:
+        """Resolves pricing table entry with robust longest-prefix matching for dated model snapshots."""
+        m = (model or "").lower().strip()
+        if m in MODEL_PRICING:
+            return MODEL_PRICING[m]
+        # Match longest matching known model key first (e.g. 'gpt-4o-mini' before 'gpt-4o')
+        for known_k in sorted(MODEL_PRICING.keys(), key=len, reverse=True):
+            if known_k != "default" and (known_k in m or m.startswith(known_k)):
+                return MODEL_PRICING[known_k]
+        return MODEL_PRICING["default"]
+
+    @classmethod
     def calculate_savings(cls, model: str, prompt_tokens: int, completion_tokens: int) -> float:
-        pricing = MODEL_PRICING.get(model.lower(), MODEL_PRICING["default"])
+        pricing = cls.resolve_model_pricing(model)
         in_cost = (prompt_tokens / 1_000_000.0) * pricing["input"]
         out_cost = (completion_tokens / 1_000_000.0) * pricing["output"]
         return in_cost + out_cost

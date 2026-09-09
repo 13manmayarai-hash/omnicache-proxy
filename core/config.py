@@ -66,14 +66,18 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "o3-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
     "gpt-4-turbo": {"input": 10.00, "output": 30.00, "cached_input": 5.00},
     "gpt-3.5-turbo": {"input": 0.50, "output": 1.50, "cached_input": 0.25},
+    "claude-3-5-sonnet": {"input": 3.00, "output": 15.00, "cached_input": 0.30},
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00, "cached_input": 0.30},
+    "claude-3-5-haiku": {"input": 0.80, "output": 4.00, "cached_input": 0.08},
     "claude-3-5-haiku-20241022": {"input": 0.80, "output": 4.00, "cached_input": 0.08},
     "claude-3-7-sonnet": {"input": 3.00, "output": 15.00, "cached_input": 0.30},
+    "claude-3-opus": {"input": 15.00, "output": 75.00, "cached_input": 1.50},
     "claude-sonnet-4-5-20250929": {"input": 3.00, "output": 15.00, "cached_input": 0.30},
     "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00, "cached_input": 0.08},
     "gemini-2.5-flash": {"input": 0.10, "output": 0.40, "cached_input": 0.025},
     "gemini-1.5-pro": {"input": 1.25, "output": 5.00, "cached_input": 0.3125},
     "gemini-1.5-flash": {"input": 0.075, "output": 0.30, "cached_input": 0.01875},
+    "gpt-4": {"input": 30.00, "output": 60.00, "cached_input": 15.00},
     "default": {"input": 2.00, "output": 8.00, "cached_input": 1.00},
 }
 

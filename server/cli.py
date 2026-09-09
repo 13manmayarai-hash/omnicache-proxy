@@ -559,12 +559,15 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
     # 2. Snapshot initial telemetry
     initial_tokens_saved = 0
     initial_savings_usd = 0.0
+    initial_tool_replays = 0
     try:
         req = urllib.request.urlopen(f"http://{target_host}:{port}/v1/cache/stats", timeout=1.0)
         data = json.loads(req.read().decode("utf-8"))
         fin = data.get("financial_telemetry", {})
+        eng = data.get("enterprise_engine", {})
         initial_tokens_saved = fin.get("total_tokens_saved", 0)
         initial_savings_usd = fin.get("total_savings_usd", 0.0)
+        initial_tool_replays = eng.get("agent_tool_replays", 0)
     except Exception:
         pass
 
@@ -617,13 +620,13 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
             
             diff_tokens = max(0, fin.get("total_tokens_saved", 0) - initial_tokens_saved)
             diff_savings = max(0.0, fin.get("total_savings_usd", 0.0) - initial_savings_usd)
-            tool_replays = eng.get("agent_tool_replays", 0)
+            diff_tools = max(0, eng.get("agent_tool_replays", 0) - initial_tool_replays)
 
             print("\n╭──────────────────────────────────────────────────╮")
             print("│ ⚡ OmniCache Session Telemetry                   │")
             print(f"│  - Tokens Saved:    {diff_tokens:>8,} tokens                 │")
             print(f"│  - Avoided Cost:    ${diff_savings:>8.4f} USD                    │")
-            print(f"│  - Tool Replays:    {tool_replays:>8} cached tool calls        │")
+            print(f"│  - Tool Replays:    {diff_tools:>8} cached tool calls        │")
             print("╰──────────────────────────────────────────────────╯\n")
         except Exception:
             pass

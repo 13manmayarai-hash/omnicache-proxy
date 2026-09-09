@@ -1191,6 +1191,12 @@ def run_mesh(peers_arg: Optional[str] = None):
     print("========================================================\n")
 
 
+def run_demo():
+    """Runs 30-second live realistic telemetry and agent simulation test."""
+    from scripts.live_demo_test import run_simulation
+    run_simulation()
+
+
 def main():
     # Handle "omnicache run <command> [args...]"
     if len(sys.argv) > 1 and sys.argv[1] == "run":
@@ -1209,7 +1215,7 @@ def main():
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync", "mesh"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync", "mesh", "demo"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal", "cascade", "arbiter", "swarm"], help="Target agent preset for init (default: all)")
@@ -1229,7 +1235,10 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "init":
+    if args.command == "demo":
+        run_demo()
+        sys.exit(0)
+    elif args.command == "init":
         run_init(agent=args.agent, show_only=args.show)
         sys.exit(0)
     elif args.command in ("harness", "verify-agent"):

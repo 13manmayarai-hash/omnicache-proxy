@@ -514,9 +514,12 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
     Zero-config execution wrapper for AI coding agents (Claude Code, Cursor, Aider, custom scripts).
     Automatically starts or attaches to OmniCache proxy and injects environment variables.
     """
+    if cmd_args and cmd_args[0] == "--":
+        cmd_args = cmd_args[1:]
+
     if not cmd_args:
         print("❌ Error: No command specified.")
-        print("Usage: omnicache run <command> [args...]")
+        print("Usage: omnicache run [--] <command> [args...]")
         print("Example: omnicache run claude")
         sys.exit(1)
 
@@ -544,9 +547,9 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
             env=server_env
         )
         started_local_server = True
-        # Wait up to 5s for the server to be ready
+        # Wait up to 8s for the server to be ready
         ready = False
-        for _ in range(50):
+        for _ in range(80):
             if is_port_in_use(port, target_host):
                 ready = True
                 break

@@ -1,138 +1,49 @@
 ---
 name: neumorphism-styleguide
 description: >-
-  Enforces the official Neumorphism (Soft UI) Product UI Styleguide for OmniCache dashboards, web interfaces, and UI components based on the confirmed WhatsApp reference design. Use whenever designing, building, inspecting, or refactoring UI components, dashboards, CSS, or HTML.
+  Enforces the official Neumorphism (Soft UI) Dark Monochrome Design System for OmniCache dashboards and web components based on the confirmed WhatsApp reference image (IMG-20260911-WA0000.jpg). Use whenever designing, building, inspecting, or refactoring UI components, dashboards, CSS, or HTML.
 ---
 
-# Neumorphism (Soft UI) Product UI Styleguide
+# Neumorphism (Soft UI) Dark Monochrome Styleguide
 
-This skill governs all frontend interface engineering and design system implementations for OmniCache. It codifies the exact visual language, color tokens, light physics, and component architectures specified in the confirmed **Product UI Styleguide**.
-
----
-
-## 1. Core Visual Philosophy
-
-Neumorphism (Soft UI) treats the user interface as a continuous physical surface made of soft porcelain or extruded matte polymer. Instead of floating flat cards or translucent frosted glass, elements either **extrude outward** (raised towards the user via dual light-source shadows) or **press inward** (recessed wells into the surface via inset dual shadows).
-
-* **Light Direction:** Top-Left (135° simulated angle)
-* **Highlight Color:** Pure White (`#FFFFFF`) on top-left edges
-* **Shadow Color:** Soft desaturated blue-slate (`#D1D9E6` or `#CBD5E1`) on bottom-right edges
-* **Continuous Canvas:** The background and card surfaces share identical base tones (`#EEF2F6`).
+This design system governs all frontend interface engineering for OmniCache. It strictly codifies the 6-tier dark monochrome slate/navy palette from the confirmed **Product UI Styleguide** (reference: `IMG-20260911-WA0000.jpg`).
 
 ---
 
-## 2. Token Specification
+## 1. The Strict 6-Color Palette
 
-### Color Tokens
-| Token | Hex Value | Semantic Role |
+| Token Variable | Hex Code | Visual Role |
 | :--- | :--- | :--- |
-| `--canvas-bg` | `#EEF2F6` | Master page background canvas |
-| `--surface-bg` | `#EEF2F6` | Card and component extrusion surface |
-| `--primary-mint` | `#9FE6D4` | Primary action pill button background |
-| `--primary-mint-hover` | `#88DEC9` | Primary action hover state |
-| `--primary-mint-text` | `#0F4C3A` | High-contrast forest green text on mint |
-| `--focus-ring` | `#00CFCC` | Cyan-mint active/focus border halo |
-| `--alert-success-bg` | `#C7F2E5` | Pastel mint success status badge |
-| `--alert-success-text`| `#065F46` | Success text |
-| `--alert-warning-bg` | `#FEF08A` | Soft butter yellow warning badge |
-| `--alert-warning-text`| `#854D0E` | Warning text |
-| `--alert-error-bg` | `#FECDD3` | Soft pastel rose error badge |
-| `--alert-error-text` | `#9F1239` | Error text |
-| `--text-main` | `#1E293B` | Primary headings and metrics |
-| `--text-muted` | `#475569` | Secondary body copy |
-| `--text-dim` | `#64748B` | Labels, uppercase titles, hints |
+| `--c-obsidian` | `#06141B` | Deepest canvas background & recessed inset wells |
+| `--c-midnight` | `#11212D` | Extruded card & component surface |
+| `--c-navy`     | `#253745` | Elevated surfaces, secondary buttons, subtle active fills |
+| `--c-slate`    | `#4A5C6A` | Outer borders, divider lines, architectural gridlines |
+| `--c-silver`   | `#9BA8AB` | Secondary body text, metrics hints, timestamps |
+| `--c-frost`    | `#CCD0CF` | Primary action pills, high-contrast headings, hero metric values |
 
-### Shadow & Elevation Tokens
+---
+
+## 2. Neumorphic Dual-Shadow Physics (Dark Soft UI)
+
+* **Light Direction:** Top-Left simulated illumination (`rgba(74, 92, 106, 0.25)` or `#253745`).
+* **Shadow Direction:** Bottom-Right absorption (`#02090D` / `#030A0F`).
+
+### Elevation Tokens
 ```css
 /* Extrusions (Raised Components) */
---neu-flat-1: 3px 3px 7px #d1d9e6, -3px -3px 7px #ffffff;
---neu-flat-2: 6px 6px 14px #d1d9e6, -6px -6px 14px #ffffff;
---neu-flat-3: 10px 10px 22px #d1d9e6, -10px -10px 22px #ffffff;
---neu-flat-hover: 8px 8px 18px #c5cfdf, -8px -8px 18px #ffffff;
+--neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
+--neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
+--neu-flat-3: 10px 10px 24px #02070b, -10px -10px 24px rgba(74, 92, 106, 0.28);
+--neu-flat-hover: 7px 7px 18px #02070b, -7px -7px 18px rgba(74, 92, 106, 0.32);
 
-/* Insets (Recessed Wells & Active States) */
---neu-pressed: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff;
---neu-pressed-deep: inset 4px 4px 8px #cbd5e1, inset -4px -4px 8px #ffffff;
-```
-
-### Radii & Geometry
-* **Pill Elements:** `border-radius: 9999px` (Buttons, tabs, status chips, badges, single-line search/inputs)
-* **Containers & Cards:** `border-radius: 20px`
-* **Textareas & Code Wells:** `border-radius: 16px`
-* **Subtle Highlights:** `border: 1px solid rgba(255, 255, 255, 0.7)`
-
----
-
-## 3. Standard Component Recipes
-
-### A. Primary Action Pill Button
-```css
-.btn-primary-mint {
-  background: var(--primary-mint);
-  color: var(--primary-mint-text);
-  border-radius: 9999px;
-  padding: 0.55rem 1.15rem;
-  font-weight: 600;
-  box-shadow: 4px 4px 10px #c5d0e0, -4px -4px 10px #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.btn-primary-mint:hover {
-  background: var(--primary-mint-hover);
-  box-shadow: 6px 6px 14px #b8c5d8, -6px -6px 14px #ffffff;
-  transform: translateY(-1px);
-}
-.btn-primary-mint:active {
-  box-shadow: inset 3px 3px 6px #78c8b4, inset -3px -3px 6px #bbf4e6;
-  transform: translateY(1px);
-}
-```
-
-### B. Recessed Input Well
-```css
-.input-neu {
-  background: var(--surface-bg);
-  border-radius: 9999px;
-  box-shadow: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  padding: 0.65rem 1.15rem;
-  color: #1e293b;
-  outline: none;
-}
-.input-neu:focus {
-  box-shadow: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff, 0 0 0 2px #00cfcc;
-}
-```
-
-### C. Segmented Tab Pills
-```css
-.tab-container {
-  display: flex;
-  padding: 4px;
-  background: var(--surface-bg);
-  border-radius: 9999px;
-  box-shadow: inset 2px 2px 5px #d1d9e6, inset -2px -2px 5px #ffffff;
-}
-.tab-item {
-  border-radius: 9999px;
-  padding: 0.4rem 1rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.tab-item.active {
-  background: var(--surface-bg);
-  box-shadow: 3px 3px 7px #d1d9e6, -3px -3px 7px #ffffff;
-  color: #0d9488;
-}
+/* Insets (Recessed Wells & Textareas) */
+--neu-pressed: inset 3px 3px 6px #02080d, inset -3px -3px 6px rgba(74, 92, 106, 0.2);
+--neu-pressed-deep: inset 4px 4px 8px #01060a, inset -4px -4px 8px rgba(74, 92, 106, 0.25);
 ```
 
 ---
 
-## 4. Strict Design System Constraints (Anti-Patterns)
-
-1. **NO Glassmorphism / Frosted Acrylic:** Do NOT use `backdrop-filter: blur()`, semi-transparent saturated backgrounds, or neon glow borders.
-2. **NO Dark Mode Inversion:** Maintain the clean soft-porcelain `#EEF2F6` theme.
-3. **NO Harsh Black Shadows:** Avoid `rgba(0, 0, 0, 0.5+)`. Shadows must use subtle, diffused slate tints (`#D1D9E6`) paired with bright white light counter-shadows (`#FFFFFF`).
-4. **NO Sharp Rectangular Corners:** Interactive elements MUST use full pill geometry (`9999px`), and cards MUST use `20px` radius.
-5. **Preserve DOM Element IDs & Contracts:** Any dashboard styling update must preserve telemetry listeners, Chart.js canvases, and WebSocket hook points.
+## 3. Geometry & Typography
+* **Pill Geometry (`border-radius: 9999px`):** Buttons, segmented tabs, status chips, badges, single-line inputs.
+* **Card Geometry (`border-radius: 20px`):** All containers, metric blocks, chart panels.
+* **Typography:** `Plus Jakarta Sans` for UI copy and headings; `JetBrains Mono` for tabular metrics and code blocks.

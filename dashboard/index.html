@@ -10,42 +10,23 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      /* Palette Tokens directly matching Product UI Styleguide */
-      --canvas-bg: #f4f6f9;
-      --surface-bg: #ffffff;
-      --surface-secondary: #f8fafc;
-      --surface-recessed: #eef2f6;
+      /* Strictly derived from WhatsApp Reference Image (IMG-20260911-WA0000.jpg) */
+      --c-obsidian: #06141B; /* Deepest canvas & recessed wells */
+      --c-midnight: #11212D; /* Main card & panel surface */
+      --c-navy:     #253745; /* Elevated surfaces, secondary buttons */
+      --c-slate:    #4A5C6A; /* Borders, inactive states, grid lines */
+      --c-silver:   #9BA8AB; /* Secondary labels, subtitles, hints */
+      --c-frost:    #CCD0CF; /* Primary highlights, buttons, hero text */
 
-      /* Primary Mint Accent from Styleguide Tokens */
-      --primary-mint: #9fe6d4;
-      --primary-mint-hover: #88dec9;
-      --primary-mint-text: #0f4c3a;
-      --focus-ring: #00cfcc;
+      /* Neumorphic Dual Shadows in Dark Palette */
+      --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
+      --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
+      --neu-flat-3: 10px 10px 24px #02070b, -10px -10px 24px rgba(74, 92, 106, 0.28);
+      --neu-flat-hover: 7px 7px 18px #02070b, -7px -7px 18px rgba(74, 92, 106, 0.32);
 
-      /* Status Alert Pills from Styleguide */
-      --alert-success-bg: #c7f2e5;
-      --alert-success-text: #065f46;
-      --alert-warning-bg: #fef08a;
-      --alert-warning-text: #854d0e;
-      --alert-error-bg: #fecdd3;
-      --alert-error-text: #9f1239;
-
-      /* Typography & Neutrals */
-      --text-main: #1e252b;
-      --text-muted: #475569;
-      --text-dim: #64748b;
-      --text-caption: #94a3b8;
-      --border-soft: #e2e8f0;
-
-      /* Neumorphism Extrusions (Dual Light Source) */
-      --neu-flat-1: 3px 3px 8px #d5dce6, -3px -3px 8px #ffffff;
-      --neu-flat-2: 6px 6px 16px #d1d9e6, -6px -6px 16px #ffffff;
-      --neu-flat-3: 10px 10px 24px #cbd5e1, -10px -10px 24px #ffffff;
-      --neu-flat-hover: 8px 8px 20px #c5d0df, -8px -8px 20px #ffffff;
-
-      /* Inset Recessed Wells from Styleguide */
-      --neu-pressed: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff;
-      --neu-pressed-deep: inset 4px 4px 8px #cbd5e1, inset -4px -4px 8px #ffffff;
+      /* Inset Recessed Wells */
+      --neu-pressed: inset 3px 3px 6px #02080d, inset -3px -3px 6px rgba(74, 92, 106, 0.2);
+      --neu-pressed-deep: inset 4px 4px 8px #01060a, inset -4px -4px 8px rgba(74, 92, 106, 0.25);
 
       /* Geometry */
       --radius-pill: 9999px;
@@ -56,12 +37,12 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background-color: var(--canvas-bg);
+      background-color: var(--c-obsidian);
       background-image: 
-        linear-gradient(rgba(209, 217, 230, 0.28) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(209, 217, 230, 0.28) 1px, transparent 1px);
+        linear-gradient(rgba(74, 92, 106, 0.15) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74, 92, 106, 0.15) 1px, transparent 1px);
       background-size: 24px 24px;
-      color: var(--text-main);
+      color: var(--c-frost);
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh;
       padding: 2rem 1.5rem;
@@ -74,12 +55,12 @@
       margin: 0 auto;
     }
 
-    /* Neumorphic Cards (Surface #FFFFFF with Dual Shadow) */
+    /* Neumorphic Cards (Surface #11212D) */
     .neu-card {
-      background: var(--surface-bg);
+      background: var(--c-midnight);
       border-radius: var(--radius-card);
       box-shadow: var(--neu-flat-2);
-      border: 1px solid rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(74, 92, 106, 0.35);
       padding: 1.5rem;
       position: relative;
       transition: box-shadow 0.25s ease, transform 0.25s ease;
@@ -98,7 +79,7 @@
       flex-wrap: wrap;
       gap: 1.25rem;
       padding-bottom: 1.25rem;
-      border-bottom: 1px solid rgba(209, 217, 230, 0.4);
+      border-bottom: 1px solid rgba(74, 92, 106, 0.35);
     }
 
     .brand-title {
@@ -110,20 +91,20 @@
     .brand-icon-neu {
       width: 3rem;
       height: 3rem;
-      background: var(--surface-bg);
+      background: var(--c-midnight);
       border-radius: 16px;
       box-shadow: var(--neu-flat-1);
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(155, 168, 171, 0.25);
       flex-shrink: 0;
     }
 
     .brand-h1 {
       font-size: 1.35rem;
       font-weight: 800;
-      color: var(--text-main);
+      color: var(--c-frost);
       letter-spacing: -0.025em;
       display: flex;
       align-items: center;
@@ -133,12 +114,12 @@
 
     .brand-sub {
       font-size: 0.8rem;
-      color: var(--text-dim);
+      color: var(--c-silver);
       font-weight: 500;
       margin-top: 0.25rem;
     }
 
-    /* Buttons from Styleguide */
+    /* Pill Buttons from Palette */
     .btn-group {
       display: flex;
       align-items: center;
@@ -157,9 +138,9 @@
       font-family: inherit;
       cursor: pointer;
       text-decoration: none;
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      background: var(--surface-bg);
-      color: var(--text-muted);
+      border: 1px solid rgba(74, 92, 106, 0.4);
+      background: var(--c-navy);
+      color: var(--c-frost);
       box-shadow: var(--neu-flat-1);
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       height: 38px;
@@ -167,7 +148,8 @@
 
     .btn-neu:hover {
       box-shadow: var(--neu-flat-2);
-      color: var(--text-main);
+      background: #2e4456;
+      color: #ffffff;
       transform: translateY(-1px);
     }
 
@@ -176,37 +158,38 @@
       transform: translateY(1px);
     }
 
-    /* Primary Action Pill (Mint Green from Styleguide) */
+    /* Primary Action Pill (Light Frost with Dark Obsidian Text) */
     .btn-primary-mint {
-      background: var(--primary-mint) !important;
-      color: var(--primary-mint-text) !important;
-      box-shadow: 4px 4px 10px #c5d0e0, -4px -4px 10px #ffffff !important;
+      background: var(--c-frost) !important;
+      color: var(--c-obsidian) !important;
+      box-shadow: 4px 4px 12px rgba(3, 10, 15, 0.6), -4px -4px 12px rgba(74, 92, 106, 0.25) !important;
       border: 1px solid rgba(255, 255, 255, 0.6) !important;
-      font-weight: 700 !important;
+      font-weight: 800 !important;
     }
 
     .btn-primary-mint:hover {
-      background: var(--primary-mint-hover) !important;
-      box-shadow: 6px 6px 14px #b8c5d8, -6px -6px 14px #ffffff !important;
+      background: #ffffff !important;
+      box-shadow: 5px 5px 16px rgba(3, 10, 15, 0.8), -5px -5px 16px rgba(155, 168, 171, 0.35) !important;
     }
 
     .btn-primary-mint:active {
-      box-shadow: inset 3px 3px 6px #78c8b4, inset -3px -3px 6px #bbf4e6 !important;
+      box-shadow: inset 3px 3px 6px #9ba8ab, inset -3px -3px 6px #ffffff !important;
     }
 
     .btn-secondary-neu {
-      background: #eef2f6 !important;
-      color: #334155 !important;
-      box-shadow: 4px 4px 10px #d5dce6, -4px -4px 10px #ffffff !important;
-      font-weight: 600 !important;
+      background: var(--c-navy) !important;
+      color: var(--c-frost) !important;
+      box-shadow: var(--neu-flat-1) !important;
+      border: 1px solid rgba(74, 92, 106, 0.5) !important;
+      font-weight: 700 !important;
     }
 
     .btn-secondary-neu:hover {
-      background: #e2e8f0 !important;
-      box-shadow: 5px 5px 12px #cbd5e1, -5px -5px 12px #ffffff !important;
+      background: #2e4456 !important;
+      color: #ffffff !important;
     }
 
-    /* Status Pills / Chips from Styleguide */
+    /* Status Pills / Chips */
     .chip-neu {
       display: inline-flex;
       align-items: center;
@@ -216,34 +199,36 @@
       font-size: 0.74rem;
       font-weight: 700;
       box-shadow: var(--neu-flat-1);
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(74, 92, 106, 0.4);
       letter-spacing: 0.02em;
+      background: var(--c-navy);
+      color: var(--c-frost);
     }
 
     .chip-success {
-      background: var(--alert-success-bg);
-      color: var(--alert-success-text);
-      box-shadow: 2px 2px 6px #c2dfd5, -2px -2px 6px #ffffff;
+      background: #193836;
+      color: #7ee0c3;
+      border-color: #2b5e58;
     }
 
     .chip-warning {
-      background: var(--alert-warning-bg);
-      color: var(--alert-warning-text);
-      box-shadow: 2px 2px 6px #ddd9af, -2px -2px 6px #ffffff;
+      background: #383219;
+      color: #fce182;
+      border-color: #5c5225;
     }
 
     .chip-error {
-      background: var(--alert-error-bg);
-      color: var(--alert-error-text);
-      box-shadow: 2px 2px 6px #dec0c5, -2px -2px 6px #ffffff;
+      background: #3d1c24;
+      color: #fda4af;
+      border-color: #632634;
     }
 
     .pulse-dot-mint {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #0f766e;
-      box-shadow: 0 0 6px #14b8a6;
+      background: var(--c-frost);
+      box-shadow: 0 0 8px var(--c-frost);
       animation: pulse 2s infinite;
       display: inline-block;
       flex-shrink: 0;
@@ -254,7 +239,7 @@
       50% { opacity: 0.45; transform: scale(0.85); }
     }
 
-    /* Perfectly Aligned 8-Card KPI Grid (4x2 on Desktop) */
+    /* Perfectly Symmetrical 8-Card KPI Grid (4x2 on Desktop) */
     .grid-kpi {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -287,7 +272,7 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: var(--text-dim);
+      color: var(--c-silver);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -299,27 +284,27 @@
       font-family: 'JetBrains Mono', monospace;
       letter-spacing: -0.03em;
       margin: 0.45rem 0 0.25rem 0;
-      color: var(--text-main);
+      color: var(--c-frost);
       font-variant-numeric: tabular-nums;
       line-height: 1.1;
     }
 
     .kpi-hint {
       font-size: 0.72rem;
-      color: var(--text-dim);
+      color: var(--c-silver);
       font-weight: 500;
       display: flex;
       align-items: center;
       gap: 0.35rem;
     }
 
-    .text-mint { color: #0d9488 !important; }
-    .text-cyan { color: #0284c7 !important; }
-    .text-violet { color: #6d28d9 !important; }
-    .text-amber { color: #b45309 !important; }
-    .text-rose { color: #be123c !important; }
+    .text-mint   { color: var(--c-frost) !important; }
+    .text-cyan   { color: #a4c2cb !important; }
+    .text-violet { color: #b2b9cb !important; }
+    .text-amber  { color: #d6cfb8 !important; }
+    .text-rose   { color: #d6b8be !important; }
 
-    /* Visual Charts Section (1.15fr 0.85fr) */
+    /* Visual Charts Section */
     .grid-charts {
       display: grid;
       grid-template-columns: 1.15fr 0.85fr;
@@ -346,13 +331,13 @@
       font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--text-main);
+      color: var(--c-frost);
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
 
-    /* Recessed Inputs from Styleguide (e.g. Search invoices well) */
+    /* Inset Recessed Wells (Canvas Obsidian #06141B) */
     .input-group {
       display: flex;
       flex-direction: column;
@@ -363,19 +348,19 @@
     .input-label {
       font-size: 0.75rem;
       font-weight: 700;
-      color: var(--text-dim);
+      color: var(--c-silver);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
     .input-neu {
-      background: var(--surface-recessed);
+      background: var(--c-obsidian);
       border-radius: var(--radius-pill);
       box-shadow: var(--neu-pressed);
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(74, 92, 106, 0.45);
       padding: 0.65rem 1.15rem;
-      color: var(--text-main);
+      color: var(--c-frost);
       width: 100%;
       font-size: 0.82rem;
       font-family: inherit;
@@ -385,7 +370,8 @@
     }
 
     .input-neu:focus {
-      box-shadow: var(--neu-pressed), 0 0 0 2px var(--focus-ring);
+      box-shadow: var(--neu-pressed), 0 0 0 2px var(--c-silver);
+      border-color: var(--c-frost);
     }
 
     textarea.input-neu {
@@ -399,14 +385,14 @@
       cursor: pointer;
     }
 
-    /* Segmented Pill Tabs from Styleguide */
+    /* Segmented Pill Tabs from Palette */
     .tabs-segmented-neu {
       display: inline-flex;
-      background: var(--surface-recessed);
+      background: var(--c-obsidian);
       padding: 4px;
       border-radius: var(--radius-pill);
       box-shadow: var(--neu-pressed);
-      border: 1px solid rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(74, 92, 106, 0.4);
     }
 
     .tab-neu-btn {
@@ -417,32 +403,32 @@
       cursor: pointer;
       border: none;
       background: transparent;
-      color: var(--text-dim);
+      color: var(--c-silver);
       transition: all 0.2s ease;
       font-family: inherit;
     }
 
     .tab-neu-active {
-      background: var(--surface-bg);
-      color: #0f4c3a;
-      box-shadow: 2px 2px 6px #d1d9e6, -2px -2px 6px #ffffff;
+      background: var(--c-navy);
+      color: var(--c-frost);
+      box-shadow: 2px 2px 6px #03080c, -2px -2px 6px rgba(74, 92, 106, 0.3);
     }
 
     .tab-neu-inactive:hover {
-      color: var(--text-main);
+      color: var(--c-frost);
     }
 
     /* Recessed Code Well */
     .pre-neu {
-      background: var(--surface-recessed);
+      background: var(--c-obsidian);
       box-shadow: var(--neu-pressed);
       border-radius: 14px;
       padding: 0.85rem 1rem;
-      color: #0f766e;
+      color: var(--c-frost);
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.76rem;
       overflow-x: auto;
-      border: 1px solid rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(74, 92, 106, 0.35);
       line-height: 1.5;
     }
 
@@ -472,11 +458,11 @@
       justify-content: space-between;
       align-items: center;
       padding: 0.55rem 0.85rem;
-      background: var(--surface-bg);
+      background: var(--c-midnight);
       border-radius: 12px;
-      box-shadow: 2px 2px 5px #d5dce6, -2px -2px 5px #ffffff;
+      box-shadow: 2px 2px 6px #030a0f, -2px -2px 6px rgba(74, 92, 106, 0.2);
       margin-bottom: 0.45rem;
-      border: 1px solid rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(74, 92, 106, 0.35);
     }
   </style>
 </head>
@@ -488,7 +474,7 @@
     <header class="header-bar">
       <div class="brand-title">
         <div class="brand-icon-neu">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#CCD0CF" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
         </div>
@@ -520,14 +506,14 @@
       </div>
     </header>
 
-    <!-- Top KPI Grid: Perfectly Balanced 8-Card Symmetrical Grid -->
+    <!-- Top KPI Grid: Symmetrical 8-Card Layout -->
     <section class="grid-kpi">
       
       <!-- Card 1: Cost Avoided -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Cost Avoided</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CCD0CF" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
         <div class="kpi-val text-mint" id="stat-savings">$0.0000</div>
         <div class="kpi-hint">Avoided upstream cloud spend</div>
@@ -537,7 +523,7 @@
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Tokens Saved</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a4c2cb" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
         </div>
         <div class="kpi-val text-cyan" id="stat-tok-saved">0</div>
         <div class="kpi-hint">100% avoided upstream tokens</div>
@@ -547,7 +533,7 @@
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Hit Rate</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CCD0CF" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
         </div>
         <div class="kpi-val text-mint" id="stat-hitrate">0.0%</div>
         <div class="kpi-hint"><span id="stat-total-hits">0</span> cached hits recorded</div>
@@ -557,7 +543,7 @@
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Total Requests</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2.2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b2b9cb" stroke-width="2.2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
         </div>
         <div class="kpi-val text-violet" id="stat-total-reqs">0</div>
         <div class="kpi-hint">Active sidecar loopback traffic</div>
@@ -567,7 +553,7 @@
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Agent Tool Hits</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b2b9cb" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
         </div>
         <div class="kpi-val text-violet" id="stat-tool-hits">0</div>
         <div class="kpi-hint">Claude Code & Cursor replays</div>
@@ -577,7 +563,7 @@
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Context Pruned</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a4c2cb" stroke-width="2.2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
         </div>
         <div class="kpi-val text-cyan" id="stat-pruned-tok">0</div>
         <div class="kpi-hint">Compacted prompt tokens</div>
@@ -587,7 +573,7 @@
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Privacy Redactions</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#CCD0CF" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         </div>
         <div class="kpi-val text-mint" id="stat-pii-scrubbed">0</div>
         <div class="kpi-hint">HMAC salted PII masked</div>
@@ -615,7 +601,7 @@
             <span class="pulse-dot-mint"></span>
             Savings & Ingestion Velocity
           </div>
-          <span style="font-size: 0.74rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
+          <span style="font-size: 0.74rem; color: var(--c-silver); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
         </div>
         <div style="position: relative; height: 230px; width: 100%;">
           <canvas id="savingsTimelineChart"></canvas>
@@ -626,13 +612,13 @@
       <div class="neu-card">
         <div class="card-title-row">
           <div class="card-title">Resolution Distribution</div>
-          <span style="font-size: 0.74rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
+          <span style="font-size: 0.74rem; color: var(--c-silver); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
         </div>
         <div style="position: relative; height: 230px; width: 100%;">
           <canvas id="distributionDoughnutChart"></canvas>
           <div id="doughnut-center-info" style="position: absolute; top: 50%; left: 35%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
-            <div id="doughnut-hit-rate" style="font-size: 1.25rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: #0d9488;">0.0%</div>
-            <div style="font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Hit Rate</div>
+            <div id="doughnut-hit-rate" style="font-size: 1.25rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--c-frost);">0.0%</div>
+            <div style="font-size: 0.65rem; font-weight: 700; color: var(--c-silver); text-transform: uppercase; letter-spacing: 0.05em;">Hit Rate</div>
           </div>
         </div>
       </div>
@@ -668,7 +654,7 @@
           <div class="input-group">
             <div class="input-label">
               <span>Client API Key (Optional)</span>
-              <span style="color: #0d9488; font-size: 0.72rem; font-weight: 700;">Sandbox Active</span>
+              <span style="color: var(--c-frost); font-size: 0.72rem; font-weight: 700;">Sandbox Active</span>
             </div>
             <input type="password" id="playground-api-key" class="input-neu" style="font-family: 'JetBrains Mono', monospace;" placeholder="sk-ant-... or sk-... (stored locally)" onchange="localStorage.setItem('omnicache_key', this.value)" />
           </div>
@@ -676,7 +662,7 @@
           <div class="input-group">
             <div class="input-label">
               <span>Test Prompt</span>
-              <span style="color: #0284c7; cursor: pointer; text-decoration: underline; font-weight: 700;" onclick="loadPIIExample()">Insert Synthetic PII</span>
+              <span style="color: var(--c-silver); cursor: pointer; text-decoration: underline; font-weight: 700;" onclick="loadPIIExample()">Insert Synthetic PII</span>
             </div>
             <textarea id="prompt-input" rows="3" class="input-neu" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
           </div>
@@ -693,24 +679,24 @@
           </div>
 
           <!-- Live Result Box -->
-          <div id="test-result-container" class="neu-card" style="margin-top: 1.25rem; padding: 1.15rem; display: none; box-shadow: var(--neu-flat-1); background: var(--surface-secondary);">
+          <div id="test-result-container" class="neu-card" style="margin-top: 1.25rem; padding: 1.15rem; display: none; box-shadow: var(--neu-flat-1); background: var(--c-obsidian);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; font-family: 'JetBrains Mono', monospace; font-size: 0.76rem;">
               <span id="res-status-badge" class="chip-neu chip-success">STATUS</span>
-              <span id="res-latency" style="color: var(--text-violet); font-weight: 700;">0.00 ms</span>
-              <span id="res-sim" style="color: var(--text-cyan); font-weight: 700;">Sim: 1.0000</span>
+              <span id="res-latency" style="color: var(--c-silver); font-weight: 700;">0.00 ms</span>
+              <span id="res-sim" style="color: var(--c-frost); font-weight: 700;">Sim: 1.0000</span>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
-              <div style="background: var(--surface-bg); padding: 0.65rem 0.85rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
-                <div style="color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; font-weight: 700;">Tokens Saved</div>
+              <div style="background: var(--c-midnight); padding: 0.65rem 0.85rem; border-radius: 12px; box-shadow: var(--neu-flat-1); border: 1px solid rgba(74, 92, 106, 0.3);">
+                <div style="color: var(--c-silver); font-size: 0.68rem; text-transform: uppercase; font-weight: 700;">Tokens Saved</div>
                 <div class="text-mint" style="font-weight: 800; font-size: 1.05rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-saved">0 tokens</div>
-                <div style="color: #0d9488; font-size: 0.7rem; font-weight: 600;" id="res-saved-usd">$0.0000 saved</div>
+                <div style="color: var(--c-silver); font-size: 0.7rem; font-weight: 600;" id="res-saved-usd">$0.0000 saved</div>
               </div>
 
-              <div style="background: var(--surface-bg); padding: 0.65rem 0.85rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
-                <div style="color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; font-weight: 700;">Tokens Billed</div>
+              <div style="background: var(--c-midnight); padding: 0.65rem 0.85rem; border-radius: 12px; box-shadow: var(--neu-flat-1); border: 1px solid rgba(74, 92, 106, 0.3);">
+                <div style="color: var(--c-silver); font-size: 0.68rem; text-transform: uppercase; font-weight: 700;">Tokens Billed</div>
                 <div class="text-amber" style="font-weight: 800; font-size: 1.05rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-used">0 tokens</div>
-                <div style="color: var(--text-dim); font-size: 0.7rem;">Routed: <span id="res-routed" style="font-weight: 700;">Normal</span></div>
+                <div style="color: var(--c-silver); font-size: 0.7rem;">Routed: <span id="res-routed" style="font-weight: 700; color: var(--c-frost);">Normal</span></div>
               </div>
             </div>
 
@@ -731,7 +717,7 @@
             </div>
           </div>
           <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.45rem; max-height: 220px; overflow-y: auto; font-size: 0.74rem; font-family: 'JetBrains Mono', monospace;">
-            <div style="color: var(--text-caption); font-style: italic; padding: 0.5rem 0;">Listening for live cache, tool replay & context pruning events...</div>
+            <div style="color: var(--c-silver); font-style: italic; padding: 0.5rem 0;">Listening for live cache, tool replay & context pruning events...</div>
           </div>
         </div>
 
@@ -748,24 +734,24 @@
           </div>
           
           <div style="font-size: 0.78rem; display: flex; flex-direction: column; gap: 0.55rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
-              <span style="color: var(--text-dim); font-weight: 600;">Git Ref / Status</span>
-              <span><code id="ws-git-ref" style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace;">HEAD</code> <span id="ws-dirty-badge" class="chip-neu chip-success" style="font-size: 0.68rem; padding: 0.1rem 0.5rem; margin-left: 0.4rem;">CLEAN</span></span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--c-obsidian); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed); border: 1px solid rgba(74, 92, 106, 0.3);">
+              <span style="color: var(--c-silver); font-weight: 600;">Git Ref / Status</span>
+              <span><code id="ws-git-ref" style="color: var(--c-frost); font-weight: 700; font-family: 'JetBrains Mono', monospace;">HEAD</code> <span id="ws-dirty-badge" class="chip-neu chip-success" style="font-size: 0.68rem; padding: 0.1rem 0.5rem; margin-left: 0.4rem;">CLEAN</span></span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
-              <span style="color: var(--text-dim); font-weight: 600;">Active Cached Signatures</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--c-obsidian); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed); border: 1px solid rgba(74, 92, 106, 0.3);">
+              <span style="color: var(--c-silver); font-weight: 600;">Active Cached Signatures</span>
               <span class="text-violet" style="font-weight: 800; font-family: 'JetBrains Mono', monospace;" id="ws-active-tools">0 records</span>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
-              <span style="color: var(--text-dim); font-weight: 600;">Workspace Avoided Tokens</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--c-obsidian); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed); border: 1px solid rgba(74, 92, 106, 0.3);">
+              <span style="color: var(--c-silver); font-weight: 600;">Workspace Avoided Tokens</span>
               <span class="text-mint" style="font-weight: 800; font-family: 'JetBrains Mono', monospace;" id="ws-token-potential">0 tokens</span>
             </div>
           </div>
 
-          <div style="margin-top: 1.15rem; padding-top: 0.95rem; border-top: 1px solid rgba(209, 217, 230, 0.4);">
-            <div style="font-size: 0.72rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.6rem;">Business Tool Caching Policies</div>
+          <div style="margin-top: 1.15rem; padding-top: 0.95rem; border-top: 1px solid rgba(74, 92, 106, 0.35);">
+            <div style="font-size: 0.72rem; color: var(--c-silver); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.6rem;">Business Tool Caching Policies</div>
             <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 110px; overflow-y: auto; font-size: 0.74rem; font-family: 'JetBrains Mono', monospace;">
-              <div style="color: var(--text-caption);">Loading policies...</div>
+              <div style="color: var(--c-silver);">Loading policies...</div>
             </div>
           </div>
         </div>
@@ -776,8 +762,8 @@
             <div class="card-title">Tenant Quotas & Spend</div>
           </div>
           <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.78rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
-              <span style="color: var(--text-main); font-weight: 700;">Default Team</span>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.95rem; background: var(--c-obsidian); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed); border: 1px solid rgba(74, 92, 106, 0.3);">
+              <span style="color: var(--c-frost); font-weight: 700;">Default Team</span>
               <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">$0.00 / $1000.00 (0%)</span>
             </div>
           </div>
@@ -903,7 +889,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       await sendTestPrompt(rephrased);
     }
 
-    // --- Chart.js Setup ---
+    // --- Chart.js Setup with Strict Dark Monochrome Palette ---
     let timelineChart = null;
     let distributionChart = null;
     const timelineLabels = [];
@@ -930,19 +916,19 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
               {
                 label: 'Savings ($)',
                 data: timelineSavings,
-                borderColor: '#0d9488',
-                backgroundColor: 'rgba(159, 230, 212, 0.25)',
+                borderColor: '#CCD0CF',
+                backgroundColor: 'rgba(204, 208, 207, 0.18)',
                 fill: true,
                 tension: 0.35,
                 borderWidth: 2.5,
                 pointRadius: 3,
-                pointBackgroundColor: '#0d9488',
+                pointBackgroundColor: '#CCD0CF',
                 yAxisID: 'yCost'
               },
               {
                 label: 'Tokens Saved',
                 data: timelineTokens,
-                borderColor: '#0284c7',
+                borderColor: '#9BA8AB',
                 backgroundColor: 'transparent',
                 borderDash: [4, 4],
                 borderWidth: 2,
@@ -957,33 +943,33 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             plugins: {
               legend: {
                 position: 'top',
-                labels: { boxWidth: 10, font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 700 }, color: '#334155' }
+                labels: { boxWidth: 10, font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 700 }, color: '#CCD0CF' }
               },
               tooltip: {
-                backgroundColor: '#ffffff',
-                titleColor: '#0f172a',
-                bodyColor: '#334155',
-                borderColor: '#cbd5e1',
+                backgroundColor: '#11212D',
+                titleColor: '#CCD0CF',
+                bodyColor: '#9BA8AB',
+                borderColor: '#4A5C6A',
                 borderWidth: 1,
                 padding: 10,
-                boxShadow: '4px 4px 12px #d1d9e6',
+                boxShadow: '4px 4px 14px #02070b',
                 titleFont: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 'bold' },
                 bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
             scales: {
               x: {
-                grid: { color: 'rgba(0, 0, 0, 0.04)' },
-                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#64748b' }
+                grid: { color: 'rgba(74, 92, 106, 0.2)' },
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#9BA8AB' }
               },
               yCost: {
                 type: 'linear',
                 display: true,
                 position: 'left',
-                grid: { color: 'rgba(0, 0, 0, 0.04)' },
+                grid: { color: 'rgba(74, 92, 106, 0.2)' },
                 ticks: {
                   font: { size: 9, family: "'JetBrains Mono', monospace" },
-                  color: '#0d9488',
+                  color: '#CCD0CF',
                   callback: (val) => '$' + Number(val).toFixed(3)
                 }
               },
@@ -992,7 +978,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
                 display: true,
                 position: 'right',
                 grid: { drawOnChartArea: false },
-                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#0284c7' }
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#9BA8AB' }
               }
             }
           }
@@ -1007,8 +993,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             labels: ['L1 Exact (0)', 'L2 Semantic (0)', 'Agent Tools (0)', 'Vision Dedup (0)', 'Misses (0)'],
             datasets: [{
               data: [0, 0, 0, 0, 1],
-              backgroundColor: ['#9fe6d4', '#00cfcc', '#a78bfa', '#fef08a', '#e2e8f0'],
-              borderColor: '#ffffff',
+              backgroundColor: ['#CCD0CF', '#9BA8AB', '#4A5C6A', '#253745', '#06141B'],
+              borderColor: '#11212D',
               borderWidth: 2
             }]
           },
@@ -1022,17 +1008,17 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
                   boxWidth: 10,
                   padding: 12,
                   font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 700 },
-                  color: '#334155'
+                  color: '#CCD0CF'
                 }
               },
               tooltip: {
-                backgroundColor: '#ffffff',
-                titleColor: '#0f172a',
-                bodyColor: '#334155',
-                borderColor: '#cbd5e1',
+                backgroundColor: '#11212D',
+                titleColor: '#CCD0CF',
+                bodyColor: '#9BA8AB',
+                borderColor: '#4A5C6A',
                 borderWidth: 1,
                 padding: 10,
-                boxShadow: '4px 4px 12px #d1d9e6',
+                boxShadow: '4px 4px 14px #02070b',
                 bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
@@ -1107,11 +1093,11 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         const exact = cs.exact_hits || 0;
         const semantic = cs.semantic_hits || 0;
         const total = cs.total_requests || 0;
+        const misses = (cs.misses !== undefined) ? cs.misses : Math.max(0, total - (exact + semantic));
         const toolHits = ee.agent_tool_replays || fm.agent_tool_hits || 0;
         const visionHits = ee.vision_cache_hits || fm.vision_cache_hits || 0;
         const totalSavedUsd = fm.total_savings_usd || 0;
         const totalTokensSaved = fm.total_tokens_saved || 0;
-        const misses = (cs.misses !== undefined) ? cs.misses : Math.max(0, total - (exact + semantic));
 
         document.getElementById('stat-savings').textContent = `$${totalSavedUsd.toFixed(4)}`;
         document.getElementById('stat-tok-saved').textContent = totalTokensSaved.toLocaleString();
@@ -1134,8 +1120,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           qContainer.innerHTML = '';
           for (const [k, v] of Object.entries(qData)) {
             qContainer.innerHTML += `
-              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
-                <span style="color: var(--text-main); font-weight: 700;">${v.team_name || k}</span>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.95rem; background: var(--c-obsidian); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed); border: 1px solid rgba(74, 92, 106, 0.3);">
+                <span style="color: var(--c-frost); font-weight: 700;">${v.team_name || k}</span>
                 <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
               </div>
             `;
@@ -1197,8 +1183,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
               const badgeClass = p.is_idempotent ? 'chip-neu chip-success' : 'chip-neu chip-error';
               const badgeText = p.is_idempotent ? `${p.ttl_seconds}s TTL` : 'BLOCKED';
               pList.innerHTML += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.75rem; background: var(--surface-bg); border-radius: 8px; box-shadow: 2px 2px 5px #d5dce6, -2px -2px 5px #ffffff; border: 1px solid rgba(255,255,255,0.8);">
-                  <span style="color: var(--text-main); font-weight: 600;">${p.tool_name}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.75rem; background: var(--c-navy); border-radius: 8px; box-shadow: var(--neu-flat-1); border: 1px solid rgba(74, 92, 106, 0.4);">
+                  <span style="color: var(--c-frost); font-weight: 600;">${p.tool_name}</span>
                   <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${badgeText}</span>
                 </div>
               `;
@@ -1225,8 +1211,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           const ind = document.getElementById('ws-indicator');
           const txt = document.getElementById('ws-status-text');
           if (ind) {
-            ind.style.background = '#0f766e';
-            ind.style.boxShadow = '0 0 6px #14b8a6';
+            ind.style.background = 'var(--c-frost)';
+            ind.style.boxShadow = '0 0 8px var(--c-frost)';
           }
           if (txt) {
             txt.textContent = 'CONNECTED';
@@ -1291,10 +1277,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       item.innerHTML = `
         <div style="display: flex; align-items: center; gap: 0.6rem;">
           <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${status}</span>
-          <span style="font-weight: 700; color: var(--text-main); font-size: 0.74rem;">${eventName}</span>
-          <span style="color: var(--text-dim); font-size: 0.7rem;">${model}</span>
+          <span style="font-weight: 700; color: var(--c-frost); font-size: 0.74rem;">${eventName}</span>
+          <span style="color: var(--c-silver); font-size: 0.7rem;">${model}</span>
         </div>
-        <span style="color: var(--text-caption); font-size: 0.68rem;">${timeStr}</span>
+        <span style="color: var(--c-silver); font-size: 0.68rem;">${timeStr}</span>
       `;
 
       feed.insertBefore(item, feed.firstChild);
@@ -1306,7 +1292,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     function clearEventFeed() {
       const feed = document.getElementById('live-event-feed');
       if (feed) {
-        feed.innerHTML = '<div style="color: var(--text-caption); font-style: italic; padding: 0.5rem 0;">Event feed cleared. Listening for new events...</div>';
+        feed.innerHTML = '<div style="color: var(--c-silver); font-style: italic; padding: 0.5rem 0;">Event feed cleared. Listening for new events...</div>';
       }
     }
 

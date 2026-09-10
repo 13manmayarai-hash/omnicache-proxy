@@ -6,57 +6,65 @@
   <title>OmniCache — AI Agent Caching Sidecar</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      /* Neumorphism Design System Tokens */
-      --canvas-bg: #eef2f6;
-      --surface-bg: #eef2f6;
-      
-      /* Extrusion Shadows (Dual Source: Light Top-Left, Dark Bottom-Right) */
-      --neu-flat-1: 3px 3px 7px #d1d9e6, -3px -3px 7px #ffffff;
-      --neu-flat-2: 6px 6px 14px #d1d9e6, -6px -6px 14px #ffffff;
-      --neu-flat-3: 10px 10px 22px #d1d9e6, -10px -10px 22px #ffffff;
-      --neu-flat-hover: 8px 8px 18px #c5cfdf, -8px -8px 18px #ffffff;
-      
-      /* Inset Shadows (Recessed Wells / Input Fields) */
-      --neu-pressed: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff;
-      --neu-pressed-deep: inset 4px 4px 8px #cbd5e1, inset -4px -4px 8px #ffffff;
-      
-      /* Accent Colors from Product UI Styleguide */
+      /* Palette Tokens directly matching Product UI Styleguide */
+      --canvas-bg: #f4f6f9;
+      --surface-bg: #ffffff;
+      --surface-secondary: #f8fafc;
+      --surface-recessed: #eef2f6;
+
+      /* Primary Mint Accent from Styleguide Tokens */
       --primary-mint: #9fe6d4;
       --primary-mint-hover: #88dec9;
       --primary-mint-text: #0f4c3a;
       --focus-ring: #00cfcc;
-      
-      /* Status Alert Colors from Styleguide */
+
+      /* Status Alert Pills from Styleguide */
       --alert-success-bg: #c7f2e5;
       --alert-success-text: #065f46;
       --alert-warning-bg: #fef08a;
       --alert-warning-text: #854d0e;
       --alert-error-bg: #fecdd3;
       --alert-error-text: #9f1239;
-      
-      /* Typography Colors */
-      --text-main: #1e293b;
+
+      /* Typography & Neutrals */
+      --text-main: #1e252b;
       --text-muted: #475569;
       --text-dim: #64748b;
       --text-caption: #94a3b8;
-      
+      --border-soft: #e2e8f0;
+
+      /* Neumorphism Extrusions (Dual Light Source) */
+      --neu-flat-1: 3px 3px 8px #d5dce6, -3px -3px 8px #ffffff;
+      --neu-flat-2: 6px 6px 16px #d1d9e6, -6px -6px 16px #ffffff;
+      --neu-flat-3: 10px 10px 24px #cbd5e1, -10px -10px 24px #ffffff;
+      --neu-flat-hover: 8px 8px 20px #c5d0df, -8px -8px 20px #ffffff;
+
+      /* Inset Recessed Wells from Styleguide */
+      --neu-pressed: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff;
+      --neu-pressed-deep: inset 4px 4px 8px #cbd5e1, inset -4px -4px 8px #ffffff;
+
+      /* Geometry */
       --radius-pill: 9999px;
       --radius-card: 20px;
       --radius-sm: 12px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
+
     body {
       background-color: var(--canvas-bg);
+      background-image: 
+        linear-gradient(rgba(209, 217, 230, 0.28) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(209, 217, 230, 0.28) 1px, transparent 1px);
+      background-size: 24px 24px;
       color: var(--text-main);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh;
-      padding: 1.5rem 1rem;
+      padding: 2rem 1.5rem;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
     }
@@ -66,91 +74,95 @@
       margin: 0 auto;
     }
 
-    /* Neumorphic Cards (Extruded Level 2) */
+    /* Neumorphic Cards (Surface #FFFFFF with Dual Shadow) */
     .neu-card {
       background: var(--surface-bg);
       border-radius: var(--radius-card);
       box-shadow: var(--neu-flat-2);
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      padding: 1.35rem;
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      padding: 1.5rem;
       position: relative;
-      transition: all 0.25s ease;
+      transition: box-shadow 0.25s ease, transform 0.25s ease;
     }
 
     .neu-card:hover {
       box-shadow: var(--neu-flat-hover);
     }
 
-    /* Header Bar */
+    /* Top Brand Header Bar */
     .header-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 2rem;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: 1.25rem;
       padding-bottom: 1.25rem;
+      border-bottom: 1px solid rgba(209, 217, 230, 0.4);
     }
 
     .brand-title {
       display: flex;
       align-items: center;
-      gap: 0.85rem;
+      gap: 1rem;
     }
 
     .brand-icon-neu {
-      width: 2.75rem;
-      height: 2.75rem;
+      width: 3rem;
+      height: 3rem;
       background: var(--surface-bg);
       border-radius: 16px;
       box-shadow: var(--neu-flat-1);
       display: flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      flex-shrink: 0;
     }
 
     .brand-h1 {
-      font-size: 1.25rem;
-      font-weight: 700;
+      font-size: 1.35rem;
+      font-weight: 800;
       color: var(--text-main);
-      letter-spacing: -0.02em;
+      letter-spacing: -0.025em;
       display: flex;
       align-items: center;
-      gap: 0.65rem;
+      gap: 0.75rem;
+      line-height: 1.2;
     }
 
     .brand-sub {
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       color: var(--text-dim);
       font-weight: 500;
-      margin-top: 0.15rem;
+      margin-top: 0.25rem;
     }
 
     /* Buttons from Styleguide */
     .btn-group {
       display: flex;
       align-items: center;
-      gap: 0.65rem;
+      gap: 0.75rem;
       flex-wrap: wrap;
     }
 
     .btn-neu {
       display: inline-flex;
       align-items: center;
-      gap: 0.45rem;
-      padding: 0.55rem 1.15rem;
+      gap: 0.5rem;
+      padding: 0.55rem 1.25rem;
       border-radius: var(--radius-pill);
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
       text-decoration: none;
-      border: 1px solid rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.9);
       background: var(--surface-bg);
       color: var(--text-muted);
       box-shadow: var(--neu-flat-1);
       transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      height: 38px;
     }
 
     .btn-neu:hover {
@@ -169,7 +181,8 @@
       background: var(--primary-mint) !important;
       color: var(--primary-mint-text) !important;
       box-shadow: 4px 4px 10px #c5d0e0, -4px -4px 10px #ffffff !important;
-      border: 1px solid rgba(255, 255, 255, 0.5) !important;
+      border: 1px solid rgba(255, 255, 255, 0.6) !important;
+      font-weight: 700 !important;
     }
 
     .btn-primary-mint:hover {
@@ -181,41 +194,42 @@
       box-shadow: inset 3px 3px 6px #78c8b4, inset -3px -3px 6px #bbf4e6 !important;
     }
 
-    /* Secondary Action Pill */
     .btn-secondary-neu {
-      background: #e2e8f0 !important;
+      background: #eef2f6 !important;
       color: #334155 !important;
-      box-shadow: 4px 4px 10px #d1d9e6, -4px -4px 10px #ffffff !important;
+      box-shadow: 4px 4px 10px #d5dce6, -4px -4px 10px #ffffff !important;
+      font-weight: 600 !important;
     }
 
     .btn-secondary-neu:hover {
-      background: #cbd5e1 !important;
-      box-shadow: 5px 5px 12px #c5cfdf, -5px -5px 12px #ffffff !important;
+      background: #e2e8f0 !important;
+      box-shadow: 5px 5px 12px #cbd5e1, -5px -5px 12px #ffffff !important;
     }
 
-    /* Neumorphic Chips & Badges from Styleguide */
+    /* Status Pills / Chips from Styleguide */
     .chip-neu {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
       padding: 0.25rem 0.75rem;
       border-radius: var(--radius-pill);
-      font-size: 0.72rem;
-      font-weight: 600;
+      font-size: 0.74rem;
+      font-weight: 700;
       box-shadow: var(--neu-flat-1);
-      border: 1px solid rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      letter-spacing: 0.02em;
     }
 
     .chip-success {
       background: var(--alert-success-bg);
       color: var(--alert-success-text);
-      box-shadow: 2px 2px 6px #c5d9d2, -2px -2px 6px #ffffff;
+      box-shadow: 2px 2px 6px #c2dfd5, -2px -2px 6px #ffffff;
     }
 
     .chip-warning {
       background: var(--alert-warning-bg);
       color: var(--alert-warning-text);
-      box-shadow: 2px 2px 6px #d8d4a6, -2px -2px 6px #ffffff;
+      box-shadow: 2px 2px 6px #ddd9af, -2px -2px 6px #ffffff;
     }
 
     .chip-error {
@@ -225,39 +239,54 @@
     }
 
     .pulse-dot-mint {
-      width: 7px;
-      height: 7px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       background: #0f766e;
       box-shadow: 0 0 6px #14b8a6;
       animation: pulse 2s infinite;
+      display: inline-block;
+      flex-shrink: 0;
     }
 
     @keyframes pulse {
       0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
+      50% { opacity: 0.45; transform: scale(0.85); }
     }
 
-    /* Top KPI Metric Grid */
+    /* Perfectly Aligned 8-Card KPI Grid (4x2 on Desktop) */
     .grid-kpi {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
-      gap: 1.1rem;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.25rem;
       margin-bottom: 2rem;
     }
 
+    @media (max-width: 1024px) {
+      .grid-kpi {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .grid-kpi {
+        grid-template-columns: 1fr;
+      }
+    }
+
     .kpi-card {
-      padding: 1.25rem;
+      padding: 1.35rem;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      min-height: 125px;
     }
 
     .kpi-label {
-      font-size: 0.7rem;
-      font-weight: 600;
+      font-size: 0.72rem;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
       color: var(--text-dim);
       display: flex;
       align-items: center;
@@ -265,19 +294,23 @@
     }
 
     .kpi-val {
-      font-size: 1.6rem;
-      font-weight: 700;
+      font-size: 1.7rem;
+      font-weight: 800;
       font-family: 'JetBrains Mono', monospace;
       letter-spacing: -0.03em;
-      margin: 0.4rem 0 0.25rem 0;
+      margin: 0.45rem 0 0.25rem 0;
       color: var(--text-main);
       font-variant-numeric: tabular-nums;
+      line-height: 1.1;
     }
 
     .kpi-hint {
       font-size: 0.72rem;
       color: var(--text-dim);
       font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
     }
 
     .text-mint { color: #0d9488 !important; }
@@ -286,22 +319,16 @@
     .text-amber { color: #b45309 !important; }
     .text-rose { color: #be123c !important; }
 
-    /* Layout Grids */
+    /* Visual Charts Section (1.15fr 0.85fr) */
     .grid-charts {
       display: grid;
-      grid-template-columns: 1.4fr 0.85fr;
+      grid-template-columns: 1.15fr 0.85fr;
       gap: 1.25rem;
       margin-bottom: 2rem;
     }
 
-    .grid-main {
-      display: grid;
-      grid-template-columns: 1.1fr 0.9fr;
-      gap: 1.25rem;
-    }
-
-    @media (max-width: 900px) {
-      .grid-charts, .grid-main {
+    @media (max-width: 960px) {
+      .grid-charts {
         grid-template-columns: 1fr;
       }
     }
@@ -311,11 +338,12 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 1.25rem;
+      gap: 0.75rem;
     }
 
     .card-title {
-      font-size: 0.82rem;
-      font-weight: 700;
+      font-size: 0.85rem;
+      font-weight: 800;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--text-main);
@@ -324,17 +352,17 @@
       gap: 0.5rem;
     }
 
-    /* Recessed Inputs from Styleguide */
+    /* Recessed Inputs from Styleguide (e.g. Search invoices well) */
     .input-group {
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
-      margin-bottom: 1rem;
+      gap: 0.4rem;
+      margin-bottom: 1.1rem;
     }
 
     .input-label {
-      font-size: 0.74rem;
-      font-weight: 600;
+      font-size: 0.75rem;
+      font-weight: 700;
       color: var(--text-dim);
       display: flex;
       justify-content: space-between;
@@ -342,10 +370,10 @@
     }
 
     .input-neu {
-      background: var(--surface-bg);
+      background: var(--surface-recessed);
       border-radius: var(--radius-pill);
       box-shadow: var(--neu-pressed);
-      border: 1px solid rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.8);
       padding: 0.65rem 1.15rem;
       color: var(--text-main);
       width: 100%;
@@ -353,6 +381,7 @@
       font-family: inherit;
       outline: none;
       transition: all 0.2s ease;
+      height: 42px;
     }
 
     .input-neu:focus {
@@ -362,55 +391,79 @@
     textarea.input-neu {
       border-radius: 16px;
       resize: none;
+      height: auto;
+      min-height: 80px;
     }
 
     select.input-neu {
       cursor: pointer;
     }
 
-    /* Neumorphic Segmented Tabs from Styleguide */
+    /* Segmented Pill Tabs from Styleguide */
     .tabs-segmented-neu {
       display: inline-flex;
-      background: var(--surface-bg);
+      background: var(--surface-recessed);
       padding: 4px;
       border-radius: var(--radius-pill);
       box-shadow: var(--neu-pressed);
-      border: 1px solid rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.7);
     }
 
     .tab-neu-btn {
-      padding: 0.35rem 0.85rem;
+      padding: 0.35rem 0.95rem;
       border-radius: var(--radius-pill);
       font-size: 0.74rem;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       border: none;
       background: transparent;
       color: var(--text-dim);
       transition: all 0.2s ease;
+      font-family: inherit;
     }
 
     .tab-neu-active {
-      background: var(--primary-mint);
-      color: var(--primary-mint-text);
-      box-shadow: 2px 2px 6px #c5d0e0, -2px -2px 6px #ffffff;
+      background: var(--surface-bg);
+      color: #0f4c3a;
+      box-shadow: 2px 2px 6px #d1d9e6, -2px -2px 6px #ffffff;
     }
 
     .tab-neu-inactive:hover {
       color: var(--text-main);
     }
 
-    /* Recessed Pre / Code Container */
+    /* Recessed Code Well */
     .pre-neu {
-      background: var(--surface-bg);
-      box-shadow: var(--neu-pressed-deep);
+      background: var(--surface-recessed);
+      box-shadow: var(--neu-pressed);
       border-radius: 14px;
       padding: 0.85rem 1rem;
       color: #0f766e;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.76rem;
       overflow-x: auto;
-      border: 1px solid rgba(255, 255, 255, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      line-height: 1.5;
+    }
+
+    /* Main Balanced 2-Column Grid */
+    .grid-main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .grid-main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .col-stacked {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
     }
 
     /* Event Feed Items */
@@ -418,12 +471,12 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.45rem 0.75rem;
+      padding: 0.55rem 0.85rem;
       background: var(--surface-bg);
       border-radius: 12px;
-      box-shadow: 2px 2px 5px #d1d9e6, -2px -2px 5px #ffffff;
-      margin-bottom: 0.4rem;
-      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: 2px 2px 5px #d5dce6, -2px -2px 5px #ffffff;
+      margin-bottom: 0.45rem;
+      border: 1px solid rgba(255, 255, 255, 0.9);
     }
   </style>
 </head>
@@ -435,7 +488,7 @@
     <header class="header-bar">
       <div class="brand-title">
         <div class="brand-icon-neu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
         </div>
@@ -453,231 +506,211 @@
 
       <div class="btn-group">
         <a href="/v1/cache/export" download class="btn-neu">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Export CSV
         </a>
         <a href="/metrics" target="_blank" class="btn-neu">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           Prometheus
         </a>
         <button onclick="refreshData()" class="btn-neu">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           Refresh
         </button>
       </div>
     </header>
 
-    <!-- Top KPI Grid: Neumorphic Extruded Cards -->
+    <!-- Top KPI Grid: Perfectly Balanced 8-Card Symmetrical Grid -->
     <section class="grid-kpi">
+      
+      <!-- Card 1: Cost Avoided -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Cost Avoided</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
         <div class="kpi-val text-mint" id="stat-savings">$0.0000</div>
         <div class="kpi-hint">Avoided upstream cloud spend</div>
       </div>
 
+      <!-- Card 2: Tokens Saved -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Tokens Saved</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
         </div>
         <div class="kpi-val text-cyan" id="stat-tok-saved">0</div>
         <div class="kpi-hint">100% avoided upstream tokens</div>
       </div>
 
+      <!-- Card 3: Cache Hit Rate -->
+      <div class="neu-card kpi-card">
+        <div class="kpi-label">
+          <span>Hit Rate</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        </div>
+        <div class="kpi-val text-mint" id="stat-hitrate">0.0%</div>
+        <div class="kpi-hint"><span id="stat-total-hits">0</span> cached hits recorded</div>
+      </div>
+
+      <!-- Card 4: Requests Proxied -->
+      <div class="neu-card kpi-card">
+        <div class="kpi-label">
+          <span>Total Requests</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2.2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+        </div>
+        <div class="kpi-val text-violet" id="stat-total-reqs">0</div>
+        <div class="kpi-hint">Active sidecar loopback traffic</div>
+      </div>
+
+      <!-- Card 5: Agent Tool Hits -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Agent Tool Hits</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
         </div>
         <div class="kpi-val text-violet" id="stat-tool-hits">0</div>
-        <div class="kpi-hint">Claude & Cursor replays</div>
+        <div class="kpi-hint">Claude Code & Cursor replays</div>
       </div>
 
+      <!-- Card 6: Context Pruned -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Context Pruned</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
         </div>
         <div class="kpi-val text-cyan" id="stat-pruned-tok">0</div>
         <div class="kpi-hint">Compacted prompt tokens</div>
       </div>
 
+      <!-- Card 7: Privacy Redactions -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Privacy Redactions</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         </div>
         <div class="kpi-val text-mint" id="stat-pii-scrubbed">0</div>
         <div class="kpi-hint">HMAC salted PII masked</div>
       </div>
 
+      <!-- Card 8: Vision Dedup Matches -->
       <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Vision Matches</span>
-          <span class="chip-neu chip-warning" style="font-size: 0.62rem; padding: 0.1rem 0.45rem;">BETA</span>
+          <span class="chip-neu chip-warning" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">BETA</span>
         </div>
         <div class="kpi-val text-amber" id="stat-vision-hits">0</div>
         <div class="kpi-hint">64-bit pHash image dedup</div>
       </div>
 
-      <div class="neu-card kpi-card">
-        <div class="kpi-label">
-          <span>Hit Rate</span>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
-        </div>
-        <div class="kpi-val text-cyan" id="stat-hitrate">0.0%</div>
-        <div class="kpi-hint"><span id="stat-total-hits">0</span> hits / <span id="stat-total-reqs">0</span> reqs</div>
-      </div>
     </section>
 
-    <!-- Visual Charts: Neumorphic Level 2 Cards -->
+    <!-- Visual Charts: Neumorphic Symmetrical Panels -->
     <section class="grid-charts">
+      
+      <!-- Chart 1: Timeline -->
       <div class="neu-card">
         <div class="card-title-row">
           <div class="card-title">
             <span class="pulse-dot-mint"></span>
             Savings & Ingestion Velocity
           </div>
-          <span style="font-size: 0.72rem; color: var(--text-caption); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
+          <span style="font-size: 0.74rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
         </div>
-        <div style="position: relative; height: 220px; width: 100%;">
+        <div style="position: relative; height: 230px; width: 100%;">
           <canvas id="savingsTimelineChart"></canvas>
         </div>
       </div>
 
+      <!-- Chart 2: Doughnut Distribution -->
       <div class="neu-card">
         <div class="card-title-row">
           <div class="card-title">Resolution Distribution</div>
-          <span style="font-size: 0.72rem; color: var(--text-caption); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
+          <span style="font-size: 0.74rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
         </div>
-        <div style="position: relative; height: 220px; width: 100%; display: flex; align-items: center; justify-content: center;">
+        <div style="position: relative; height: 230px; width: 100%; display: flex; align-items: center; justify-content: center;">
           <canvas id="distributionDoughnutChart"></canvas>
         </div>
       </div>
+
     </section>
 
-    <!-- Main Working Grid -->
+    <!-- Main Symmetrical 2-Column Grid -->
     <section class="grid-main">
       
-      <!-- Left Column: Interactive Multi-Feature Test Console -->
-      <div class="neu-card">
-        <div class="card-title-row">
-          <div class="card-title">Gateway Sandbox Console</div>
-          <div class="tabs-segmented-neu">
-            <button id="tab-claude" onclick="setApiMode('claude')" class="tab-neu-btn tab-neu-active">Claude Messages</button>
-            <button id="tab-openai" onclick="setApiMode('openai')" class="tab-neu-btn tab-neu-inactive">OpenAI Completions</button>
-          </div>
-        </div>
-
-        <div class="input-group">
-          <label class="input-label">Target Model</label>
-          <select id="model-select" class="input-neu">
-            <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Live Anthropic)</option>
-            <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
-            <option value="gpt-4o">gpt-4o (Frontier)</option>
-            <option value="gemini-2.5-flash">gemini-2.5-flash (Economy)</option>
-          </select>
-        </div>
-
-        <div class="input-group">
-          <div class="input-label">
-            <span>Client API Key (Optional)</span>
-            <span style="color: #0d9488; font-size: 0.7rem; font-weight: 600;">Sandbox active if empty</span>
-          </div>
-          <input type="password" id="playground-api-key" class="input-neu" style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;" placeholder="sk-ant-... or sk-... (stored locally in browser)" onchange="localStorage.setItem('omnicache_key', this.value)" />
-        </div>
-
-        <div class="input-group">
-          <div class="input-label">
-            <span>Test Prompt</span>
-            <span style="color: #0284c7; cursor: pointer; text-decoration: underline; font-weight: 600;" onclick="loadPIIExample()">Insert Synthetic PII</span>
-          </div>
-          <textarea id="prompt-input" rows="3" class="input-neu" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-top: 0.6rem;">
-          <button onclick="sendTestPrompt()" class="btn-neu btn-primary-mint" style="justify-content: center;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            Send via Proxy
-          </button>
-          <button onclick="sendRephrasedTest()" class="btn-neu btn-secondary-neu" style="justify-content: center;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-            Test Rephrasing
-          </button>
-        </div>
-
-        <!-- Live Result Box -->
-        <div id="test-result-container" class="neu-card" style="margin-top: 1.25rem; padding: 1rem; display: none; box-shadow: var(--neu-flat-1);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;">
-            <span id="res-status-badge" class="chip-neu chip-success">STATUS</span>
-            <span id="res-latency" style="color: var(--text-violet); font-weight: 600;">0.00 ms</span>
-            <span id="res-sim" style="color: var(--text-cyan); font-weight: 600;">Sim: 1.0000</span>
-          </div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
-            <div style="background: var(--surface-bg); padding: 0.6rem 0.8rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
-              <div style="color: var(--text-caption); font-size: 0.65rem; text-transform: uppercase; font-weight: 600;">Tokens Saved</div>
-              <div class="text-mint" style="font-weight: 700; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-saved">0 tokens</div>
-              <div style="color: #0d9488; font-size: 0.68rem; font-weight: 500;" id="res-saved-usd">$0.0000 saved</div>
-            </div>
-
-            <div style="background: var(--surface-bg); padding: 0.6rem 0.8rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
-              <div style="color: var(--text-caption); font-size: 0.65rem; text-transform: uppercase; font-weight: 600;">Tokens Billed</div>
-              <div class="text-amber" style="font-weight: 700; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-used">0 tokens</div>
-              <div style="color: var(--text-dim); font-size: 0.68rem;">Routed: <span id="res-routed" style="font-weight: 600;">Normal</span></div>
-            </div>
-          </div>
-
-          <pre id="res-content" class="pre-neu" style="white-space: pre-wrap; max-height: 150px; overflow-y: auto;"></pre>
-        </div>
-      </div>
-
-      <!-- Right Column: Quotas, Workspace & Live Event Stream -->
-      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+      <!-- Left Column: Sandbox Console & Live Telemetry Stream -->
+      <div class="col-stacked">
         
-        <!-- Virtual Key Quotas -->
+        <!-- Interactive Gateway Sandbox Console -->
         <div class="neu-card">
           <div class="card-title-row">
-            <div class="card-title">Tenant Quotas & Spend</div>
-          </div>
-          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.76rem;">
-            <div style="display: flex; justify-content: space-between; padding: 0.6rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
-              <span style="color: var(--text-main); font-weight: 600;">Default Team</span>
-              <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">$0.00 / $1000.00 (0%)</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Workspace & Business Tool Policies -->
-        <div class="neu-card">
-          <div class="card-title-row">
-            <div class="card-title">Workspace Sync & Git Memory</div>
-            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn-neu btn-primary-mint" style="padding: 0.35rem 0.85rem; font-size: 0.72rem;">Pre-Warm</button>
-          </div>
-          
-          <div style="font-size: 0.76rem; display: flex; flex-direction: column; gap: 0.45rem;">
-            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
-              <span style="color: var(--text-dim); font-weight: 500;">Git Ref / Status</span>
-              <span><code id="ws-git-ref" style="color: #0284c7; font-weight: 600;">HEAD</code> <span id="ws-dirty-badge" class="chip-neu chip-success" style="font-size: 0.65rem; padding: 0.1rem 0.45rem;">CLEAN</span></span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
-              <span style="color: var(--text-dim); font-weight: 500;">Active Cached Signatures</span>
-              <span class="text-violet" style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="ws-active-tools">0 records</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
-              <span style="color: var(--text-dim); font-weight: 500;">Workspace Avoided Tokens</span>
-              <span class="text-mint" style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="ws-token-potential">0 tokens</span>
+            <div class="card-title">Gateway Sandbox Console</div>
+            <div class="tabs-segmented-neu">
+              <button id="tab-claude" onclick="setApiMode('claude')" class="tab-neu-btn tab-neu-active">Claude</button>
+              <button id="tab-openai" onclick="setApiMode('openai')" class="tab-neu-btn tab-neu-inactive">OpenAI</button>
             </div>
           </div>
 
-          <div style="margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(0, 0, 0, 0.06);">
-            <div style="font-size: 0.7rem; color: var(--text-dim); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.5rem;">Business Tool Caching Policies</div>
-            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 95px; overflow-y: auto; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace;">
-              <div style="color: var(--text-caption);">Loading policies...</div>
+          <div class="input-group">
+            <label class="input-label">Target Model</label>
+            <select id="model-select" class="input-neu">
+              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Live Anthropic)</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
+              <option value="gpt-4o">gpt-4o (Frontier)</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash (Economy)</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <div class="input-label">
+              <span>Client API Key (Optional)</span>
+              <span style="color: #0d9488; font-size: 0.72rem; font-weight: 700;">Sandbox Active</span>
             </div>
+            <input type="password" id="playground-api-key" class="input-neu" style="font-family: 'JetBrains Mono', monospace;" placeholder="sk-ant-... or sk-... (stored locally)" onchange="localStorage.setItem('omnicache_key', this.value)" />
+          </div>
+
+          <div class="input-group">
+            <div class="input-label">
+              <span>Test Prompt</span>
+              <span style="color: #0284c7; cursor: pointer; text-decoration: underline; font-weight: 700;" onclick="loadPIIExample()">Insert Synthetic PII</span>
+            </div>
+            <textarea id="prompt-input" rows="3" class="input-neu" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-top: 0.85rem;">
+            <button onclick="sendTestPrompt()" class="btn-neu btn-primary-mint" style="justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+              Send via Proxy
+            </button>
+            <button onclick="sendRephrasedTest()" class="btn-neu btn-secondary-neu" style="justify-content: center;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+              Test Rephrasing
+            </button>
+          </div>
+
+          <!-- Live Result Box -->
+          <div id="test-result-container" class="neu-card" style="margin-top: 1.25rem; padding: 1.15rem; display: none; box-shadow: var(--neu-flat-1); background: var(--surface-secondary);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; font-family: 'JetBrains Mono', monospace; font-size: 0.76rem;">
+              <span id="res-status-badge" class="chip-neu chip-success">STATUS</span>
+              <span id="res-latency" style="color: var(--text-violet); font-weight: 700;">0.00 ms</span>
+              <span id="res-sim" style="color: var(--text-cyan); font-weight: 700;">Sim: 1.0000</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
+              <div style="background: var(--surface-bg); padding: 0.65rem 0.85rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
+                <div style="color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; font-weight: 700;">Tokens Saved</div>
+                <div class="text-mint" style="font-weight: 800; font-size: 1.05rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-saved">0 tokens</div>
+                <div style="color: #0d9488; font-size: 0.7rem; font-weight: 600;" id="res-saved-usd">$0.0000 saved</div>
+              </div>
+
+              <div style="background: var(--surface-bg); padding: 0.65rem 0.85rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
+                <div style="color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; font-weight: 700;">Tokens Billed</div>
+                <div class="text-amber" style="font-weight: 800; font-size: 1.05rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-used">0 tokens</div>
+                <div style="color: var(--text-dim); font-size: 0.7rem;">Routed: <span id="res-routed" style="font-weight: 700;">Normal</span></div>
+              </div>
+            </div>
+
+            <pre id="res-content" class="pre-neu" style="white-space: pre-wrap; max-height: 160px; overflow-y: auto;"></pre>
           </div>
         </div>
 
@@ -688,13 +721,61 @@
               <span id="ws-indicator" class="pulse-dot-mint"></span>
               Live Telemetry Stream
             </div>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <span id="ws-status-text" class="chip-neu chip-success" style="font-size: 0.65rem;">CONNECTED</span>
-              <button onclick="clearEventFeed()" class="btn-neu" style="padding: 0.25rem 0.6rem; font-size: 0.68rem;">Clear</button>
+            <div style="display: flex; gap: 0.6rem; align-items: center;">
+              <span id="ws-status-text" class="chip-neu chip-success">CONNECTED</span>
+              <button onclick="clearEventFeed()" class="btn-neu" style="padding: 0.25rem 0.75rem; font-size: 0.72rem; height: 30px;">Clear</button>
             </div>
           </div>
-          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 180px; overflow-y: auto; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace;">
-            <div style="color: var(--text-caption); font-style: italic;">Listening for live cache, tool replay & context pruning events...</div>
+          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.45rem; max-height: 220px; overflow-y: auto; font-size: 0.74rem; font-family: 'JetBrains Mono', monospace;">
+            <div style="color: var(--text-caption); font-style: italic; padding: 0.5rem 0;">Listening for live cache, tool replay & context pruning events...</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Workspace Memory, Tenant Quotas & Quickstart -->
+      <div class="col-stacked">
+        
+        <!-- Workspace Sync & Git Memory -->
+        <div class="neu-card">
+          <div class="card-title-row">
+            <div class="card-title">Workspace Sync & Git Memory</div>
+            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn-neu btn-primary-mint" style="padding: 0.35rem 0.95rem; font-size: 0.74rem; height: 32px;">Pre-Warm</button>
+          </div>
+          
+          <div style="font-size: 0.78rem; display: flex; flex-direction: column; gap: 0.55rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
+              <span style="color: var(--text-dim); font-weight: 600;">Git Ref / Status</span>
+              <span><code id="ws-git-ref" style="color: #0284c7; font-weight: 700; font-family: 'JetBrains Mono', monospace;">HEAD</code> <span id="ws-dirty-badge" class="chip-neu chip-success" style="font-size: 0.68rem; padding: 0.1rem 0.5rem; margin-left: 0.4rem;">CLEAN</span></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
+              <span style="color: var(--text-dim); font-weight: 600;">Active Cached Signatures</span>
+              <span class="text-violet" style="font-weight: 800; font-family: 'JetBrains Mono', monospace;" id="ws-active-tools">0 records</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
+              <span style="color: var(--text-dim); font-weight: 600;">Workspace Avoided Tokens</span>
+              <span class="text-mint" style="font-weight: 800; font-family: 'JetBrains Mono', monospace;" id="ws-token-potential">0 tokens</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 1.15rem; padding-top: 0.95rem; border-top: 1px solid rgba(209, 217, 230, 0.4);">
+            <div style="font-size: 0.72rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.6rem;">Business Tool Caching Policies</div>
+            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 110px; overflow-y: auto; font-size: 0.74rem; font-family: 'JetBrains Mono', monospace;">
+              <div style="color: var(--text-caption);">Loading policies...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tenant Quotas & Spend -->
+        <div class="neu-card">
+          <div class="card-title-row">
+            <div class="card-title">Tenant Quotas & Spend</div>
+          </div>
+          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.55rem; font-size: 0.78rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
+              <span style="color: var(--text-main); font-weight: 700;">Default Team</span>
+              <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">$0.00 / $1000.00 (0%)</span>
+            </div>
           </div>
         </div>
 
@@ -792,92 +873,78 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         badge.textContent = cacheStatus;
         if (cacheStatus.includes('HIT')) {
           badge.className = 'chip-neu chip-success';
+        } else if (cacheStatus.includes('SEMANTIC')) {
+          badge.className = 'chip-neu chip-warning';
         } else {
           badge.className = 'chip-neu chip-error';
         }
 
         document.getElementById('res-latency').textContent = `${dt} ms`;
-        document.getElementById('res-sim').textContent = `Sim: ${similarity}`;
-        document.getElementById('res-tokens-saved').textContent = `${tokensSaved} tokens`;
-        document.getElementById('res-saved-usd').textContent = `$${parseFloat(costSaved).toFixed(4)} saved`;
-        document.getElementById('res-tokens-used').textContent = `${tokensUsed} tokens`;
-        document.getElementById('res-routed').textContent = routedModel.split('-')[0];
+        document.getElementById('res-sim').textContent = `Sim: ${Number(similarity).toFixed(4)}`;
+        document.getElementById('res-tokens-saved').textContent = `+${Number(tokensSaved).toLocaleString()} tokens`;
+        document.getElementById('res-saved-usd').textContent = `$${Number(costSaved).toFixed(6)} avoided`;
+        document.getElementById('res-tokens-used').textContent = `${Number(tokensUsed).toLocaleString()} tokens`;
+        document.getElementById('res-routed').textContent = routedModel;
         document.getElementById('res-content').textContent = textContent;
 
         refreshData();
       } catch (err) {
-        alert('Error sending prompt: ' + err.message);
+        alert('Playground Request Failed: ' + err.message);
       }
     }
 
-    function sendRephrasedTest() {
-      const original = document.getElementById('prompt-input').value.trim();
-      const rephrased = `Please ${original.charAt(0).toLowerCase() + original.slice(1)}`;
-      document.getElementById('prompt-input').value = rephrased;
-      sendTestPrompt(rephrased);
+    async function sendRephrasedTest() {
+      const orig = document.getElementById('prompt-input').value.trim();
+      const rephrased = "Please " + orig.charAt(0).toLowerCase() + orig.slice(1);
+      await sendTestPrompt(rephrased);
     }
 
-    // --- Chart.js Visualization Engine ---
+    // --- Chart.js Setup ---
     let timelineChart = null;
     let distributionChart = null;
-    const maxHistoryPoints = 15;
     const timelineLabels = [];
-    const timelineCostData = [];
-    const timelineTokenData = [];
+    const timelineSavings = [];
+    const timelineTokens = [];
 
     function initCharts() {
-      if (typeof Chart === 'undefined') return;
-
-      Chart.defaults.color = '#64748b';
-      Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
-
       const ctxTimeline = document.getElementById('savingsTimelineChart')?.getContext('2d');
       if (ctxTimeline) {
-        const gradientCost = ctxTimeline.createLinearGradient(0, 0, 0, 200);
-        gradientCost.addColorStop(0, 'rgba(15, 118, 110, 0.25)');
-        gradientCost.addColorStop(1, 'rgba(15, 118, 110, 0.0)');
-
         timelineChart = new Chart(ctxTimeline, {
           type: 'line',
           data: {
             labels: timelineLabels,
             datasets: [
               {
-                label: 'Cost Saved ($ USD)',
-                data: timelineCostData,
+                label: 'Savings ($)',
+                data: timelineSavings,
                 borderColor: '#0d9488',
-                borderWidth: 2.5,
-                backgroundColor: gradientCost,
+                backgroundColor: 'rgba(159, 230, 212, 0.25)',
                 fill: true,
                 tension: 0.35,
-                yAxisID: 'yCost',
+                borderWidth: 2.5,
                 pointRadius: 3,
-                pointHoverRadius: 5,
-                pointBackgroundColor: '#0d9488'
+                pointBackgroundColor: '#0d9488',
+                yAxisID: 'yCost'
               },
               {
-                label: 'Tokens Avoided',
-                data: timelineTokenData,
+                label: 'Tokens Saved',
+                data: timelineTokens,
                 borderColor: '#0284c7',
-                borderWidth: 2,
                 backgroundColor: 'transparent',
                 borderDash: [4, 4],
-                tension: 0.35,
-                yAxisID: 'yTokens',
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                pointBackgroundColor: '#0284c7'
+                borderWidth: 2,
+                pointRadius: 2,
+                yAxisID: 'yTokens'
               }
             ]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
             plugins: {
               legend: {
                 position: 'top',
-                labels: { boxWidth: 10, font: { size: 11, weight: 600 }, color: '#334155' }
+                labels: { boxWidth: 10, font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 700 }, color: '#334155' }
               },
               tooltip: {
                 backgroundColor: '#ffffff',
@@ -886,8 +953,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
                 borderColor: '#cbd5e1',
                 borderWidth: 1,
                 padding: 10,
-                boxShadow: '4px 4px 10px #d1d9e6',
-                titleFont: { family: "'Inter', sans-serif", size: 11, weight: 'bold' },
+                boxShadow: '4px 4px 12px #d1d9e6',
+                titleFont: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: 'bold' },
                 bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
@@ -927,9 +994,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             labels: ['L1 Exact', 'L2 Semantic', 'Agent Tools', 'Vision Hits', 'Misses'],
             datasets: [{
               data: [0, 0, 0, 0, 1],
-              backgroundColor: ['#0d9488', '#0284c7', '#7c3aed', '#d97706', '#cbd5e1'],
-              borderColor: '#eef2f6',
-              borderWidth: 4
+              backgroundColor: ['#9fe6d4', '#00cfcc', '#a78bfa', '#fef08a', '#e2e8f0'],
+              borderColor: '#ffffff',
+              borderWidth: 3
             }]
           },
           options: {
@@ -938,7 +1005,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             plugins: {
               legend: {
                 position: 'right',
-                labels: { boxWidth: 9, font: { size: 10, weight: 600 }, color: '#334155' }
+                labels: { boxWidth: 9, font: { family: "'Plus Jakarta Sans', sans-serif", size: 10, weight: 700 }, color: '#334155' }
               },
               tooltip: {
                 backgroundColor: '#ffffff',
@@ -949,34 +1016,32 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
                 bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
-            cutout: '72%'
+            cutout: '68%'
           }
         });
       }
     }
 
     function updateCharts(cost, tokens, exact, semantic, tools, vision, misses) {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString([], { hour12: false, minute: '2-digit', second: '2-digit' });
-      
-      const timeElem = document.getElementById('chart-update-time');
-      if (timeElem) timeElem.textContent = `Updated ${timeStr}`;
+      const now = new Date().toLocaleTimeString();
+      if (timelineLabels.length >= 15) {
+        timelineLabels.shift();
+        timelineSavings.shift();
+        timelineTokens.shift();
+      }
+      timelineLabels.push(now);
+      timelineSavings.push(cost);
+      timelineTokens.push(tokens);
+
+      if (timelineChart) {
+        timelineChart.update('none');
+        const updateElem = document.getElementById('chart-update-time');
+        if (updateElem) updateElem.textContent = `Updated: ${now}`;
+      }
 
       const totalEvents = exact + semantic + tools + vision + misses;
       const countElem = document.getElementById('chart-total-count');
       if (countElem) countElem.textContent = `${totalEvents} events`;
-
-      if (timelineChart) {
-        if (timelineLabels.length >= maxHistoryPoints) {
-          timelineLabels.shift();
-          timelineCostData.shift();
-          timelineTokenData.shift();
-        }
-        timelineLabels.push(timeStr);
-        timelineCostData.push(cost);
-        timelineTokenData.push(tokens);
-        timelineChart.update('none');
-      }
 
       if (distributionChart) {
         const hasData = totalEvents > 0;
@@ -1034,9 +1099,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           qContainer.innerHTML = '';
           for (const [k, v] of Object.entries(qData)) {
             qContainer.innerHTML += `
-              <div style="display: flex; justify-content: space-between; padding: 0.55rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
-                <span style="color: var(--text-main); font-weight: 600;">${v.team_name || k}</span>
-                <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.65rem 0.95rem; background: var(--surface-recessed); border-radius: var(--radius-pill); box-shadow: var(--neu-pressed);">
+                <span style="color: var(--text-main); font-weight: 700;">${v.team_name || k}</span>
+                <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 700;">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
               </div>
             `;
           }
@@ -1097,9 +1162,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
               const badgeClass = p.is_idempotent ? 'chip-neu chip-success' : 'chip-neu chip-error';
               const badgeText = p.is_idempotent ? `${p.ttl_seconds}s TTL` : 'BLOCKED';
               pList.innerHTML += `
-                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0.65rem; background: var(--surface-bg); border-radius: 8px; box-shadow: 2px 2px 4px #d1d9e6, -2px -2px 4px #ffffff;">
-                  <span style="color: var(--text-main); font-weight: 500;">${p.tool_name}</span>
-                  <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.45rem;">${badgeText}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.75rem; background: var(--surface-bg); border-radius: 8px; box-shadow: 2px 2px 5px #d5dce6, -2px -2px 5px #ffffff; border: 1px solid rgba(255,255,255,0.8);">
+                  <span style="color: var(--text-main); font-weight: 600;">${p.tool_name}</span>
+                  <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${badgeText}</span>
                 </div>
               `;
             }
@@ -1171,102 +1236,33 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     function addEventToFeed(ev) {
       const feed = document.getElementById('live-event-feed');
       if (!feed) return;
-      if (feed.firstElementChild && feed.firstElementChild.style.fontStyle === 'italic') {
-        feed.innerHTML = '';
-      }
 
-      const time = ev.time_str || new Date(ev.timestamp * 1000).toLocaleTimeString([], { hour12: false });
-      const t = ev.event_type;
-      const d = ev.data || {};
-
-      let chipClass = 'chip-neu chip-success';
-      let badgeLabel = (t || 'EVENT').toUpperCase();
-      let detail = '';
-
-      if (t === 'tool_replay' || t === 'tool_hit') {
-        chipClass = 'chip-neu chip-success';
-        badgeLabel = 'TOOL HIT';
-        detail = `${d.tool_name || 'tool'} (${d.latency_ms || 0.2}ms)`;
-      } else if (t === 'context_compacted' || t === 'context_pruned') {
-        chipClass = 'chip-neu chip-success';
-        badgeLabel = 'PRUNED';
-        detail = `-${d.tokens_compacted || 0} prompt tokens`;
-      } else if (t === 'telephony_filtered') {
-        chipClass = 'chip-neu';
-        badgeLabel = 'VOICE FILTER';
-        detail = `-${d.fillers_stripped || 0} fillers, +${d.tokens_saved || 0} tok saved`;
-      } else if (t === 'telephony_fast_path') {
-        chipClass = 'chip-neu';
-        badgeLabel = 'VOICE FAST';
-        detail = `${(d.reply || '').slice(0, 32)}... (<0.2ms)`;
-      } else if (t === 'audio_cache_hit') {
-        chipClass = 'chip-neu chip-warning';
-        badgeLabel = 'AUDIO HIT';
-        detail = `aHash ${(d.audio_hash || '').slice(0, 8)}... (${d.distance || 0}/64 dist, ${d.latency_ms || 0.3}ms)`;
-      } else if (t === 'tool_recorded') {
-        chipClass = 'chip-neu';
-        badgeLabel = 'RECORDED';
-        detail = `${d.tool_name || 'tool'} (${d.ttl_seconds || 300}s TTL)`;
-      } else if (t === 'mutation_blocked') {
-        chipClass = 'chip-neu chip-error';
-        badgeLabel = 'BLOCKED';
-        detail = `${d.tool_name || 'mutative_tool'}`;
-      } else if (t === 'cache_hit') {
-        chipClass = 'chip-neu chip-success';
-        badgeLabel = d.status || 'HIT';
-        detail = `${d.model || ''} +${d.tokens_saved || 0} tok ($${d.savings_usd || '0.00'})`;
-      } else if (t === 'workspace_warmed') {
-        chipClass = 'chip-neu chip-warning';
-        badgeLabel = 'WARMED';
-        detail = `${d.files_warmed || 0} files in ${d.duration_ms || 0}ms`;
-      } else if (t === 'swarm_hit') {
-        chipClass = 'chip-neu chip-warning';
-        badgeLabel = 'SWARM HIT';
-        detail = `${d.origin_agent || 'agent'} -> ${d.requesting_agent || 'subagent'} (+${d.tokens_saved || 0} tok)`;
-      } else if (t === 'swarm_delegation') {
-        chipClass = 'chip-neu chip-warning';
-        badgeLabel = 'DELEGATED';
-        detail = `${d.parent_agent || 'lead'} -> ${d.subagent_id || 'subagent'}`;
-      } else if (t === 'swarm_invalidation') {
-        chipClass = 'chip-neu chip-error';
-        badgeLabel = 'SWARM PURGE';
-        detail = `mutated: ${d.mutated_resource || 'workspace'}`;
-      } else if (t === 'mesh_peer_registered') {
-        chipClass = 'chip-neu';
-        badgeLabel = 'MESH PEER';
-        detail = `${d.endpoint || ''} (${d.node_id || ''})`;
-      } else if (t === 'mesh_sync_processed') {
-        chipClass = 'chip-neu';
-        badgeLabel = 'MESH SYNC';
-        detail = `sync from ${d.remote_node_id || 'peer'} (+${d.tombstones_applied || 0} tombstones)`;
-      } else if (t === 'mesh_tombstone_applied') {
-        chipClass = 'chip-neu chip-error';
-        badgeLabel = 'TOMBSTONE';
-        detail = `${d.resource_id || ''} (${d.reason || ''})`;
-      } else if (t === 'model_cascaded') {
-        chipClass = 'chip-neu chip-warning';
-        badgeLabel = 'CASCADED';
-        detail = `${d.requested_model} -> ${d.routed_model} (${d.tier})`;
-      } else if (t === 'quantized_embeddings_generated' || t === 'quantized_embed') {
-        chipClass = 'chip-neu';
-        badgeLabel = 'QUANT EMBED';
-        detail = `${d.count || 1} text(s), ${d.dimensions || 256}d int8 (${d.duration_ms || 0.4}ms)`;
-      } else {
-        detail = JSON.stringify(d);
-      }
+      const emptyHint = feed.querySelector('div[style*="font-style: italic"]');
+      if (emptyHint) emptyHint.remove();
 
       const item = document.createElement('div');
       item.className = 'feed-item-neu';
+
+      const status = ev.cache_status || (ev.data && ev.data.status) || 'EVENT';
+      let badgeClass = 'chip-neu chip-warning';
+      if (status.includes('HIT')) badgeClass = 'chip-neu chip-success';
+      if (status.includes('MISS')) badgeClass = 'chip-neu chip-error';
+
+      const eventName = ev.event_type || ev.event || 'cache_event';
+      const timeStr = new Date(ev.timestamp ? ev.timestamp * 1000 : Date.now()).toLocaleTimeString();
+      const model = (ev.data && (ev.data.model || ev.data.tool_name)) || '';
+
       item.innerHTML = `
-        <div style="display: flex; gap: 0.6rem; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          <span style="color: var(--text-caption); font-size: 0.68rem;">${time}</span>
-          <span class="${chipClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${badgeLabel}</span>
-          <span style="color: var(--text-main); font-size: 0.72rem; font-weight: 500;">${detail}</span>
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${status}</span>
+          <span style="font-weight: 700; color: var(--text-main); font-size: 0.74rem;">${eventName}</span>
+          <span style="color: var(--text-dim); font-size: 0.7rem;">${model}</span>
         </div>
+        <span style="color: var(--text-caption); font-size: 0.68rem;">${timeStr}</span>
       `;
 
       feed.insertBefore(item, feed.firstChild);
-      while (feed.children.length > 50) {
+      while (feed.children.length > 20) {
         feed.removeChild(feed.lastChild);
       }
     }
@@ -1274,20 +1270,23 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     function clearEventFeed() {
       const feed = document.getElementById('live-event-feed');
       if (feed) {
-        feed.innerHTML = '<div style="color: var(--text-caption); font-style: italic;">Feed cleared. Waiting for events...</div>';
+        feed.innerHTML = '<div style="color: var(--text-caption); font-style: italic; padding: 0.5rem 0;">Event feed cleared. Listening for new events...</div>';
       }
     }
 
-    const savedKey = localStorage.getItem('omnicache_key');
-    if (savedKey) {
-      const el = document.getElementById('playground-api-key');
-      if (el) el.value = savedKey;
-    }
+    // --- Initialization ---
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedKey = localStorage.getItem('omnicache_key');
+      if (savedKey) {
+        const keyInput = document.getElementById('playground-api-key');
+        if (keyInput) keyInput.value = savedKey;
+      }
 
-    initCharts();
-    refreshData();
-    initWebSocket();
-    setInterval(refreshData, 3000);
+      initCharts();
+      refreshData();
+      initWebSocket();
+      setInterval(refreshData, 5000);
+    });
   </script>
 </body>
 </html>

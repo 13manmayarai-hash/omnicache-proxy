@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>OmniCache 2 — Cybernetic Telemetry HUD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      /* Pure Black & Cybernetic Topographic Telemetry Theme (IMG-20260910-WA0002.jpg) */
+      --bg-void: #000000;
+      --bg-surface: #07090e;
+      --bg-surface-elevated: #0d1117;
+      --bg-well: #020305;
+
+      --text-white: #ffffff;
+      --text-silver: #c9d1d9;
+      --text-dim: #8b949e;
+      --text-muted: #484f58;
+
+      --border-hud: rgba(255, 255, 255, 0.18);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-bright: rgba(255, 255, 255, 0.4);
+
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-display: 'Space Grotesk', -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-void);
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 32px 32px;
+      color: var(--text-silver);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      padding: 1.5rem 1.25rem;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 1360px;
+      margin: 0 auto;
+    }
+
+    /* HUD Corner Tick Markers */
+    .hud-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hud);
+      position: relative;
+      padding: 1.25rem 1.4rem;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .hud-card:hover {
+      border-color: var(--border-bright);
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.04);
+    }
+
+    .hud-card::before {
+      content: '+';
+      position: absolute;
+      top: -7px;
+      left: -5px;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      line-height: 1;
+    }
+
+    .hud-card::after {
+      content: '+';
+      position: absolute;
+      bottom: -7px;
+      right: -5px;
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      line-height: 1;
+    }
+
+    /* Header Bar */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1.25rem;
+      padding: 1rem 1.4rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hud);
+      position: relative;
+    }
+
+    .header-bar::before { content: '+'; position: absolute; top: -7px; left: -5px; color: rgba(255, 255, 255, 0.6); font-size: 11px; }
+    .header-bar::after { content: '+'; position: absolute; bottom: -7px; right: -5px; color: rgba(255, 255, 255, 0.6); font-size: 11px; }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-icon-box {
+      width: 2.75rem;
+      height: 2.75rem;
+      background: #000000;
+      border: 1px solid var(--border-bright);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.1);
+    }
+
+    .brand-h1 {
+      font-size: 1.35rem;
+      font-weight: 800;
+      color: var(--text-white);
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      line-height: 1.2;
+    }
+
+    .brand-sub {
+      font-size: 0.76rem;
+      color: var(--text-dim);
+      letter-spacing: 0.04em;
+      margin-top: 0.2rem;
+      text-transform: uppercase;
+    }
+
+    /* Action Buttons */
+    .btn-group {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-hud {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.45rem 1rem;
+      font-size: 0.76rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid var(--border-hud);
+      background: #000000;
+      color: var(--text-silver);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.2s ease;
+      height: 36px;
+    }
+
+    .btn-hud:hover {
+      background: var(--text-white);
+      color: #000000;
+      border-color: var(--text-white);
+      box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+    }
+
+    .btn-primary-white {
+      background: var(--text-white) !important;
+      color: #000000 !important;
+      border: 1px solid #ffffff !important;
+      font-weight: 800 !important;
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.3) !important;
+    }
+
+    .btn-primary-white:hover {
+      background: #e2e8f0 !important;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.6) !important;
+    }
+
+    .btn-secondary-hud {
+      background: #0d1117 !important;
+      color: var(--text-white) !important;
+      border: 1px solid var(--border-hud) !important;
+    }
+
+    .btn-secondary-hud:hover {
+      border-color: var(--text-white) !important;
+    }
+
+    /* Badges & Chips */
+    .chip-hud {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border: 1px solid var(--border-hud);
+      background: #000000;
+      color: var(--text-white);
+    }
+
+    .chip-success {
+      border-color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+
+    .chip-warning {
+      border-color: rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.06);
+      color: #e2e8f0;
+    }
+
+    .chip-error {
+      border-color: #8b0000;
+      background: rgba(139, 0, 0, 0.2);
+      color: #fda4af;
+    }
+
+    .pulse-dot {
+      width: 7px;
+      height: 7px;
+      background: #ffffff;
+      box-shadow: 0 0 8px #ffffff;
+      animation: pulse-hud 1.8s infinite;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse-hud {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.8); }
+    }
+
+    /* Topographic Hero Wireframe Display */
+    .hero-topo-card {
+      background: #000000;
+      border: 1px solid var(--border-hud);
+      margin-bottom: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      padding: 1rem 1.4rem;
+    }
+
+    .hero-topo-card::before { content: '+'; position: absolute; top: -7px; left: -5px; color: rgba(255, 255, 255, 0.6); font-size: 11px; }
+    .hero-topo-card::after { content: '+'; position: absolute; bottom: -7px; right: -5px; color: rgba(255, 255, 255, 0.6); font-size: 11px; }
+
+    .topo-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      font-size: 0.74rem;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+      padding-bottom: 0.4rem;
+    }
+
+    #topoCanvas {
+      width: 100%;
+      height: 220px;
+      display: block;
+      background: #000000;
+    }
+
+    /* Top KPI Grid: 8-Card Symmetrical Grid */
+    .grid-kpi {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 1024px) {
+      .grid-kpi { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .grid-kpi { grid-template-columns: 1fr; }
+    }
+
+    .kpi-card {
+      padding: 1.1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 115px;
+      background: var(--bg-surface);
+    }
+
+    .kpi-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .kpi-val {
+      font-size: 1.65rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      letter-spacing: -0.03em;
+      margin: 0.35rem 0 0.15rem 0;
+      color: var(--text-white);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+    }
+
+    .kpi-hint {
+      font-size: 0.68rem;
+      color: var(--text-dim);
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    /* Charts Section */
+    .grid-charts {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 960px) {
+      .grid-charts { grid-template-columns: 1fr; }
+    }
+
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      gap: 0.75rem;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+      padding-bottom: 0.4rem;
+    }
+
+    .card-title {
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-white);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Inset Terminal Inputs */
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
+    }
+
+    .input-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-dim);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .input-hud {
+      background: var(--bg-well);
+      border: 1px solid var(--border-hud);
+      padding: 0.6rem 0.95rem;
+      color: var(--text-white);
+      width: 100%;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      height: 40px;
+    }
+
+    .input-hud:focus {
+      border-color: var(--text-white);
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
+    }
+
+    textarea.input-hud {
+      resize: none;
+      height: auto;
+      min-height: 75px;
+    }
+
+    select.input-hud {
+      cursor: pointer;
+    }
+
+    /* Segmented Tabs */
+    .tabs-segmented-hud {
+      display: inline-flex;
+      background: #000000;
+      border: 1px solid var(--border-hud);
+      padding: 2px;
+    }
+
+    .tab-hud-btn {
+      padding: 0.25rem 0.75rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--text-dim);
+      transition: all 0.2s ease;
+      font-family: var(--font-mono);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .tab-hud-active {
+      background: var(--text-white);
+      color: #000000;
+    }
+
+    .tab-hud-inactive:hover {
+      color: var(--text-white);
+    }
+
+    /* Pre / Code Box */
+    .pre-hud {
+      background: var(--bg-well);
+      border: 1px solid var(--border-hud);
+      padding: 0.85rem 1rem;
+      color: var(--text-silver);
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      overflow-x: auto;
+      line-height: 1.5;
+    }
+
+    /* Main 2-Column Grid */
+    .grid-main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .grid-main { grid-template-columns: 1fr; }
+    }
+
+    .col-stacked {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* Event Feed Items */
+    .feed-item-hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.45rem 0.75rem;
+      background: #000000;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      margin-bottom: 0.35rem;
+      font-size: 0.72rem;
+      transition: border-color 0.2s ease;
+    }
+
+    .feed-item-hud:hover {
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Top Navigation / Technical Header Bar -->
+    <header class="header-bar">
+      <div class="brand-title">
+        <div class="brand-icon-box">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.3" stroke-linecap="square">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-h1">
+            OMNICACHE_2//HUD
+            <span class="chip-hud chip-success" id="version-badge">
+              <span class="pulse-dot"></span>
+              v3.0.5 ONLINE
+            </span>
+          </h1>
+          <p class="brand-sub">Cybernetic Topographic Telemetry & Neural Caching Core</p>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <a href="/dashboard" class="btn-hud" title="Switch to Original Dashboard">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          [ ORIGINAL_DASH ]
+        </a>
+        <a href="/v1/cache/export" download class="btn-hud">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          [ CSV_DUMP ]
+        </a>
+        <a href="/metrics" target="_blank" class="btn-hud">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          [ PROM_TELEMETRY ]
+        </a>
+        <button onclick="refreshData()" class="btn-hud">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          [ SYNC ]
+        </button>
+      </div>
+    </header>
+
+    <!-- Topographic Wireframe Hero Visualization (Pulsar Mountain from Reference Image) -->
+    <section class="hero-topo-card">
+      <div class="topo-header">
+        <span>// TOPOGRAPHIC LATENCY & TOKEN TOPOLOGY MATRIX</span>
+        <span>LAT_SAMPLE: &lt;0.3MS | RADIX_INDEX: ACTIVE | SPEC: -8/7C6</span>
+      </div>
+      <canvas id="topoCanvas"></canvas>
+    </section>
+
+    <!-- Top KPI Grid: 8-Card Symmetrical HUD -->
+    <section class="grid-kpi">
+      
+      <!-- Card 1: Cost Avoided -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// COST_AVOIDED</span>
+          <span>USD</span>
+        </div>
+        <div class="kpi-val" id="stat-savings">$0.0000</div>
+        <div class="kpi-hint">Avoided cloud compute spend</div>
+      </div>
+
+      <!-- Card 2: Tokens Saved -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// TOKENS_SAVED</span>
+          <span>TOTAL</span>
+        </div>
+        <div class="kpi-val" id="stat-tok-saved">0</div>
+        <div class="kpi-hint">100% avoided upstream tokens</div>
+      </div>
+
+      <!-- Card 3: Cache Hit Rate -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// HIT_EFFICIENCY</span>
+          <span>RATIO</span>
+        </div>
+        <div class="kpi-val" id="stat-hitrate">0.0%</div>
+        <div class="kpi-hint"><span id="stat-total-hits">0</span> cached hits logged</div>
+      </div>
+
+      <!-- Card 4: Requests Proxied -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// TOTAL_REQUESTS</span>
+          <span>INSPECTED</span>
+        </div>
+        <div class="kpi-val" id="stat-total-reqs">0</div>
+        <div class="kpi-hint">Sidecar loopback throughput</div>
+      </div>
+
+      <!-- Card 5: Agent Tool Hits -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// TOOL_REPLAYS</span>
+          <span>ZERO_COST</span>
+        </div>
+        <div class="kpi-val" id="stat-tool-hits">0</div>
+        <div class="kpi-hint">Deterministic disk replays</div>
+      </div>
+
+      <!-- Card 6: Context Pruned -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// CONTEXT_PRUNED</span>
+          <span>COMPACTED</span>
+        </div>
+        <div class="kpi-val" id="stat-pruned-tok">0</div>
+        <div class="kpi-hint">Prompt overhead eliminated</div>
+      </div>
+
+      <!-- Card 7: Privacy Redactions -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// PII_SCRUBBED</span>
+          <span>HMAC_SALT</span>
+        </div>
+        <div class="kpi-val" id="stat-pii-scrubbed">0</div>
+        <div class="kpi-hint">Redacted sensitive payloads</div>
+      </div>
+
+      <!-- Card 8: Vision Dedup Matches -->
+      <div class="hud-card kpi-card">
+        <div class="kpi-label">
+          <span>// VISION_DEDUP</span>
+          <span>64BIT_PHASH</span>
+        </div>
+        <div class="kpi-val" id="stat-vision-hits">0</div>
+        <div class="kpi-hint">Perceptual frame deduplication</div>
+      </div>
+
+    </section>
+
+    <!-- Visual Charts: Sci-Fi Oscilloscope & Spectrum Matrix -->
+    <section class="grid-charts">
+      
+      <!-- Chart 1: Oscilloscope Velocity -->
+      <div class="hud-card">
+        <div class="card-title-row">
+          <div class="card-title">
+            <span class="pulse-dot"></span>
+            INGESTION_VELOCITY // OSCILLOSCOPE
+          </div>
+          <span style="font-size: 0.72rem; color: var(--text-dim);" id="chart-update-time">STREAMING</span>
+        </div>
+        <div style="position: relative; height: 230px; width: 100%;">
+          <canvas id="savingsTimelineChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 2: Resolution Spectrum Distribution -->
+      <div class="hud-card">
+        <div class="card-title-row">
+          <div class="card-title">RESOLUTION_SPECTRUM // BREAKDOWN</div>
+          <span style="font-size: 0.72rem; color: var(--text-dim);" id="chart-total-count">0 EVENTS</span>
+        </div>
+        <div style="position: relative; height: 230px; width: 100%;">
+          <canvas id="distributionDoughnutChart"></canvas>
+          <div id="doughnut-center-info" style="position: absolute; top: 50%; left: 35%; transform: translate(-50%, -50%); text-align: center; pointer-events: none;">
+            <div id="doughnut-hit-rate" style="font-size: 1.25rem; font-weight: 800; font-family: var(--font-mono); color: var(--text-white);">0.0%</div>
+            <div style="font-size: 0.65rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em;">EFFICIENCY</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Main Symmetrical 2-Column Grid -->
+    <section class="grid-main">
+      
+      <!-- Left Column: Sandbox Console & Live Telemetry Stream -->
+      <div class="col-stacked">
+        
+        <!-- Interactive Gateway Sandbox Console -->
+        <div class="hud-card">
+          <div class="card-title-row">
+            <div class="card-title">// NEURAL_GATEWAY_TERMINAL</div>
+            <div class="tabs-segmented-hud">
+              <button id="tab-claude" onclick="setApiMode('claude')" class="tab-hud-btn tab-hud-active">ANTHROPIC</button>
+              <button id="tab-openai" onclick="setApiMode('openai')" class="tab-hud-btn tab-hud-inactive">OPENAI</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">ROUTED_MODEL_TARGET</label>
+            <select id="model-select" class="input-hud">
+              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Anthropic Native)</option>
+              <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
+              <option value="gpt-4o">gpt-4o (Frontier Core)</option>
+              <option value="gemini-2.5-flash">gemini-2.5-flash (Economy)</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <div class="input-label">
+              <span>CLIENT_AUTH_KEY (OPTIONAL)</span>
+              <span style="color: var(--text-white); font-size: 0.7rem; font-weight: 700;">SANDBOX_ACTIVE</span>
+            </div>
+            <input type="password" id="playground-api-key" class="input-hud" placeholder="sk-ant-... or sk-... (stored locally)" onchange="localStorage.setItem('omnicache_key', this.value)" />
+          </div>
+
+          <div class="input-group">
+            <div class="input-label">
+              <span>QUERY_PAYLOAD</span>
+              <span style="color: var(--text-white); cursor: pointer; text-decoration: underline; font-weight: 700;" onclick="loadPIIExample()">[ INJECT_SYNTHETIC_PII ]</span>
+            </div>
+            <textarea id="prompt-input" rows="3" class="input-hud" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.85rem;">
+            <button onclick="sendTestPrompt()" class="btn-hud btn-primary-white" style="justify-content: center;">
+              [ SEND_PROXY ]
+            </button>
+            <button onclick="sendRephrasedTest()" class="btn-hud btn-secondary-hud" style="justify-content: center;">
+              [ TEST_REPHRASE ]
+            </button>
+          </div>
+
+          <!-- Live Result Box -->
+          <div id="test-result-container" class="hud-card" style="margin-top: 1.25rem; padding: 1rem; display: none; background: #000000; border-color: rgba(255,255,255,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.76rem;">
+              <span id="res-status-badge" class="chip-hud chip-success">STATUS</span>
+              <span id="res-latency" style="color: var(--text-silver); font-weight: 700;">0.00 ms</span>
+              <span id="res-sim" style="color: var(--text-white); font-weight: 700;">Sim: 1.0000</span>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.75rem;">
+              <div style="background: var(--bg-surface); padding: 0.6rem 0.8rem; border: 1px solid var(--border-hud);">
+                <div style="color: var(--text-dim); font-size: 0.65rem; text-transform: uppercase; font-weight: 700;">Tokens Saved</div>
+                <div style="font-weight: 800; font-size: 1.05rem; color: var(--text-white);" id="res-tokens-saved">0 tokens</div>
+                <div style="color: var(--text-dim); font-size: 0.68rem;" id="res-saved-usd">$0.0000 saved</div>
+              </div>
+
+              <div style="background: var(--bg-surface); padding: 0.6rem 0.8rem; border: 1px solid var(--border-hud);">
+                <div style="color: var(--text-dim); font-size: 0.65rem; text-transform: uppercase; font-weight: 700;">Tokens Billed</div>
+                <div style="font-weight: 800; font-size: 1.05rem; color: var(--text-white);" id="res-tokens-used">0 tokens</div>
+                <div style="color: var(--text-dim); font-size: 0.68rem;">Routed: <span id="res-routed" style="font-weight: 700; color: var(--text-white);">Normal</span></div>
+              </div>
+            </div>
+
+            <pre id="res-content" class="pre-hud" style="white-space: pre-wrap; max-height: 160px; overflow-y: auto;"></pre>
+          </div>
+        </div>
+
+        <!-- Live WebSocket Activity Ticker -->
+        <div class="hud-card">
+          <div class="card-title-row">
+            <div class="card-title">
+              <span id="ws-indicator" class="pulse-dot"></span>
+              LIVE_TELEMETRY_LOGSTREAM
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span id="ws-status-text" class="chip-hud chip-success">CONNECTED</span>
+              <button onclick="clearEventFeed()" class="btn-hud" style="padding: 0.2rem 0.6rem; font-size: 0.7rem; height: 28px;">[ CLEAR ]</button>
+            </div>
+          </div>
+          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 220px; overflow-y: auto; font-size: 0.72rem;">
+            <div style="color: var(--text-dim); font-style: italic; padding: 0.5rem 0;">Listening for live cache, tool replay & context pruning packets...</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Workspace Memory, Tenant Quotas & Quickstart -->
+      <div class="col-stacked">
+        
+        <!-- Workspace Sync & Git Memory -->
+        <div class="hud-card">
+          <div class="card-title-row">
+            <div class="card-title">// WORKSPACE_GIT_STATE</div>
+            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn-hud btn-primary-white" style="padding: 0.25rem 0.85rem; font-size: 0.72rem; height: 30px;">[ PRE_WARM ]</button>
+          </div>
+          
+          <div style="font-size: 0.76rem; display: flex; flex-direction: column; gap: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.85rem; background: var(--bg-well); border: 1px solid var(--border-hud);">
+              <span style="color: var(--text-dim); font-weight: 600;">GIT_REF // STATUS</span>
+              <span><code id="ws-git-ref" style="color: var(--text-white); font-weight: 700;">HEAD</code> <span id="ws-dirty-badge" class="chip-hud chip-success" style="font-size: 0.65rem; padding: 0.1rem 0.45rem; margin-left: 0.4rem;">CLEAN</span></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.85rem; background: var(--bg-well); border: 1px solid var(--border-hud);">
+              <span style="color: var(--text-dim); font-weight: 600;">CACHED_SIGNATURES</span>
+              <span style="font-weight: 800; color: var(--text-white);" id="ws-active-tools">0 records</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.85rem; background: var(--bg-well); border: 1px solid var(--border-hud);">
+              <span style="color: var(--text-dim); font-weight: 600;">AVOIDED_TOKENS_EST</span>
+              <span style="font-weight: 800; color: var(--text-white);" id="ws-token-potential">0 tokens</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem; padding-top: 0.85rem; border-top: 1px dashed rgba(255, 255, 255, 0.12);">
+            <div style="font-size: 0.7rem; color: var(--text-dim); font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.5rem;">// BUSINESS_TOOL_POLICIES</div>
+            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 110px; overflow-y: auto; font-size: 0.72rem;">
+              <div style="color: var(--text-dim);">Loading policies...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tenant Quotas & Spend -->
+        <div class="hud-card">
+          <div class="card-title-row">
+            <div class="card-title">// TENANT_LEDGER_QUOTAS</div>
+          </div>
+          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.76rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.85rem; background: var(--bg-well); border: 1px solid var(--border-hud);">
+              <span style="color: var(--text-white); font-weight: 700;">DEFAULT_TEAM</span>
+              <span style="font-weight: 700; color: var(--text-white);">$0.00 / $1000.00 (0%)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Zero-Config Setup Quickstart -->
+        <div class="hud-card">
+          <div class="card-title-row">
+            <div class="card-title">// RAPID_AGENT_HOOK</div>
+          </div>
+          <pre class="pre-hud"><code># 1-Line Claude Code Execution
+omnicache run claude
+
+# Cursor / Custom Agents (Loopback)
+export ANTHROPIC_BASE_URL="http://127.0.0.1:8000"
+export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
+        </div>
+
+      </div>
+
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = (window.location.protocol === 'file:' || !window.location.host) ? 'http://localhost:8000' : '';
+    let currentMode = 'claude';
+
+    // --- Interactive Topographic Wireframe Engine (Pulsar Mountain) ---
+    function initTopographicWave() {
+      const canvas = document.getElementById('topoCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      function resize() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = 220;
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      let step = 0;
+      const lines = 28;
+
+      function draw() {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const midX = w * 0.5;
+
+        for (let i = 0; i < lines; i++) {
+          const yBase = 20 + i * (h * 0.85 / lines);
+          ctx.beginPath();
+          ctx.moveTo(0, yBase);
+
+          for (let x = 0; x <= w; x += 6) {
+            const distFromMid = Math.abs(x - midX) / (w * 0.35);
+            let elevation = 0;
+            if (distFromMid < 1.0) {
+              const envelope = Math.pow(Math.cos(distFromMid * Math.PI * 0.5), 2);
+              const freq1 = Math.sin(x * 0.04 + step * 0.02 + i * 0.3);
+              const freq2 = Math.cos(x * 0.08 - step * 0.015);
+              const noise = (freq1 * 0.6 + freq2 * 0.4);
+              elevation = noise * envelope * 48 * (1 - (i / lines) * 0.3);
+            }
+            ctx.lineTo(x, yBase - elevation);
+          }
+
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.15 + (i / lines) * 0.65})`;
+          ctx.lineWidth = 1.0;
+          ctx.stroke();
+
+          // Fill underneath line to create 3D occlusion
+          ctx.lineTo(w, h);
+          ctx.lineTo(0, h);
+          ctx.closePath();
+          ctx.fillStyle = '#000000';
+          ctx.fill();
+        }
+
+        step += 1.2;
+        requestAnimationFrame(draw);
+      }
+      requestAnimationFrame(draw);
+    }
+
+    function setApiMode(mode) {
+      currentMode = mode;
+      document.getElementById('tab-claude').className = mode === 'claude' ? 'tab-hud-btn tab-hud-active' : 'tab-hud-btn tab-hud-inactive';
+      document.getElementById('tab-openai').className = mode === 'openai' ? 'tab-hud-btn tab-hud-active' : 'tab-hud-btn tab-hud-inactive';
+    }
+
+    function loadPIIExample() {
+      document.getElementById('prompt-input').value = "Analyze customer record for Alice (SSN: 123-45-6789, Email: alice@example.com, Card: 4111-1111-1111-1111).";
+    }
+
+    async function sendTestPrompt(overridePrompt = null) {
+      const prompt = overridePrompt || document.getElementById('prompt-input').value.trim();
+      const model = document.getElementById('model-select').value;
+      if (!prompt) return;
+
+      const endpoint = `${API_BASE}${currentMode === 'claude' ? '/v1/messages' : '/v1/chat/completions'}`;
+      
+      const payload = currentMode === 'claude' ? {
+        model: model,
+        messages: [{"role": "user", "content": prompt}],
+        max_tokens: 1024
+      } : {
+        model: model,
+        messages: [{"role": "user", "content": prompt}],
+        temperature: 0.0
+      };
+
+      const t0 = performance.now();
+      try {
+        const storedKey = document.getElementById('playground-api-key')?.value.trim() || '';
+        const reqHeaders = {
+          'Content-Type': 'application/json',
+          'x-org-id': 'enterprise_user',
+          'x-dashboard-playground': 'true'
+        };
+        if (storedKey) {
+          if (currentMode === 'claude') {
+            reqHeaders['x-api-key'] = storedKey;
+          } else {
+            reqHeaders['Authorization'] = `Bearer ${storedKey}`;
+          }
+        }
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(payload)
+        });
+
+        const dt = (performance.now() - t0).toFixed(2);
+        const data = await res.json();
+        const cacheStatus = res.headers.get('X-Cache-Status') || 'MISS';
+        const similarity = res.headers.get('X-Cache-Similarity') || '1.0000';
+        const costSaved = res.headers.get('X-Cost-Saved-USD') || '0.000000';
+        const tokensUsed = res.headers.get('X-Tokens-Used') || '0';
+        const tokensSaved = res.headers.get('X-Tokens-Saved') || '0';
+        const routedModel = res.headers.get('X-Routed-Model') || model;
+
+        let textContent = '';
+        if (currentMode === 'claude') {
+          textContent = data.content?.[0]?.text || JSON.stringify(data, null, 2);
+        } else {
+          textContent = data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
+        }
+
+        const container = document.getElementById('test-result-container');
+        container.style.display = 'block';
+        
+        const badge = document.getElementById('res-status-badge');
+        badge.textContent = cacheStatus;
+        if (cacheStatus.includes('HIT')) {
+          badge.className = 'chip-hud chip-success';
+        } else if (cacheStatus.includes('SEMANTIC')) {
+          badge.className = 'chip-hud chip-warning';
+        } else {
+          badge.className = 'chip-hud chip-error';
+        }
+
+        document.getElementById('res-latency').textContent = `${dt} ms`;
+        document.getElementById('res-sim').textContent = `Sim: ${Number(similarity).toFixed(4)}`;
+        document.getElementById('res-tokens-saved').textContent = `+${Number(tokensSaved).toLocaleString()} tokens`;
+        document.getElementById('res-saved-usd').textContent = `$${Number(costSaved).toFixed(6)} avoided`;
+        document.getElementById('res-tokens-used').textContent = `${Number(tokensUsed).toLocaleString()} tokens`;
+        document.getElementById('res-routed').textContent = routedModel;
+        document.getElementById('res-content').textContent = textContent;
+
+        await refreshData();
+      } catch (err) {
+        alert('Playground Request Failed: ' + err.message);
+      }
+    }
+
+    async function sendRephrasedTest() {
+      const orig = document.getElementById('prompt-input').value.trim();
+      const rephrased = "Please " + orig.charAt(0).toLowerCase() + orig.slice(1);
+      await sendTestPrompt(rephrased);
+    }
+
+    // --- Chart.js Setup (Cybernetic Oscilloscope & Spectrum Matrix) ---
+    let timelineChart = null;
+    let distributionChart = null;
+    const timelineLabels = [];
+    const timelineSavings = [];
+    const timelineTokens = [];
+
+    function initCharts() {
+      if (timelineChart) {
+        timelineChart.destroy();
+        timelineChart = null;
+      }
+      if (distributionChart) {
+        distributionChart.destroy();
+        distributionChart = null;
+      }
+
+      const ctxTimeline = document.getElementById('savingsTimelineChart')?.getContext('2d');
+      if (ctxTimeline) {
+        timelineChart = new Chart(ctxTimeline, {
+          type: 'line',
+          data: {
+            labels: timelineLabels,
+            datasets: [
+              {
+                label: 'SAVINGS ($)',
+                data: timelineSavings,
+                borderColor: '#FFFFFF',
+                backgroundColor: 'rgba(255, 255, 255, 0.12)',
+                fill: true,
+                tension: 0.1,
+                borderWidth: 2,
+                pointRadius: 2,
+                pointBackgroundColor: '#FFFFFF',
+                yAxisID: 'yCost'
+              },
+              {
+                label: 'TOKENS_SAVED',
+                data: timelineTokens,
+                borderColor: 'rgba(255, 255, 255, 0.5)',
+                backgroundColor: 'transparent',
+                borderDash: [3, 3],
+                borderWidth: 1.5,
+                pointRadius: 2,
+                yAxisID: 'yTokens'
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: { boxWidth: 10, font: { family: "'JetBrains Mono', monospace", size: 10, weight: 700 }, color: '#FFFFFF' }
+              },
+              tooltip: {
+                backgroundColor: '#07090e',
+                titleColor: '#FFFFFF',
+                bodyColor: '#c9d1d9',
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                borderWidth: 1,
+                padding: 8,
+                titleFont: { family: "'JetBrains Mono', monospace", size: 10, weight: 'bold' },
+                bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
+              }
+            },
+            scales: {
+              x: {
+                grid: { color: 'rgba(255, 255, 255, 0.08)' },
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#8b949e' }
+              },
+              yCost: {
+                type: 'linear',
+                display: true,
+                position: 'left',
+                grid: { color: 'rgba(255, 255, 255, 0.08)' },
+                ticks: {
+                  font: { size: 9, family: "'JetBrains Mono', monospace" },
+                  color: '#FFFFFF',
+                  callback: (val) => '$' + Number(val).toFixed(3)
+                }
+              },
+              yTokens: {
+                type: 'linear',
+                display: true,
+                position: 'right',
+                grid: { drawOnChartArea: false },
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: 'rgba(255, 255, 255, 0.6)' }
+              }
+            }
+          }
+        });
+      }
+
+      const ctxDoughnut = document.getElementById('distributionDoughnutChart')?.getContext('2d');
+      if (ctxDoughnut) {
+        distributionChart = new Chart(ctxDoughnut, {
+          type: 'doughnut',
+          data: {
+            labels: ['L1 EXACT (0)', 'L2 SEMANTIC (0)', 'AGENT TOOLS (0)', 'VISION DEDUP (0)', 'MISSES (0)'],
+            datasets: [{
+              data: [0, 0, 0, 0, 1],
+              backgroundColor: ['#FFFFFF', '#C9D1D9', '#8B949E', '#484F58', '#161B22'],
+              borderColor: '#000000',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'right',
+                labels: {
+                  boxWidth: 10,
+                  padding: 10,
+                  font: { family: "'JetBrains Mono', monospace", size: 10, weight: 700 },
+                  color: '#FFFFFF'
+                }
+              },
+              tooltip: {
+                backgroundColor: '#07090e',
+                titleColor: '#FFFFFF',
+                bodyColor: '#c9d1d9',
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+                borderWidth: 1,
+                bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
+              }
+            },
+            cutout: '72%'
+          }
+        });
+      }
+    }
+
+    function updateCharts(cost, tokens, exact, semantic, tools, vision, misses) {
+      const now = new Date().toLocaleTimeString();
+      if (timelineLabels.length >= 20) {
+        timelineLabels.shift();
+        timelineSavings.shift();
+        timelineTokens.shift();
+      }
+      timelineLabels.push(now);
+      timelineSavings.push(cost);
+      timelineTokens.push(tokens);
+
+      if (timelineChart) {
+        timelineChart.update('none');
+        const updateElem = document.getElementById('chart-update-time');
+        if (updateElem) updateElem.textContent = `UPDATE//${now}`;
+      }
+
+      const totalEvents = exact + semantic + tools + vision + misses;
+      const countElem = document.getElementById('chart-total-count');
+      if (countElem) countElem.textContent = `${totalEvents} EVENTS`;
+
+      const centerRate = document.getElementById('doughnut-hit-rate');
+      if (centerRate) {
+        const totalReqs = exact + semantic + misses;
+        const rate = totalReqs > 0 ? (((exact + semantic) / totalReqs) * 100).toFixed(1) : '0.0';
+        centerRate.textContent = `${rate}%`;
+      }
+
+      if (distributionChart) {
+        const hasData = totalEvents > 0;
+        distributionChart.data.datasets[0].data = hasData 
+          ? [exact, semantic, tools, vision, misses]
+          : [0, 0, 0, 0, 1];
+        
+        distributionChart.data.labels = [
+          `L1 EXACT (${exact})`,
+          `L2 SEMANTIC (${semantic})`,
+          `AGENT TOOLS (${tools})`,
+          `VISION DEDUP (${vision})`,
+          `MISSES (${misses})`
+        ];
+        distributionChart.update();
+      }
+    }
+
+    async function refreshData() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/cache/stats`);
+        const data = await res.json();
+
+        const sys = data.system_info || {};
+        if (sys.version) {
+          const versionBadge = document.getElementById('version-badge');
+          if (versionBadge) {
+            versionBadge.innerHTML = `<span class="pulse-dot"></span> v${sys.version} ONLINE`;
+          }
+        }
+
+        const cs = data.cache_stats || data;
+        const fm = data.financial_telemetry || data.financial_metrics || {};
+        const ee = data.enterprise_engine || {};
+
+        const exact = cs.exact_hits || 0;
+        const semantic = cs.semantic_hits || 0;
+        const total = cs.total_requests || 0;
+        const misses = (cs.misses !== undefined) ? cs.misses : Math.max(0, total - (exact + semantic));
+        const toolHits = ee.agent_tool_replays || fm.agent_tool_hits || 0;
+        const visionHits = ee.vision_cache_hits || fm.vision_cache_hits || 0;
+        const totalSavedUsd = fm.total_savings_usd || 0;
+        const totalTokensSaved = fm.total_tokens_saved || 0;
+
+        document.getElementById('stat-savings').textContent = `$${totalSavedUsd.toFixed(4)}`;
+        document.getElementById('stat-tok-saved').textContent = totalTokensSaved.toLocaleString();
+        document.getElementById('stat-tool-hits').textContent = toolHits.toLocaleString();
+        const prunedElem = document.getElementById('stat-pruned-tok');
+        if (prunedElem) prunedElem.textContent = (ee.agent_tool_compacted_tokens || 0).toLocaleString();
+        document.getElementById('stat-pii-scrubbed').textContent = (ee.privacy_redactions_total || fm.privacy_scrubbed_count || 0).toLocaleString();
+        document.getElementById('stat-vision-hits').textContent = visionHits.toLocaleString();
+        document.getElementById('stat-hitrate').textContent = `${cs.hit_rate_percentage || data.hit_rate_percentage || 0}%`;
+        document.getElementById('stat-total-hits').textContent = exact + semantic;
+        document.getElementById('stat-total-reqs').textContent = total;
+
+        updateCharts(totalSavedUsd, totalTokensSaved, exact, semantic, toolHits, visionHits, misses);
+
+        // Quotas
+        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`);
+        const qData = await qRes.json();
+        const qContainer = document.getElementById('quotas-container');
+        if (qContainer && typeof qData === 'object' && !qData.error) {
+          qContainer.innerHTML = '';
+          for (const [k, v] of Object.entries(qData)) {
+            qContainer.innerHTML += `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.85rem; background: var(--bg-well); border: 1px solid var(--border-hud);">
+                <span style="color: var(--text-white); font-weight: 700;">${v.team_name || k}</span>
+                <span style="font-family: var(--font-mono); font-weight: 700; color: var(--text-white);">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+              </div>
+            `;
+          }
+        }
+        await refreshWorkspaceData();
+      } catch (err) {}
+    }
+
+    async function triggerWarmWorkspace() {
+      const btn = document.getElementById('btn-warm-ws');
+      if (btn) btn.textContent = '[ WARMING... ]';
+      try {
+        const res = await fetch(`${API_BASE}/v1/workspace/warm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ directory: '.', max_files: 50 })
+        });
+        const data = await res.json();
+        if (btn) btn.textContent = '[ PRE_WARM ]';
+        if (data.status === 'ok') {
+          alert(`PRE-WARMED ${data.files_warmed} FILES AND ${data.entries_recorded} TOOL SIGNATURES IN ${data.duration_ms} MS.`);
+          refreshWorkspaceData();
+        } else {
+          alert('Warm status: ' + JSON.stringify(data));
+        }
+      } catch (e) {
+        if (btn) btn.textContent = '[ PRE_WARM ]';
+        alert('Warm error: ' + e.message);
+      }
+    }
+
+    async function refreshWorkspaceData() {
+      try {
+        const wsRes = await fetch(`${API_BASE}/v1/workspace/sync/status`);
+        if (wsRes.ok) {
+          const wsData = await wsRes.json();
+          const refElem = document.getElementById('ws-git-ref');
+          const dirtyElem = document.getElementById('ws-dirty-badge');
+          const toolsElem = document.getElementById('ws-active-tools');
+          const tokensElem = document.getElementById('ws-token-potential');
+
+          if (refElem) refElem.textContent = (wsData.git_ref || 'HEAD').slice(0, 10);
+          if (dirtyElem) {
+            dirtyElem.textContent = wsData.dirty ? 'DIRTY' : 'CLEAN';
+            dirtyElem.className = wsData.dirty ? 'chip-hud chip-error' : 'chip-hud chip-success';
+          }
+          if (toolsElem) toolsElem.textContent = `${wsData.active_tool_records || 0} records`;
+          if (tokensElem) tokensElem.textContent = `${(wsData.estimated_tokens_saved || 0).toLocaleString()} tokens`;
+        }
+
+        const polRes = await fetch(`${API_BASE}/v1/agent/tools/policies`);
+        if (polRes.ok) {
+          const polData = await polRes.json();
+          const pList = document.getElementById('tool-policies-list');
+          if (pList && Array.isArray(polData.policies)) {
+            pList.innerHTML = '';
+            for (const p of polData.policies) {
+              const badgeClass = p.is_idempotent ? 'chip-hud chip-success' : 'chip-hud chip-error';
+              const badgeText = p.is_idempotent ? `${p.ttl_seconds}s TTL` : 'BLOCKED';
+              pList.innerHTML += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.75rem; background: var(--bg-surface); border: 1px solid var(--border-hud);">
+                  <span style="color: var(--text-white); font-weight: 600;">${p.tool_name}</span>
+                  <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${badgeText}</span>
+                </div>
+              `;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    // --- WebSocket Live Telemetry Engine ---
+    let ws = null;
+    let wsReconnectTimeout = null;
+
+    function initWebSocket() {
+      if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = (window.location.protocol === 'file:' || !window.location.host) ? 'localhost:8000' : window.location.host;
+      const wsUrl = `${protocol}//${host}/ws`;
+
+      try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          const ind = document.getElementById('ws-indicator');
+          const txt = document.getElementById('ws-status-text');
+          if (ind) {
+            ind.style.background = '#FFFFFF';
+            ind.style.boxShadow = '0 0 8px #FFFFFF';
+          }
+          if (txt) {
+            txt.textContent = 'ONLINE';
+            txt.className = 'chip-hud chip-success';
+          }
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'connection_established' && Array.isArray(msg.recent_events)) {
+              msg.recent_events.forEach(addEventToFeed);
+              refreshData();
+            } else if (msg.type === 'event') {
+              addEventToFeed(msg);
+              refreshData();
+            }
+          } catch (e) {}
+        };
+
+        ws.onclose = () => {
+          const ind = document.getElementById('ws-indicator');
+          const txt = document.getElementById('ws-status-text');
+          if (ind) {
+            ind.style.background = '#888888';
+            ind.style.boxShadow = 'none';
+          }
+          if (txt) {
+            txt.textContent = 'RECONNECTING';
+            txt.className = 'chip-hud chip-warning';
+          }
+          wsReconnectTimeout = setTimeout(initWebSocket, 3000);
+        };
+
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+      } catch (e) {
+        wsReconnectTimeout = setTimeout(initWebSocket, 5000);
+      }
+    }
+
+    function addEventToFeed(ev) {
+      const feed = document.getElementById('live-event-feed');
+      if (!feed) return;
+
+      const emptyHint = feed.querySelector('div[style*="font-style: italic"]');
+      if (emptyHint) emptyHint.remove();
+
+      const item = document.createElement('div');
+      item.className = 'feed-item-hud';
+
+      const status = ev.cache_status || (ev.data && ev.data.status) || 'EVENT';
+      let badgeClass = 'chip-hud chip-warning';
+      if (status.includes('HIT')) badgeClass = 'chip-hud chip-success';
+      if (status.includes('MISS')) badgeClass = 'chip-hud chip-error';
+
+      const eventName = ev.event_type || ev.event || 'cache_event';
+      const timeStr = new Date(ev.timestamp ? ev.timestamp * 1000 : Date.now()).toLocaleTimeString();
+      const model = (ev.data && (ev.data.model || ev.data.tool_name)) || '';
+
+      item.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.45rem;">${status}</span>
+          <span style="font-weight: 700; color: var(--text-white); font-size: 0.74rem;">${eventName}</span>
+          <span style="color: var(--text-dim); font-size: 0.7rem;">${model}</span>
+        </div>
+        <span style="color: var(--text-dim); font-size: 0.68rem;">${timeStr}</span>
+      `;
+
+      feed.insertBefore(item, feed.firstChild);
+      while (feed.children.length > 20) {
+        feed.removeChild(feed.lastChild);
+      }
+    }
+
+    function clearEventFeed() {
+      const feed = document.getElementById('live-event-feed');
+      if (feed) {
+        feed.innerHTML = '<div style="color: var(--text-dim); font-style: italic; padding: 0.5rem 0;">// TELEMETRY_STREAM_PURGED. LISTENING FOR EVENTS...</div>';
+      }
+    }
+
+    // --- Resilient Initialization ---
+    function initApp() {
+      const savedKey = localStorage.getItem('omnicache_key');
+      if (savedKey) {
+        const keyInput = document.getElementById('playground-api-key');
+        if (keyInput) keyInput.value = savedKey;
+      }
+
+      initTopographicWave();
+      initCharts();
+      refreshData();
+      initWebSocket();
+      setInterval(refreshData, 2000);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+  </script>
+</body>
+</html>

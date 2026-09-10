@@ -82,3 +82,19 @@ def test_dashboard_playground_openai_flow(client):
     assert r2.headers.get("X-Cache-Status") == "HIT_SEMANTIC"
     tokens_saved = int(r2.headers.get("X-Tokens-Saved", "0"))
     assert tokens_saved > 0
+
+
+def test_dashboards_endpoints(client):
+    """Verify original dashboard and omnicache_2 redesign both serve 200 OK."""
+    # Original dashboard
+    r_dash = client.get("/dashboard")
+    assert r_dash.status_code == 200
+    assert "text/html" in r_dash.headers.get("content-type", "")
+
+    # OmniCache 2 redesign
+    r_dash2 = client.get("/omnicache_2")
+    assert r_dash2.status_code == 200
+    assert "text/html" in r_dash2.headers.get("content-type", "")
+    assert "OmniCache 2" in r_dash2.text
+    assert "topoCanvas" in r_dash2.text
+

@@ -8,10 +8,12 @@ when 'Test Rephrasing' is clicked.
 import pytest
 from starlette.testclient import TestClient
 from server.gateway import app
+from core.vector_cache import cache_instance
 
 
 @pytest.fixture
 def client():
+    cache_instance.clear()
     return TestClient(app)
 
 

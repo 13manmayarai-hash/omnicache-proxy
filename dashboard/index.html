@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -10,45 +10,55 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg-canvas: #090a0f;
-      --glass-bg: rgba(17, 20, 29, 0.65);
-      --glass-bg-subtle: rgba(255, 255, 255, 0.02);
-      --glass-bg-hover: rgba(255, 255, 255, 0.05);
-      --glass-border: rgba(255, 255, 255, 0.08);
-      --glass-border-hover: rgba(255, 255, 255, 0.16);
-      --glass-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
-      --accent-emerald: #10b981;
-      --accent-emerald-subtle: rgba(16, 185, 129, 0.12);
-      --accent-sky: #38bdf8;
-      --accent-sky-subtle: rgba(56, 189, 248, 0.12);
-      --accent-violet: #818cf8;
-      --accent-violet-subtle: rgba(129, 140, 248, 0.12);
-      --accent-amber: #f59e0b;
-      --accent-rose: #f43f5e;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
+      /* Neumorphism Design System Tokens */
+      --canvas-bg: #eef2f6;
+      --surface-bg: #eef2f6;
+      
+      /* Extrusion Shadows (Dual Source: Light Top-Left, Dark Bottom-Right) */
+      --neu-flat-1: 3px 3px 7px #d1d9e6, -3px -3px 7px #ffffff;
+      --neu-flat-2: 6px 6px 14px #d1d9e6, -6px -6px 14px #ffffff;
+      --neu-flat-3: 10px 10px 22px #d1d9e6, -10px -10px 22px #ffffff;
+      --neu-flat-hover: 8px 8px 18px #c5cfdf, -8px -8px 18px #ffffff;
+      
+      /* Inset Shadows (Recessed Wells / Input Fields) */
+      --neu-pressed: inset 3px 3px 6px #d1d9e6, inset -3px -3px 6px #ffffff;
+      --neu-pressed-deep: inset 4px 4px 8px #cbd5e1, inset -4px -4px 8px #ffffff;
+      
+      /* Accent Colors from Product UI Styleguide */
+      --primary-mint: #9fe6d4;
+      --primary-mint-hover: #88dec9;
+      --primary-mint-text: #0f4c3a;
+      --focus-ring: #00cfcc;
+      
+      /* Status Alert Colors from Styleguide */
+      --alert-success-bg: #c7f2e5;
+      --alert-success-text: #065f46;
+      --alert-warning-bg: #fef08a;
+      --alert-warning-text: #854d0e;
+      --alert-error-bg: #fecdd3;
+      --alert-error-text: #9f1239;
+      
+      /* Typography Colors */
+      --text-main: #1e293b;
+      --text-muted: #475569;
       --text-dim: #64748b;
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 16px;
+      --text-caption: #94a3b8;
+      
+      --radius-pill: 9999px;
+      --radius-card: 20px;
+      --radius-sm: 12px;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     
     body {
-      background-color: var(--bg-canvas);
-      background-image: 
-        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
-        radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.04) 0%, transparent 40%),
-        radial-gradient(circle at 0% 50%, rgba(129, 140, 248, 0.03) 0%, transparent 50%);
-      background-attachment: fixed;
+      background-color: var(--canvas-bg);
       color: var(--text-main);
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh;
       padding: 1.5rem 1rem;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
     }
 
     .container {
@@ -56,24 +66,22 @@
       margin: 0 auto;
     }
 
-    /* Glassmorphism Containers */
-    .glass-card {
-      background: var(--glass-bg);
-      backdrop-filter: blur(18px) saturate(180%);
-      -webkit-backdrop-filter: blur(18px) saturate(180%);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--glass-glow);
-      padding: 1.25rem;
+    /* Neumorphic Cards (Extruded Level 2) */
+    .neu-card {
+      background: var(--surface-bg);
+      border-radius: var(--radius-card);
+      box-shadow: var(--neu-flat-2);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      padding: 1.35rem;
       position: relative;
-      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+      transition: all 0.25s ease;
     }
 
-    .glass-card:hover {
-      border-color: var(--glass-border-hover);
+    .neu-card:hover {
+      box-shadow: var(--neu-flat-hover);
     }
 
-    /* Header */
+    /* Header Bar */
     .header-bar {
       display: flex;
       justify-content: space-between;
@@ -82,78 +90,147 @@
       flex-wrap: wrap;
       gap: 1rem;
       padding-bottom: 1.25rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     }
 
     .brand-title {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.85rem;
     }
 
-    .brand-icon {
-      width: 2.25rem;
-      height: 2.25rem;
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(56, 189, 248, 0.2));
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: var(--radius-md);
+    .brand-icon-neu {
+      width: 2.75rem;
+      height: 2.75rem;
+      background: var(--surface-bg);
+      border-radius: 16px;
+      box-shadow: var(--neu-flat-1);
       display: flex;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
     }
 
     .brand-h1 {
-      font-size: 1.15rem;
-      font-weight: 600;
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
       letter-spacing: -0.02em;
       display: flex;
       align-items: center;
-      gap: 0.5rem;
+      gap: 0.65rem;
     }
 
     .brand-sub {
-      font-size: 0.75rem;
+      font-size: 0.78rem;
       color: var(--text-dim);
-      font-weight: 400;
-      margin-top: 0.1rem;
+      font-weight: 500;
+      margin-top: 0.15rem;
     }
 
-    /* Badges & Pills */
-    .badge {
+    /* Buttons from Styleguide */
+    .btn-group {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+    }
+
+    .btn-neu {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.55rem 1.15rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.78rem;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      background: var(--surface-bg);
+      color: var(--text-muted);
+      box-shadow: var(--neu-flat-1);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-neu:hover {
+      box-shadow: var(--neu-flat-2);
+      color: var(--text-main);
+      transform: translateY(-1px);
+    }
+
+    .btn-neu:active {
+      box-shadow: var(--neu-pressed);
+      transform: translateY(1px);
+    }
+
+    /* Primary Action Pill (Mint Green from Styleguide) */
+    .btn-primary-mint {
+      background: var(--primary-mint) !important;
+      color: var(--primary-mint-text) !important;
+      box-shadow: 4px 4px 10px #c5d0e0, -4px -4px 10px #ffffff !important;
+      border: 1px solid rgba(255, 255, 255, 0.5) !important;
+    }
+
+    .btn-primary-mint:hover {
+      background: var(--primary-mint-hover) !important;
+      box-shadow: 6px 6px 14px #b8c5d8, -6px -6px 14px #ffffff !important;
+    }
+
+    .btn-primary-mint:active {
+      box-shadow: inset 3px 3px 6px #78c8b4, inset -3px -3px 6px #bbf4e6 !important;
+    }
+
+    /* Secondary Action Pill */
+    .btn-secondary-neu {
+      background: #e2e8f0 !important;
+      color: #334155 !important;
+      box-shadow: 4px 4px 10px #d1d9e6, -4px -4px 10px #ffffff !important;
+    }
+
+    .btn-secondary-neu:hover {
+      background: #cbd5e1 !important;
+      box-shadow: 5px 5px 12px #c5cfdf, -5px -5px 12px #ffffff !important;
+    }
+
+    /* Neumorphic Chips & Badges from Styleguide */
+    .chip-neu {
       display: inline-flex;
       align-items: center;
       gap: 0.35rem;
-      background: var(--glass-bg-subtle);
-      border: 1px solid var(--glass-border);
-      color: var(--text-muted);
-      padding: 0.2rem 0.55rem;
-      border-radius: 9999px;
-      font-size: 0.7rem;
-      font-family: 'JetBrains Mono', monospace;
-      font-weight: 500;
-      letter-spacing: -0.01em;
+      padding: 0.25rem 0.75rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.72rem;
+      font-weight: 600;
+      box-shadow: var(--neu-flat-1);
+      border: 1px solid rgba(255, 255, 255, 0.7);
     }
 
-    .badge-emerald {
-      background: var(--accent-emerald-subtle);
-      color: #34d399;
-      border-color: rgba(16, 185, 129, 0.25);
+    .chip-success {
+      background: var(--alert-success-bg);
+      color: var(--alert-success-text);
+      box-shadow: 2px 2px 6px #c5d9d2, -2px -2px 6px #ffffff;
     }
 
-    .badge-sky {
-      background: var(--accent-sky-subtle);
-      color: #7dd3fc;
-      border-color: rgba(56, 189, 248, 0.25);
+    .chip-warning {
+      background: var(--alert-warning-bg);
+      color: var(--alert-warning-text);
+      box-shadow: 2px 2px 6px #d8d4a6, -2px -2px 6px #ffffff;
     }
 
-    .pulse-dot {
-      width: 6px;
-      height: 6px;
+    .chip-error {
+      background: var(--alert-error-bg);
+      color: var(--alert-error-text);
+      box-shadow: 2px 2px 6px #dec0c5, -2px -2px 6px #ffffff;
+    }
+
+    .pulse-dot-mint {
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: var(--accent-emerald);
-      box-shadow: 0 0 8px var(--accent-emerald);
-      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      background: #0f766e;
+      box-shadow: 0 0 6px #14b8a6;
+      animation: pulse 2s infinite;
     }
 
     @keyframes pulse {
@@ -161,81 +238,24 @@
       50% { opacity: 0.4; transform: scale(0.85); }
     }
 
-    /* Action Buttons */
-    .btn-group {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.45rem 0.85rem;
-      border-radius: var(--radius-sm);
-      font-size: 0.75rem;
-      font-weight: 500;
-      font-family: inherit;
-      cursor: pointer;
-      text-decoration: none;
-      transition: all 0.18s ease;
-      border: 1px solid var(--glass-border);
-      background: rgba(255, 255, 255, 0.03);
-      color: var(--text-muted);
-      backdrop-filter: blur(10px);
-    }
-
-    .btn:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: var(--glass-border-hover);
-      color: var(--text-main);
-    }
-
-    .btn-primary {
-      background: linear-gradient(180deg, rgba(16, 185, 129, 0.85) 0%, rgba(5, 150, 105, 0.95) 100%);
-      border-color: rgba(255, 255, 255, 0.15);
-      color: #ffffff;
-      box-shadow: 0 2px 12px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }
-
-    .btn-primary:hover {
-      background: linear-gradient(180deg, rgba(16, 185, 129, 1) 0%, rgba(5, 150, 105, 1) 100%);
-      color: #ffffff;
-      border-color: rgba(255, 255, 255, 0.25);
-    }
-
-    .btn-secondary {
-      background: linear-gradient(180deg, rgba(99, 102, 241, 0.8) 0%, rgba(79, 70, 229, 0.9) 100%);
-      border-color: rgba(255, 255, 255, 0.15);
-      color: #ffffff;
-      box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-    }
-
-    .btn-secondary:hover {
-      background: linear-gradient(180deg, rgba(99, 102, 241, 0.95) 0%, rgba(79, 70, 229, 1) 100%);
-      color: #ffffff;
-    }
-
-    /* Metric Grids */
+    /* Top KPI Metric Grid */
     .grid-kpi {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 0.85rem;
-      margin-bottom: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+      gap: 1.1rem;
+      margin-bottom: 2rem;
     }
 
     .kpi-card {
-      padding: 1.1rem 1.15rem;
+      padding: 1.25rem;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
     }
 
     .kpi-label {
-      font-size: 0.68rem;
-      font-weight: 500;
+      font-size: 0.7rem;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--text-dim);
@@ -245,42 +265,39 @@
     }
 
     .kpi-val {
-      font-size: 1.45rem;
-      font-weight: 600;
+      font-size: 1.6rem;
+      font-weight: 700;
       font-family: 'JetBrains Mono', monospace;
       letter-spacing: -0.03em;
-      margin: 0.35rem 0 0.2rem 0;
+      margin: 0.4rem 0 0.25rem 0;
       color: var(--text-main);
       font-variant-numeric: tabular-nums;
     }
 
     .kpi-hint {
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       color: var(--text-dim);
-      font-weight: 400;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
+      font-weight: 500;
     }
 
-    .text-emerald { color: #34d399 !important; }
-    .text-sky { color: #38bdf8 !important; }
-    .text-violet { color: #a78bfa !important; }
-    .text-amber { color: #fbbf24 !important; }
-    .text-rose { color: #fb7185 !important; }
+    .text-mint { color: #0d9488 !important; }
+    .text-cyan { color: #0284c7 !important; }
+    .text-violet { color: #6d28d9 !important; }
+    .text-amber { color: #b45309 !important; }
+    .text-rose { color: #be123c !important; }
 
     /* Layout Grids */
     .grid-charts {
       display: grid;
       grid-template-columns: 1.4fr 0.85fr;
-      gap: 1rem;
-      margin-bottom: 1.5rem;
+      gap: 1.25rem;
+      margin-bottom: 2rem;
     }
 
     .grid-main {
       display: grid;
       grid-template-columns: 1.1fr 0.9fr;
-      gap: 1rem;
+      gap: 1.25rem;
     }
 
     @media (max-width: 900px) {
@@ -289,133 +306,124 @@
       }
     }
 
-    /* Section Headers */
     .card-title-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 1rem;
+      margin-bottom: 1.25rem;
     }
 
     .card-title {
-      font-size: 0.78rem;
-      font-weight: 600;
+      font-size: 0.82rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--text-muted);
+      color: var(--text-main);
       display: flex;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.5rem;
     }
 
-    /* Inputs & Forms */
+    /* Recessed Inputs from Styleguide */
     .input-group {
       display: flex;
       flex-direction: column;
-      gap: 0.3rem;
-      margin-bottom: 0.85rem;
+      gap: 0.35rem;
+      margin-bottom: 1rem;
     }
 
     .input-label {
-      font-size: 0.72rem;
-      font-weight: 500;
+      font-size: 0.74rem;
+      font-weight: 600;
       color: var(--text-dim);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    .input-box {
-      background: rgba(10, 13, 20, 0.75);
-      border: 1px solid var(--glass-border);
-      border-radius: var(--radius-sm);
-      padding: 0.55rem 0.75rem;
+    .input-neu {
+      background: var(--surface-bg);
+      border-radius: var(--radius-pill);
+      box-shadow: var(--neu-pressed);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      padding: 0.65rem 1.15rem;
       color: var(--text-main);
       width: 100%;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-family: inherit;
-      transition: all 0.2s ease;
       outline: none;
+      transition: all 0.2s ease;
     }
 
-    .input-box:focus {
-      border-color: rgba(56, 189, 248, 0.4);
-      background: rgba(10, 13, 20, 0.95);
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
+    .input-neu:focus {
+      box-shadow: var(--neu-pressed), 0 0 0 2px var(--focus-ring);
     }
 
-    select.input-box {
+    textarea.input-neu {
+      border-radius: 16px;
+      resize: none;
+    }
+
+    select.input-neu {
       cursor: pointer;
     }
 
-    /* Segmented Control Tabs */
-    .tabs-segmented {
+    /* Neumorphic Segmented Tabs from Styleguide */
+    .tabs-segmented-neu {
       display: inline-flex;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 2px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--glass-border);
+      background: var(--surface-bg);
+      padding: 4px;
+      border-radius: var(--radius-pill);
+      box-shadow: var(--neu-pressed);
+      border: 1px solid rgba(255, 255, 255, 0.6);
     }
 
-    .tab-btn {
-      padding: 0.3rem 0.65rem;
-      border-radius: 6px;
-      font-size: 0.7rem;
-      font-weight: 500;
+    .tab-neu-btn {
+      padding: 0.35rem 0.85rem;
+      border-radius: var(--radius-pill);
+      font-size: 0.74rem;
+      font-weight: 600;
       cursor: pointer;
       border: none;
       background: transparent;
       color: var(--text-dim);
-      transition: all 0.15s ease;
+      transition: all 0.2s ease;
     }
 
-    .tab-active {
-      background: rgba(255, 255, 255, 0.08);
+    .tab-neu-active {
+      background: var(--primary-mint);
+      color: var(--primary-mint-text);
+      box-shadow: 2px 2px 6px #c5d0e0, -2px -2px 6px #ffffff;
+    }
+
+    .tab-neu-inactive:hover {
       color: var(--text-main);
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     }
 
-    .tab-inactive:hover {
-      color: var(--text-muted);
-    }
-
-    /* Response & Pre Blocks */
-    pre, code {
+    /* Recessed Pre / Code Container */
+    .pre-neu {
+      background: var(--surface-bg);
+      box-shadow: var(--neu-pressed-deep);
+      border-radius: 14px;
+      padding: 0.85rem 1rem;
+      color: #0f766e;
       font-family: 'JetBrains Mono', monospace;
-    }
-
-    .code-glass {
-      background: rgba(8, 10, 15, 0.75);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: var(--radius-sm);
-      padding: 0.75rem;
-      color: #7dd3fc;
-      font-size: 0.75rem;
+      font-size: 0.76rem;
       overflow-x: auto;
+      border: 1px solid rgba(255, 255, 255, 0.4);
     }
 
-    /* Status Micro-Chips */
-    .stat-chip {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: var(--radius-sm);
-      padding: 0.5rem 0.65rem;
-    }
-
-    /* Activity Feed Items */
-    .feed-item {
+    /* Event Feed Items */
+    .feed-item-neu {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.35rem 0.55rem;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      border-radius: 6px;
-      transition: background 0.15s ease;
-    }
-
-    .feed-item:hover {
-      background: rgba(255, 255, 255, 0.04);
+      padding: 0.45rem 0.75rem;
+      background: var(--surface-bg);
+      border-radius: 12px;
+      box-shadow: 2px 2px 5px #d1d9e6, -2px -2px 5px #ffffff;
+      margin-bottom: 0.4rem;
+      border: 1px solid rgba(255, 255, 255, 0.7);
     }
   </style>
 </head>
@@ -426,126 +434,126 @@
     <!-- Top Navigation / Brand Bar -->
     <header class="header-bar">
       <div class="brand-title">
-        <div class="brand-icon">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald">
+        <div class="brand-icon-neu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
         </div>
         <div>
           <h1 class="brand-h1">
             OmniCache
-            <span class="badge badge-emerald" id="version-badge">
-              <span class="pulse-dot"></span>
+            <span class="chip-neu chip-success" id="version-badge">
+              <span class="pulse-dot-mint"></span>
               v3.0.5 ACTIVE
             </span>
           </h1>
-          <p class="brand-sub">Git-Aware Local Tool Replay & Zero-Latency AI Acceleration Gateway</p>
+          <p class="brand-sub">Git-Aware Deterministic Tool Replay & AI Agent Memory</p>
         </div>
       </div>
 
       <div class="btn-group">
-        <a href="/v1/cache/export" download class="btn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <a href="/v1/cache/export" download class="btn-neu">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           Export CSV
         </a>
-        <a href="/metrics" target="_blank" class="btn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+        <a href="/metrics" target="_blank" class="btn-neu">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
           Prometheus
         </a>
-        <button onclick="refreshData()" class="btn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+        <button onclick="refreshData()" class="btn-neu">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           Refresh
         </button>
       </div>
     </header>
 
-    <!-- Top KPI Grid: Financial & Performance Overview -->
+    <!-- Top KPI Grid: Neumorphic Extruded Cards -->
     <section class="grid-kpi">
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Cost Avoided</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
         </div>
-        <div class="kpi-val text-emerald" id="stat-savings">$0.0000</div>
-        <div class="kpi-hint">Avoided upstream API spend</div>
+        <div class="kpi-val text-mint" id="stat-savings">$0.0000</div>
+        <div class="kpi-hint">Avoided upstream cloud spend</div>
       </div>
 
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Tokens Saved</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
         </div>
-        <div class="kpi-val text-sky" id="stat-tok-saved">0</div>
+        <div class="kpi-val text-cyan" id="stat-tok-saved">0</div>
         <div class="kpi-hint">100% avoided upstream tokens</div>
       </div>
 
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Agent Tool Hits</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-violet"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6d28d9" stroke-width="2.2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
         </div>
         <div class="kpi-val text-violet" id="stat-tool-hits">0</div>
         <div class="kpi-hint">Claude & Cursor replays</div>
       </div>
 
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Context Pruned</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line></svg>
         </div>
-        <div class="kpi-val text-sky" id="stat-pruned-tok">0</div>
+        <div class="kpi-val text-cyan" id="stat-pruned-tok">0</div>
         <div class="kpi-hint">Compacted prompt tokens</div>
       </div>
 
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Privacy Redactions</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
         </div>
-        <div class="kpi-val text-emerald" id="stat-pii-scrubbed">0</div>
-        <div class="kpi-hint">Salted HMAC PII scrubbed</div>
+        <div class="kpi-val text-mint" id="stat-pii-scrubbed">0</div>
+        <div class="kpi-hint">HMAC salted PII masked</div>
       </div>
 
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Vision Matches</span>
-          <span class="badge" style="font-size: 0.6rem; padding: 0.1rem 0.35rem;">BETA</span>
+          <span class="chip-neu chip-warning" style="font-size: 0.62rem; padding: 0.1rem 0.45rem;">BETA</span>
         </div>
         <div class="kpi-val text-amber" id="stat-vision-hits">0</div>
         <div class="kpi-hint">64-bit pHash image dedup</div>
       </div>
 
-      <div class="glass-card kpi-card">
+      <div class="neu-card kpi-card">
         <div class="kpi-label">
           <span>Hit Rate</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
         </div>
-        <div class="kpi-val text-sky" id="stat-hitrate">0.0%</div>
-        <div class="kpi-hint"><span id="stat-total-hits">0</span> hits / <span id="stat-total-reqs">0</span> requests</div>
+        <div class="kpi-val text-cyan" id="stat-hitrate">0.0%</div>
+        <div class="kpi-hint"><span id="stat-total-hits">0</span> hits / <span id="stat-total-reqs">0</span> reqs</div>
       </div>
     </section>
 
-    <!-- Visual Telemetry & Velocity Charts -->
+    <!-- Visual Charts: Neumorphic Level 2 Cards -->
     <section class="grid-charts">
-      <div class="glass-card">
+      <div class="neu-card">
         <div class="card-title-row">
           <div class="card-title">
-            <span class="pulse-dot"></span>
+            <span class="pulse-dot-mint"></span>
             Savings & Ingestion Velocity
           </div>
-          <span style="font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
+          <span style="font-size: 0.72rem; color: var(--text-caption); font-family: 'JetBrains Mono', monospace;" id="chart-update-time">Streaming telemetry</span>
         </div>
-        <div style="position: relative; height: 215px; width: 100%;">
+        <div style="position: relative; height: 220px; width: 100%;">
           <canvas id="savingsTimelineChart"></canvas>
         </div>
       </div>
 
-      <div class="glass-card">
+      <div class="neu-card">
         <div class="card-title-row">
           <div class="card-title">Resolution Distribution</div>
-          <span style="font-size: 0.7rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
+          <span style="font-size: 0.72rem; color: var(--text-caption); font-family: 'JetBrains Mono', monospace;" id="chart-total-count">0 events</span>
         </div>
-        <div style="position: relative; height: 215px; width: 100%; display: flex; align-items: center; justify-content: center;">
+        <div style="position: relative; height: 220px; width: 100%; display: flex; align-items: center; justify-content: center;">
           <canvas id="distributionDoughnutChart"></canvas>
         </div>
       </div>
@@ -555,18 +563,18 @@
     <section class="grid-main">
       
       <!-- Left Column: Interactive Multi-Feature Test Console -->
-      <div class="glass-card">
+      <div class="neu-card">
         <div class="card-title-row">
           <div class="card-title">Gateway Sandbox Console</div>
-          <div class="tabs-segmented">
-            <button id="tab-claude" onclick="setApiMode('claude')" class="tab-btn tab-active">Claude Messages</button>
-            <button id="tab-openai" onclick="setApiMode('openai')" class="tab-btn tab-inactive">OpenAI Completions</button>
+          <div class="tabs-segmented-neu">
+            <button id="tab-claude" onclick="setApiMode('claude')" class="tab-neu-btn tab-neu-active">Claude Messages</button>
+            <button id="tab-openai" onclick="setApiMode('openai')" class="tab-neu-btn tab-neu-inactive">OpenAI Completions</button>
           </div>
         </div>
 
         <div class="input-group">
           <label class="input-label">Target Model</label>
-          <select id="model-select" class="input-box">
+          <select id="model-select" class="input-neu">
             <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Live Anthropic)</option>
             <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
             <option value="gpt-4o">gpt-4o (Frontier)</option>
@@ -577,125 +585,125 @@
         <div class="input-group">
           <div class="input-label">
             <span>Client API Key (Optional)</span>
-            <span style="color: var(--accent-emerald); font-size: 0.68rem;">Sandbox active if empty</span>
+            <span style="color: #0d9488; font-size: 0.7rem; font-weight: 600;">Sandbox active if empty</span>
           </div>
-          <input type="password" id="playground-api-key" class="input-box" style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;" placeholder="sk-ant-... or sk-... (stored locally in browser)" onchange="localStorage.setItem('omnicache_key', this.value)" />
+          <input type="password" id="playground-api-key" class="input-neu" style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;" placeholder="sk-ant-... or sk-... (stored locally in browser)" onchange="localStorage.setItem('omnicache_key', this.value)" />
         </div>
 
         <div class="input-group">
           <div class="input-label">
             <span>Test Prompt</span>
-            <span style="color: var(--accent-sky); cursor: pointer; text-decoration: underline;" onclick="loadPIIExample()">Insert Synthetic PII</span>
+            <span style="color: #0284c7; cursor: pointer; text-decoration: underline; font-weight: 600;" onclick="loadPIIExample()">Insert Synthetic PII</span>
           </div>
-          <textarea id="prompt-input" rows="3" class="input-box" style="resize: none;" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
+          <textarea id="prompt-input" rows="3" class="input-neu" placeholder="e.g. Write a python function to sort a list using quicksort.">Write a python function to sort a list using quicksort.</textarea>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-top: 0.4rem;">
-          <button onclick="sendTestPrompt()" class="btn btn-primary" style="justify-content: center;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-top: 0.6rem;">
+          <button onclick="sendTestPrompt()" class="btn-neu btn-primary-mint" style="justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
             Send via Proxy
           </button>
-          <button onclick="sendRephrasedTest()" class="btn btn-secondary" style="justify-content: center;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+          <button onclick="sendRephrasedTest()" class="btn-neu btn-secondary-neu" style="justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
             Test Rephrasing
           </button>
         </div>
 
         <!-- Live Result Box -->
-        <div id="test-result-container" class="glass-card" style="margin-top: 1rem; padding: 0.85rem; display: none; background: rgba(8, 10, 15, 0.8);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;">
-            <span id="res-status-badge" class="badge">STATUS</span>
-            <span id="res-latency" style="color: var(--accent-violet);">0.00 ms</span>
-            <span id="res-sim" style="color: var(--accent-sky);">Sim: 1.0000</span>
+        <div id="test-result-container" class="neu-card" style="margin-top: 1.25rem; padding: 1rem; display: none; box-shadow: var(--neu-flat-1);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 0.74rem;">
+            <span id="res-status-badge" class="chip-neu chip-success">STATUS</span>
+            <span id="res-latency" style="color: var(--text-violet); font-weight: 600;">0.00 ms</span>
+            <span id="res-sim" style="color: var(--text-cyan); font-weight: 600;">Sim: 1.0000</span>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.65rem;">
-            <div class="stat-chip" style="border-left: 2px solid var(--accent-emerald);">
-              <div style="color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase;">Tokens Saved</div>
-              <div class="text-emerald" style="font-weight: 600; font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-saved">0 tokens</div>
-              <div style="color: var(--accent-emerald); font-size: 0.65rem;" id="res-saved-usd">$0.0000 saved</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;">
+            <div style="background: var(--surface-bg); padding: 0.6rem 0.8rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
+              <div style="color: var(--text-caption); font-size: 0.65rem; text-transform: uppercase; font-weight: 600;">Tokens Saved</div>
+              <div class="text-mint" style="font-weight: 700; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-saved">0 tokens</div>
+              <div style="color: #0d9488; font-size: 0.68rem; font-weight: 500;" id="res-saved-usd">$0.0000 saved</div>
             </div>
 
-            <div class="stat-chip" style="border-left: 2px solid var(--accent-amber);">
-              <div style="color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase;">Tokens Billed</div>
-              <div class="text-amber" style="font-weight: 600; font-size: 0.85rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-used">0 tokens</div>
-              <div style="color: var(--text-dim); font-size: 0.65rem;">Routed: <span id="res-routed" style="color: var(--text-muted);">Normal</span></div>
+            <div style="background: var(--surface-bg); padding: 0.6rem 0.8rem; border-radius: 12px; box-shadow: var(--neu-flat-1);">
+              <div style="color: var(--text-caption); font-size: 0.65rem; text-transform: uppercase; font-weight: 600;">Tokens Billed</div>
+              <div class="text-amber" style="font-weight: 700; font-size: 0.95rem; font-family: 'JetBrains Mono', monospace;" id="res-tokens-used">0 tokens</div>
+              <div style="color: var(--text-dim); font-size: 0.68rem;">Routed: <span id="res-routed" style="font-weight: 600;">Normal</span></div>
             </div>
           </div>
 
-          <pre id="res-content" class="code-glass" style="white-space: pre-wrap; max-height: 150px; overflow-y: auto;"></pre>
+          <pre id="res-content" class="pre-neu" style="white-space: pre-wrap; max-height: 150px; overflow-y: auto;"></pre>
         </div>
       </div>
 
       <!-- Right Column: Quotas, Workspace & Live Event Stream -->
-      <div style="display: flex; flex-direction: column; gap: 1rem;">
+      <div style="display: flex; flex-direction: column; gap: 1.25rem;">
         
         <!-- Virtual Key Quotas -->
-        <div class="glass-card">
+        <div class="neu-card">
           <div class="card-title-row">
             <div class="card-title">Tenant Quotas & Spend</div>
           </div>
-          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.75rem;">
-            <div style="display: flex; justify-content: space-between; padding: 0.45rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
-              <span style="color: var(--text-muted);">Default Team</span>
-              <span class="text-emerald" style="font-family: 'JetBrains Mono', monospace;">$0.00 / $1000.00 (0%)</span>
+          <div id="quotas-container" style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.76rem;">
+            <div style="display: flex; justify-content: space-between; padding: 0.6rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
+              <span style="color: var(--text-main); font-weight: 600;">Default Team</span>
+              <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">$0.00 / $1000.00 (0%)</span>
             </div>
           </div>
         </div>
 
         <!-- Workspace & Business Tool Policies -->
-        <div class="glass-card">
+        <div class="neu-card">
           <div class="card-title-row">
             <div class="card-title">Workspace Sync & Git Memory</div>
-            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn" style="padding: 0.25rem 0.55rem; font-size: 0.7rem;">Pre-Warm</button>
+            <button onclick="triggerWarmWorkspace()" id="btn-warm-ws" class="btn-neu btn-primary-mint" style="padding: 0.35rem 0.85rem; font-size: 0.72rem;">Pre-Warm</button>
           </div>
           
-          <div style="font-size: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem;">
-            <div style="display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
-              <span style="color: var(--text-dim);">Git Ref / Status</span>
-              <span><code id="ws-git-ref" style="color: var(--accent-sky);">HEAD</code> <span id="ws-dirty-badge" class="badge badge-emerald" style="font-size: 0.65rem;">CLEAN</span></span>
+          <div style="font-size: 0.76rem; display: flex; flex-direction: column; gap: 0.45rem;">
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
+              <span style="color: var(--text-dim); font-weight: 500;">Git Ref / Status</span>
+              <span><code id="ws-git-ref" style="color: #0284c7; font-weight: 600;">HEAD</code> <span id="ws-dirty-badge" class="chip-neu chip-success" style="font-size: 0.65rem; padding: 0.1rem 0.45rem;">CLEAN</span></span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
-              <span style="color: var(--text-dim);">Active Cached Tool Signatures</span>
-              <span class="text-violet" style="font-weight: 600; font-family: 'JetBrains Mono', monospace;" id="ws-active-tools">0 records</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
+              <span style="color: var(--text-dim); font-weight: 500;">Active Cached Signatures</span>
+              <span class="text-violet" style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="ws-active-tools">0 records</span>
             </div>
-            <div style="display: flex; justify-content: space-between; padding: 0.4rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
-              <span style="color: var(--text-dim);">Workspace Avoided Tokens</span>
-              <span class="text-emerald" style="font-weight: 600; font-family: 'JetBrains Mono', monospace;" id="ws-token-potential">0 tokens</span>
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
+              <span style="color: var(--text-dim); font-weight: 500;">Workspace Avoided Tokens</span>
+              <span class="text-mint" style="font-weight: 700; font-family: 'JetBrains Mono', monospace;" id="ws-token-potential">0 tokens</span>
             </div>
           </div>
 
-          <div style="margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid rgba(255, 255, 255, 0.05);">
-            <div style="font-size: 0.68rem; color: var(--text-dim); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.4rem;">Business Tool Caching Policies</div>
-            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.25rem; max-height: 95px; overflow-y: auto; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace;">
-              <div style="color: var(--text-dim);">Loading policies...</div>
+          <div style="margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid rgba(0, 0, 0, 0.06);">
+            <div style="font-size: 0.7rem; color: var(--text-dim); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.5rem;">Business Tool Caching Policies</div>
+            <div id="tool-policies-list" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 95px; overflow-y: auto; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace;">
+              <div style="color: var(--text-caption);">Loading policies...</div>
             </div>
           </div>
         </div>
 
         <!-- Live WebSocket Activity Ticker -->
-        <div class="glass-card">
+        <div class="neu-card">
           <div class="card-title-row">
             <div class="card-title">
-              <span id="ws-indicator" class="pulse-dot"></span>
+              <span id="ws-indicator" class="pulse-dot-mint"></span>
               Live Telemetry Stream
             </div>
-            <div style="display: flex; gap: 0.4rem; align-items: center;">
-              <span id="ws-status-text" class="badge badge-emerald" style="font-size: 0.65rem;">CONNECTED</span>
-              <button onclick="clearEventFeed()" class="btn" style="padding: 0.2rem 0.45rem; font-size: 0.65rem;">Clear</button>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span id="ws-status-text" class="chip-neu chip-success" style="font-size: 0.65rem;">CONNECTED</span>
+              <button onclick="clearEventFeed()" class="btn-neu" style="padding: 0.25rem 0.6rem; font-size: 0.68rem;">Clear</button>
             </div>
           </div>
-          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.35rem; max-height: 175px; overflow-y: auto; font-size: 0.7rem; font-family: 'JetBrains Mono', monospace;">
-            <div style="color: var(--text-dim); font-style: italic;">Listening for live cache, tool replay & context pruning events...</div>
+          <div id="live-event-feed" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 180px; overflow-y: auto; font-size: 0.72rem; font-family: 'JetBrains Mono', monospace;">
+            <div style="color: var(--text-caption); font-style: italic;">Listening for live cache, tool replay & context pruning events...</div>
           </div>
         </div>
 
-        <!-- Claude Code & Cursor Setup Quickstart -->
-        <div class="glass-card">
+        <!-- Zero-Config Setup Quickstart -->
+        <div class="neu-card">
           <div class="card-title-row">
             <div class="card-title">Zero-Config Agent Hook</div>
           </div>
-          <pre class="code-glass"><code># 1-Line Claude Code Execution
+          <pre class="pre-neu"><code># 1-Line Claude Code Execution
 omnicache run claude
 
 # Cursor / Custom Agents (Loopback)
@@ -713,8 +721,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     function setApiMode(mode) {
       currentMode = mode;
-      document.getElementById('tab-claude').className = mode === 'claude' ? 'tab-btn tab-active' : 'tab-btn tab-inactive';
-      document.getElementById('tab-openai').className = mode === 'openai' ? 'tab-btn tab-active' : 'tab-btn tab-inactive';
+      document.getElementById('tab-claude').className = mode === 'claude' ? 'tab-neu-btn tab-neu-active' : 'tab-neu-btn tab-neu-inactive';
+      document.getElementById('tab-openai').className = mode === 'openai' ? 'tab-neu-btn tab-neu-active' : 'tab-neu-btn tab-neu-inactive';
     }
 
     function loadPIIExample() {
@@ -782,12 +790,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         const badge = document.getElementById('res-status-badge');
         badge.textContent = cacheStatus;
         if (cacheStatus.includes('HIT')) {
-          badge.className = 'badge badge-emerald';
+          badge.className = 'chip-neu chip-success';
         } else {
-          badge.className = 'badge';
-          badge.style.borderColor = 'rgba(244, 63, 94, 0.3)';
-          badge.style.color = '#fb7185';
-          badge.style.background = 'rgba(244, 63, 94, 0.1)';
+          badge.className = 'chip-neu chip-error';
         }
 
         document.getElementById('res-latency').textContent = `${dt} ms`;
@@ -828,8 +833,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const ctxTimeline = document.getElementById('savingsTimelineChart')?.getContext('2d');
       if (ctxTimeline) {
         const gradientCost = ctxTimeline.createLinearGradient(0, 0, 0, 200);
-        gradientCost.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
-        gradientCost.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+        gradientCost.addColorStop(0, 'rgba(15, 118, 110, 0.25)');
+        gradientCost.addColorStop(1, 'rgba(15, 118, 110, 0.0)');
 
         timelineChart = new Chart(ctxTimeline, {
           type: 'line',
@@ -839,28 +844,28 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
               {
                 label: 'Cost Saved ($ USD)',
                 data: timelineCostData,
-                borderColor: '#10b981',
-                borderWidth: 2,
+                borderColor: '#0d9488',
+                borderWidth: 2.5,
                 backgroundColor: gradientCost,
                 fill: true,
                 tension: 0.35,
                 yAxisID: 'yCost',
-                pointRadius: 2,
-                pointHoverRadius: 4,
-                pointBackgroundColor: '#10b981'
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: '#0d9488'
               },
               {
                 label: 'Tokens Avoided',
                 data: timelineTokenData,
-                borderColor: '#38bdf8',
-                borderWidth: 1.5,
+                borderColor: '#0284c7',
+                borderWidth: 2,
                 backgroundColor: 'transparent',
-                borderDash: [3, 3],
+                borderDash: [4, 4],
                 tension: 0.35,
                 yAxisID: 'yTokens',
-                pointRadius: 2,
-                pointHoverRadius: 4,
-                pointBackgroundColor: '#38bdf8'
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: '#0284c7'
               }
             ]
           },
@@ -871,30 +876,33 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             plugins: {
               legend: {
                 position: 'top',
-                labels: { boxWidth: 10, font: { size: 10 }, color: '#94a3b8' }
+                labels: { boxWidth: 10, font: { size: 11, weight: 600 }, color: '#334155' }
               },
               tooltip: {
-                backgroundColor: 'rgba(10, 13, 20, 0.9)',
-                borderColor: 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: '#ffffff',
+                titleColor: '#0f172a',
+                bodyColor: '#334155',
+                borderColor: '#cbd5e1',
                 borderWidth: 1,
-                padding: 8,
-                titleFont: { family: "'Inter', sans-serif", size: 11 },
+                padding: 10,
+                boxShadow: '4px 4px 10px #d1d9e6',
+                titleFont: { family: "'Inter', sans-serif", size: 11, weight: 'bold' },
                 bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
             scales: {
               x: {
-                grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                grid: { color: 'rgba(0, 0, 0, 0.04)' },
                 ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#64748b' }
               },
               yCost: {
                 type: 'linear',
                 display: true,
                 position: 'left',
-                grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                grid: { color: 'rgba(0, 0, 0, 0.04)' },
                 ticks: {
                   font: { size: 9, family: "'JetBrains Mono', monospace" },
-                  color: '#10b981',
+                  color: '#0d9488',
                   callback: (val) => '$' + Number(val).toFixed(3)
                 }
               },
@@ -903,7 +911,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
                 display: true,
                 position: 'right',
                 grid: { drawOnChartArea: false },
-                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#38bdf8' }
+                ticks: { font: { size: 9, family: "'JetBrains Mono', monospace" }, color: '#0284c7' }
               }
             }
           }
@@ -918,9 +926,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             labels: ['L1 Exact', 'L2 Semantic', 'Agent Tools', 'Vision Hits', 'Misses'],
             datasets: [{
               data: [0, 0, 0, 0, 1],
-              backgroundColor: ['#10b981', '#38bdf8', '#818cf8', '#fbbf24', 'rgba(255, 255, 255, 0.08)'],
-              borderColor: '#090a0f',
-              borderWidth: 3
+              backgroundColor: ['#0d9488', '#0284c7', '#7c3aed', '#d97706', '#cbd5e1'],
+              borderColor: '#eef2f6',
+              borderWidth: 4
             }]
           },
           options: {
@@ -929,16 +937,18 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             plugins: {
               legend: {
                 position: 'right',
-                labels: { boxWidth: 8, font: { size: 10 }, color: '#94a3b8' }
+                labels: { boxWidth: 9, font: { size: 10, weight: 600 }, color: '#334155' }
               },
               tooltip: {
-                backgroundColor: 'rgba(10, 13, 20, 0.9)',
-                borderColor: 'rgba(255, 255, 255, 0.1)',
+                backgroundColor: '#ffffff',
+                titleColor: '#0f172a',
+                bodyColor: '#334155',
+                borderColor: '#cbd5e1',
                 borderWidth: 1,
                 bodyFont: { family: "'JetBrains Mono', monospace", size: 10 }
               }
             },
-            cutout: '74%'
+            cutout: '72%'
           }
         });
       }
@@ -985,7 +995,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         if (sys.version) {
           const versionBadge = document.getElementById('version-badge');
           if (versionBadge) {
-            versionBadge.innerHTML = `<span class="pulse-dot"></span> v${sys.version} ACTIVE`;
+            versionBadge.innerHTML = `<span class="pulse-dot-mint"></span> v${sys.version} ACTIVE`;
           }
         }
 
@@ -1023,9 +1033,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           qContainer.innerHTML = '';
           for (const [k, v] of Object.entries(qData)) {
             qContainer.innerHTML += `
-              <div style="display: flex; justify-content: space-between; padding: 0.45rem 0.6rem; background: rgba(255, 255, 255, 0.02); border-radius: var(--radius-sm); border: 1px solid var(--glass-border);">
-                <span style="color: var(--text-main); font-weight: 500;">${v.team_name || k}</span>
-                <span class="text-emerald" style="font-family: 'JetBrains Mono', monospace;">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+              <div style="display: flex; justify-content: space-between; padding: 0.55rem 0.85rem; background: var(--surface-bg); border-radius: var(--radius-pill); box-shadow: var(--neu-flat-1);">
+                <span style="color: var(--text-main); font-weight: 600;">${v.team_name || k}</span>
+                <span class="text-mint" style="font-family: 'JetBrains Mono', monospace; font-weight: 600;">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
               </div>
             `;
           }
@@ -1070,12 +1080,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           if (refElem) refElem.textContent = (wsData.git_ref || 'HEAD').slice(0, 10);
           if (dirtyElem) {
             dirtyElem.textContent = wsData.dirty ? 'DIRTY' : 'CLEAN';
-            dirtyElem.className = wsData.dirty ? 'badge' : 'badge badge-emerald';
-            if (wsData.dirty) {
-              dirtyElem.style.borderColor = 'rgba(244, 63, 94, 0.3)';
-              dirtyElem.style.color = '#fb7185';
-              dirtyElem.style.background = 'rgba(244, 63, 94, 0.1)';
-            }
+            dirtyElem.className = wsData.dirty ? 'chip-neu chip-error' : 'chip-neu chip-success';
           }
           if (toolsElem) toolsElem.textContent = `${wsData.active_tool_records || 0} records`;
           if (tokensElem) tokensElem.textContent = `${(wsData.estimated_tokens_saved || 0).toLocaleString()} tokens`;
@@ -1088,12 +1093,12 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           if (pList && Array.isArray(polData.policies)) {
             pList.innerHTML = '';
             for (const p of polData.policies) {
-              const badgeClass = p.is_idempotent ? 'text-emerald' : 'text-rose';
+              const badgeClass = p.is_idempotent ? 'chip-neu chip-success' : 'chip-neu chip-error';
               const badgeText = p.is_idempotent ? `${p.ttl_seconds}s TTL` : 'BLOCKED';
               pList.innerHTML += `
-                <div style="display: flex; justify-content: space-between; padding: 0.3rem 0.5rem; background: rgba(255, 255, 255, 0.02); border-radius: 4px; border: 1px solid rgba(255, 255, 255, 0.03);">
-                  <span style="color: var(--text-muted);">${p.tool_name}</span>
-                  <span class="${badgeClass}" style="font-weight: 500;">${badgeText}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.35rem 0.65rem; background: var(--surface-bg); border-radius: 8px; box-shadow: 2px 2px 4px #d1d9e6, -2px -2px 4px #ffffff;">
+                  <span style="color: var(--text-main); font-weight: 500;">${p.tool_name}</span>
+                  <span class="${badgeClass}" style="font-size: 0.65rem; padding: 0.1rem 0.45rem;">${badgeText}</span>
                 </div>
               `;
             }
@@ -1118,12 +1123,12 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           const ind = document.getElementById('ws-indicator');
           const txt = document.getElementById('ws-status-text');
           if (ind) {
-            ind.style.background = 'var(--accent-emerald)';
-            ind.style.boxShadow = '0 0 8px var(--accent-emerald)';
+            ind.style.background = '#0f766e';
+            ind.style.boxShadow = '0 0 6px #14b8a6';
           }
           if (txt) {
             txt.textContent = 'CONNECTED';
-            txt.className = 'badge badge-emerald';
+            txt.className = 'chip-neu chip-success';
           }
         };
 
@@ -1143,14 +1148,12 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           const ind = document.getElementById('ws-indicator');
           const txt = document.getElementById('ws-status-text');
           if (ind) {
-            ind.style.background = 'var(--accent-amber)';
-            ind.style.boxShadow = '0 0 8px var(--accent-amber)';
+            ind.style.background = '#b45309';
+            ind.style.boxShadow = '0 0 6px #f59e0b';
           }
           if (txt) {
             txt.textContent = 'RECONNECTING';
-            txt.className = 'badge';
-            txt.style.color = '#fbbf24';
-            txt.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+            txt.className = 'chip-neu chip-warning';
           }
           wsReconnectTimeout = setTimeout(initWebSocket, 3000);
         };
@@ -1174,76 +1177,76 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const t = ev.event_type;
       const d = ev.data || {};
 
-      let badgeColor = 'var(--accent-sky)';
+      let chipClass = 'chip-neu chip-success';
       let badgeLabel = (t || 'EVENT').toUpperCase();
       let detail = '';
 
       if (t === 'tool_replay' || t === 'tool_hit') {
-        badgeColor = 'var(--accent-violet)';
+        chipClass = 'chip-neu chip-success';
         badgeLabel = 'TOOL HIT';
         detail = `${d.tool_name || 'tool'} (${d.latency_ms || 0.2}ms)`;
       } else if (t === 'context_compacted' || t === 'context_pruned') {
-        badgeColor = 'var(--accent-emerald)';
+        chipClass = 'chip-neu chip-success';
         badgeLabel = 'PRUNED';
         detail = `-${d.tokens_compacted || 0} prompt tokens`;
       } else if (t === 'telephony_filtered') {
-        badgeColor = 'var(--accent-sky)';
+        chipClass = 'chip-neu';
         badgeLabel = 'VOICE FILTER';
         detail = `-${d.fillers_stripped || 0} fillers, +${d.tokens_saved || 0} tok saved`;
       } else if (t === 'telephony_fast_path') {
-        badgeColor = 'var(--accent-sky)';
+        chipClass = 'chip-neu';
         badgeLabel = 'VOICE FAST';
         detail = `${(d.reply || '').slice(0, 32)}... (<0.2ms)`;
       } else if (t === 'audio_cache_hit') {
-        badgeColor = '#e879f9';
+        chipClass = 'chip-neu chip-warning';
         badgeLabel = 'AUDIO HIT';
         detail = `aHash ${(d.audio_hash || '').slice(0, 8)}... (${d.distance || 0}/64 dist, ${d.latency_ms || 0.3}ms)`;
       } else if (t === 'tool_recorded') {
-        badgeColor = 'var(--accent-sky)';
+        chipClass = 'chip-neu';
         badgeLabel = 'RECORDED';
         detail = `${d.tool_name || 'tool'} (${d.ttl_seconds || 300}s TTL)`;
       } else if (t === 'mutation_blocked') {
-        badgeColor = 'var(--accent-rose)';
+        chipClass = 'chip-neu chip-error';
         badgeLabel = 'BLOCKED';
         detail = `${d.tool_name || 'mutative_tool'}`;
       } else if (t === 'cache_hit') {
-        badgeColor = 'var(--accent-emerald)';
+        chipClass = 'chip-neu chip-success';
         badgeLabel = d.status || 'HIT';
         detail = `${d.model || ''} +${d.tokens_saved || 0} tok ($${d.savings_usd || '0.00'})`;
       } else if (t === 'workspace_warmed') {
-        badgeColor = 'var(--accent-amber)';
+        chipClass = 'chip-neu chip-warning';
         badgeLabel = 'WARMED';
         detail = `${d.files_warmed || 0} files in ${d.duration_ms || 0}ms`;
       } else if (t === 'swarm_hit') {
-        badgeColor = 'var(--accent-amber)';
+        chipClass = 'chip-neu chip-warning';
         badgeLabel = 'SWARM HIT';
         detail = `${d.origin_agent || 'agent'} -> ${d.requesting_agent || 'subagent'} (+${d.tokens_saved || 0} tok)`;
       } else if (t === 'swarm_delegation') {
-        badgeColor = 'var(--accent-amber)';
+        chipClass = 'chip-neu chip-warning';
         badgeLabel = 'DELEGATED';
         detail = `${d.parent_agent || 'lead'} -> ${d.subagent_id || 'subagent'}`;
       } else if (t === 'swarm_invalidation') {
-        badgeColor = 'var(--accent-rose)';
+        chipClass = 'chip-neu chip-error';
         badgeLabel = 'SWARM PURGE';
         detail = `mutated: ${d.mutated_resource || 'workspace'}`;
       } else if (t === 'mesh_peer_registered') {
-        badgeColor = 'var(--accent-sky)';
+        chipClass = 'chip-neu';
         badgeLabel = 'MESH PEER';
         detail = `${d.endpoint || ''} (${d.node_id || ''})`;
       } else if (t === 'mesh_sync_processed') {
-        badgeColor = 'var(--accent-sky)';
+        chipClass = 'chip-neu';
         badgeLabel = 'MESH SYNC';
         detail = `sync from ${d.remote_node_id || 'peer'} (+${d.tombstones_applied || 0} tombstones)`;
       } else if (t === 'mesh_tombstone_applied') {
-        badgeColor = '#ec4899';
+        chipClass = 'chip-neu chip-error';
         badgeLabel = 'TOMBSTONE';
         detail = `${d.resource_id || ''} (${d.reason || ''})`;
       } else if (t === 'model_cascaded') {
-        badgeColor = 'var(--accent-amber)';
+        chipClass = 'chip-neu chip-warning';
         badgeLabel = 'CASCADED';
         detail = `${d.requested_model} -> ${d.routed_model} (${d.tier})`;
       } else if (t === 'quantized_embeddings_generated' || t === 'quantized_embed') {
-        badgeColor = 'var(--accent-violet)';
+        chipClass = 'chip-neu';
         badgeLabel = 'QUANT EMBED';
         detail = `${d.count || 1} text(s), ${d.dimensions || 256}d int8 (${d.duration_ms || 0.4}ms)`;
       } else {
@@ -1251,13 +1254,12 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       }
 
       const item = document.createElement('div');
-      item.className = 'feed-item';
-      item.style.borderLeft = '2px solid ' + badgeColor;
+      item.className = 'feed-item-neu';
       item.innerHTML = `
-        <div style="display: flex; gap: 0.5rem; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-          <span style="color: var(--text-dim); font-size: 0.65rem;">${time}</span>
-          <span style="color: ${badgeColor}; font-weight: 600; font-size: 0.65rem;">${badgeLabel}</span>
-          <span style="color: var(--text-muted); font-size: 0.7rem;">${detail}</span>
+        <div style="display: flex; gap: 0.6rem; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+          <span style="color: var(--text-caption); font-size: 0.68rem;">${time}</span>
+          <span class="${chipClass}" style="font-size: 0.65rem; padding: 0.1rem 0.5rem;">${badgeLabel}</span>
+          <span style="color: var(--text-main); font-size: 0.72rem; font-weight: 500;">${detail}</span>
         </div>
       `;
 
@@ -1270,7 +1272,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     function clearEventFeed() {
       const feed = document.getElementById('live-event-feed');
       if (feed) {
-        feed.innerHTML = '<div style="color: var(--text-dim); font-style: italic;">Feed cleared. Waiting for events...</div>';
+        feed.innerHTML = '<div style="color: var(--text-caption); font-style: italic;">Feed cleared. Waiting for events...</div>';
       }
     }
 

@@ -717,6 +717,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
   </div>
 
   <script>
+    const API_BASE = (window.location.protocol === 'file:' || !window.location.host) ? 'http://localhost:8000' : '';
     let currentMode = 'claude';
 
     function setApiMode(mode) {
@@ -734,7 +735,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const model = document.getElementById('model-select').value;
       if (!prompt) return;
 
-      const endpoint = currentMode === 'claude' ? '/v1/messages' : '/v1/chat/completions';
+      const endpoint = `${API_BASE}${currentMode === 'claude' ? '/v1/messages' : '/v1/chat/completions'}`;
       
       const payload = currentMode === 'claude' ? {
         model: model,
@@ -988,7 +989,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function refreshData() {
       try {
-        const res = await fetch('/v1/cache/stats');
+        const res = await fetch(`${API_BASE}/v1/cache/stats`);
         const data = await res.json();
 
         const sys = data.system_info || {};
@@ -1026,7 +1027,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         updateCharts(totalSavedUsd, totalTokensSaved, exact + (ee.agent_tokens_compacted || 0), semantic, toolHits, visionHits, misses);
 
         // Quotas
-        const qRes = await fetch('/v1/enterprise/quotas');
+        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`);
         const qData = await qRes.json();
         const qContainer = document.getElementById('quotas-container');
         if (qContainer && typeof qData === 'object' && !qData.error) {
@@ -1048,7 +1049,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const btn = document.getElementById('btn-warm-ws');
       if (btn) btn.textContent = 'Warming...';
       try {
-        const res = await fetch('/v1/workspace/warm', {
+        const res = await fetch(`${API_BASE}/v1/workspace/warm`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ directory: '.', max_files: 50 })
@@ -1069,7 +1070,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function refreshWorkspaceData() {
       try {
-        const wsRes = await fetch('/v1/workspace/sync/status');
+        const wsRes = await fetch(`${API_BASE}/v1/workspace/sync/status`);
         if (wsRes.ok) {
           const wsData = await wsRes.json();
           const refElem = document.getElementById('ws-git-ref');
@@ -1086,7 +1087,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           if (tokensElem) tokensElem.textContent = `${(wsData.estimated_tokens_saved || 0).toLocaleString()} tokens`;
         }
 
-        const polRes = await fetch('/v1/agent/tools/policies');
+        const polRes = await fetch(`${API_BASE}/v1/agent/tools/policies`);
         if (polRes.ok) {
           const polData = await polRes.json();
           const pList = document.getElementById('tool-policies-list');
@@ -1114,7 +1115,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     function initWebSocket() {
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const host = (window.location.protocol === 'file:' || !window.location.host) ? 'localhost:8000' : window.location.host;
+      const wsUrl = `${protocol}//${host}/ws`;
 
       try {
         ws = new WebSocket(wsUrl);

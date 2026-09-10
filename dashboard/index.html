@@ -37,11 +37,13 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      background-color: var(--c-obsidian);
+      background-color: #0e1c27;
       background-image: 
-        linear-gradient(rgba(74, 92, 106, 0.15) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(74, 92, 106, 0.15) 1px, transparent 1px);
-      background-size: 24px 24px;
+        linear-gradient(rgba(74, 92, 106, 0.18) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74, 92, 106, 0.18) 1px, transparent 1px),
+        linear-gradient(180deg, #9fa9ab 0%, #687984 18%, #3e505e 42%, #223442 70%, #0e1c27 100%);
+      background-size: 24px 24px, 24px 24px, 100% 100%;
+      background-attachment: fixed;
       color: var(--c-frost);
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh;
@@ -72,14 +74,17 @@
 
     /* Top Brand Header Bar */
     .header-bar {
+      background: var(--c-midnight);
+      border-radius: var(--radius-card);
+      box-shadow: var(--neu-flat-2);
+      border: 1px solid rgba(74, 92, 106, 0.4);
+      padding: 1.25rem 1.75rem;
+      margin-bottom: 2rem;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 2rem;
       flex-wrap: wrap;
       gap: 1.25rem;
-      padding-bottom: 1.25rem;
-      border-bottom: 1px solid rgba(74, 92, 106, 0.35);
     }
 
     .brand-title {

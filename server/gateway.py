@@ -838,13 +838,17 @@ async def handle_chat_completions(request: Request) -> Response:
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         is_playground = request.headers.get("x-dashboard-playground") == "true" or org_id == "enterprise_user"
+        supplied_key = (request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("Bearer ")).strip()
+        has_client_key = bool(supplied_key and supplied_key not in ("default", ""))
+
         if status_code != 200 and is_playground:
-            user_text = ""
-            for m in payload.get("messages", []):
-                if isinstance(m, dict) and m.get("role") == "user":
-                    user_text = str(m.get("content", ""))
-            res_data = generate_sandbox_playground_completion(user_text, routed_model, is_claude=False)
-            status_code = 200
+            if not has_client_key and not config.OPENAI_API_KEY:
+                user_text = ""
+                for m in payload.get("messages", []):
+                    if isinstance(m, dict) and m.get("role") == "user":
+                        user_text = str(m.get("content", ""))
+                res_data = generate_sandbox_playground_completion(user_text, routed_model, is_claude=False)
+                status_code = 200
 
         if not is_leader:
             METRICS_LEDGER["singleflight_coalesced_count"] += 1
@@ -1609,17 +1613,21 @@ async def handle_anthropic_messages(request: Request) -> Response:
     latency_ms = (time.perf_counter() - start_time) * 1000
 
     is_playground = request.headers.get("x-dashboard-playground") == "true" or org_id == "enterprise_user"
+    supplied_key = (request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("Bearer ")).strip()
+    has_client_key = bool(supplied_key and supplied_key not in ("default", ""))
+
     if status_code != 200 and is_playground:
-        user_text = ""
-        for m in messages:
-            if isinstance(m, dict) and m.get("role") == "user":
-                c = m.get("content", "")
-                if isinstance(c, list):
-                    user_text = " ".join(str(b.get("text", "")) for b in c if isinstance(b, dict))
-                else:
-                    user_text = str(c)
-        anthropic_res = generate_sandbox_playground_completion(user_text, requested_model, is_claude=True)
-        status_code = 200
+        if not has_client_key and not config.ANTHROPIC_API_KEY:
+            user_text = ""
+            for m in messages:
+                if isinstance(m, dict) and m.get("role") == "user":
+                    c = m.get("content", "")
+                    if isinstance(c, list):
+                        user_text = " ".join(str(b.get("text", "")) for b in c if isinstance(b, dict))
+                    else:
+                        user_text = str(c)
+            anthropic_res = generate_sandbox_playground_completion(user_text, requested_model, is_claude=True)
+            status_code = 200
 
     if not is_leader:
         METRICS_LEDGER["singleflight_coalesced_count"] += 1

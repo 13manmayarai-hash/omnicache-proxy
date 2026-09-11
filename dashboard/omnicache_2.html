@@ -685,8 +685,11 @@
           <div class="input-group">
             <label class="input-label">ROUTED_MODEL_TARGET</label>
             <select id="model-select" class="input-hud">
-              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Anthropic Native)</option>
-              <option value="claude-haiku-4-5-20251001">claude-haiku-4.5 (High Speed)</option>
+              <option value="claude-3-5-sonnet-20241022">claude-3-5-sonnet-20241022 (Anthropic Frontier)</option>
+              <option value="claude-3-7-sonnet-20250219">claude-3-7-sonnet-20250219 (Hybrid Reasoning)</option>
+              <option value="claude-3-5-haiku-20241022">claude-3-5-haiku-20241022 (Fast & Lightweight)</option>
+              <option value="claude-3-opus-20240229">claude-3-opus-20240229 (Complex Analysis)</option>
+              <option value="claude-sonnet-4-5-20250929">claude-sonnet-4.5 (Auto-maps to 3.5 Sonnet)</option>
               <option value="gpt-4o">gpt-4o (Frontier Core)</option>
               <option value="gemini-2.5-flash">gemini-2.5-flash (Economy)</option>
             </select>
@@ -695,9 +698,19 @@
           <div class="input-group">
             <div class="input-label">
               <span>CLIENT_AUTH_KEY (OPTIONAL)</span>
-              <span style="color: var(--text-white); font-size: 0.7rem; font-weight: 700;">SANDBOX_ACTIVE</span>
+              <span id="key-mode-indicator" style="color: var(--text-white); font-size: 0.7rem; font-weight: 700;">SANDBOX_ACTIVE</span>
             </div>
-            <input type="password" id="playground-api-key" class="input-hud" placeholder="sk-ant-... or sk-... (stored locally)" onchange="localStorage.setItem('omnicache_key', this.value)" />
+            <input type="password" id="playground-api-key" class="input-hud" placeholder="sk-ant-... or sk-... (stored locally)" oninput="updateKeyIndicator(this.value)" onchange="localStorage.setItem('omnicache_key', this.value); updateKeyIndicator(this.value);" />
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -0.25rem; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.5rem;">
+            <label style="display: flex; align-items: center; gap: 0.45rem; font-size: 0.7rem; color: var(--text-silver); cursor: pointer;">
+              <input type="checkbox" id="bypass-cache-toggle" style="accent-color: #ffffff;">
+              <span>[ BYPASS_CACHE ] Force live upstream (Skip local cache)</span>
+            </label>
+            <button onclick="purgePlaygroundCache()" class="btn-hud" style="padding: 0.2rem 0.6rem; font-size: 0.68rem; color: #ff8888; border-color: rgba(255, 100, 100, 0.35);">
+              [ PURGE_CACHE ]
+            </button>
           </div>
 
           <div class="input-group">
@@ -719,6 +732,8 @@
 
           <!-- Live Result Box -->
           <div id="test-result-container" class="hud-card" style="margin-top: 1.25rem; padding: 1rem; display: none; background: #000000; border-color: rgba(255,255,255,0.3);">
+            <div id="res-source-banner" style="margin-bottom: 0.75rem; padding: 0.45rem 0.7rem; font-size: 0.72rem; font-family: var(--font-mono); border: 1px solid var(--border-hud); display: none;"></div>
+
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.76rem;">
               <span id="res-status-badge" class="chip-hud chip-success">STATUS</span>
               <span id="res-latency" style="color: var(--text-silver); font-weight: 700;">0.00 ms</span>
@@ -739,7 +754,7 @@
               </div>
             </div>
 
-            <pre id="res-content" class="pre-hud" style="white-space: pre-wrap; max-height: 160px; overflow-y: auto;"></pre>
+            <pre id="res-content" class="pre-hud" style="white-space: pre-wrap; max-height: 180px; overflow-y: auto;"></pre>
           </div>
         </div>
 
@@ -900,6 +915,33 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       document.getElementById('prompt-input').value = "Analyze customer record for Alice (SSN: 123-45-6789, Email: alice@example.com, Card: 4111-1111-1111-1111).";
     }
 
+    function updateKeyIndicator(val) {
+      const ind = document.getElementById('key-mode-indicator');
+      if (!ind) return;
+      if (val && val.trim().length > 6) {
+        ind.textContent = 'LIVE_KEY_ATTACHED';
+        ind.style.color = '#56ff89';
+      } else {
+        ind.textContent = 'SANDBOX_ACTIVE';
+        ind.style.color = 'var(--text-white)';
+      }
+    }
+
+    async function purgePlaygroundCache() {
+      if (!confirm('Purge all cached responses for current tenant to test fresh upstream requests?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/cache/purge`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'x-org-id': 'enterprise_user'}
+        });
+        const d = await res.json();
+        alert(`Purged ${d.purged_entries || 0} entries from cache.`);
+        await refreshData();
+      } catch (e) {
+        alert('Purge failed: ' + e.message);
+      }
+    }
+
     async function sendTestPrompt(overridePrompt = null) {
       const prompt = overridePrompt || document.getElementById('prompt-input').value.trim();
       const model = document.getElementById('model-select').value;
@@ -920,16 +962,24 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const t0 = performance.now();
       try {
         const storedKey = document.getElementById('playground-api-key')?.value.trim() || '';
+        const bypassCache = document.getElementById('bypass-cache-toggle')?.checked || false;
+
         const reqHeaders = {
           'Content-Type': 'application/json',
           'x-org-id': 'enterprise_user',
           'x-dashboard-playground': 'true'
         };
+
+        if (bypassCache) {
+          reqHeaders['x-cache-bypass'] = 'true';
+        }
+
         if (storedKey) {
+          const cleanKey = storedKey.replace(/^Bearer\s+/i, '').trim();
           if (currentMode === 'claude') {
-            reqHeaders['x-api-key'] = storedKey;
+            reqHeaders['x-api-key'] = cleanKey;
           } else {
-            reqHeaders['Authorization'] = `Bearer ${storedKey}`;
+            reqHeaders['Authorization'] = `Bearer ${cleanKey}`;
           }
         }
 
@@ -941,15 +991,20 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
         const dt = (performance.now() - t0).toFixed(2);
         const data = await res.json();
-        const cacheStatus = res.headers.get('X-Cache-Status') || 'MISS';
+        const cacheStatus = res.headers.get('X-Cache-Status') || (res.status === 200 ? 'MISS' : 'ERROR');
         const similarity = res.headers.get('X-Cache-Similarity') || '1.0000';
         const costSaved = res.headers.get('X-Cost-Saved-USD') || '0.000000';
         const tokensUsed = res.headers.get('X-Tokens-Used') || '0';
         const tokensSaved = res.headers.get('X-Tokens-Saved') || '0';
         const routedModel = res.headers.get('X-Routed-Model') || model;
 
+        const isSandboxMock = data.id && String(data.id).startsWith('msg_sandbox_');
+        const isError = res.status !== 200 || data.error;
+
         let textContent = '';
-        if (currentMode === 'claude') {
+        if (data.error) {
+          textContent = `[ERROR HTTP ${res.status}] ${data.error.message || JSON.stringify(data.error, null, 2)}`;
+        } else if (currentMode === 'claude') {
           textContent = data.content?.[0]?.text || JSON.stringify(data, null, 2);
         } else {
           textContent = data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
@@ -959,13 +1014,37 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         container.style.display = 'block';
         
         const badge = document.getElementById('res-status-badge');
-        badge.textContent = cacheStatus;
-        if (cacheStatus.includes('HIT')) {
+        badge.textContent = isError ? 'ERROR' : cacheStatus;
+        if (isError) {
+          badge.className = 'chip-hud chip-error';
+        } else if (cacheStatus.includes('HIT')) {
           badge.className = 'chip-hud chip-success';
         } else if (cacheStatus.includes('SEMANTIC')) {
           badge.className = 'chip-hud chip-warning';
         } else {
           badge.className = 'chip-hud chip-error';
+        }
+
+        const sourceBanner = document.getElementById('res-source-banner');
+        if (sourceBanner) {
+          sourceBanner.style.display = 'block';
+          if (isError) {
+            sourceBanner.style.borderColor = '#ff4444';
+            sourceBanner.style.color = '#ff6b6b';
+            sourceBanner.textContent = '❌ [ UPSTREAM_ERROR ]: ' + (data.error?.message || `HTTP ${res.status} returned by remote provider`);
+          } else if (cacheStatus.includes('HIT')) {
+            sourceBanner.style.borderColor = '#56ff89';
+            sourceBanner.style.color = '#56ff89';
+            sourceBanner.textContent = `⚡ [ CACHE_HIT ]: Served instantly from OmniCache memory in ${dt} ms (Saved 100% cost, $0 billed to Anthropic account).`;
+          } else if (isSandboxMock) {
+            sourceBanner.style.borderColor = 'rgba(255, 255, 255, 0.4)';
+            sourceBanner.style.color = 'var(--text-silver)';
+            sourceBanner.textContent = '🧪 [ SANDBOX_SIMULATION ]: Zero-key local mock demo. (Add your Anthropic API key above & click [BYPASS_CACHE] to test live billing).';
+          } else {
+            sourceBanner.style.borderColor = '#00e5ff';
+            sourceBanner.style.color = '#00e5ff';
+            sourceBanner.textContent = `🌐 [ LIVE_UPSTREAM_HIT ]: Executed by Anthropic API using your API key (Billed to your Anthropic account).`;
+          }
         }
 
         document.getElementById('res-latency').textContent = `${dt} ms`;
@@ -1397,7 +1476,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const savedKey = localStorage.getItem('omnicache_key');
       if (savedKey) {
         const keyInput = document.getElementById('playground-api-key');
-        if (keyInput) keyInput.value = savedKey;
+        if (keyInput) {
+          keyInput.value = savedKey;
+          updateKeyIndicator(savedKey);
+        }
       }
 
       initTopographicWave();

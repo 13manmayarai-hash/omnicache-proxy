@@ -299,6 +299,25 @@ class UpstreamClient:
             sanitized.append(m_copy)
         return sanitized
 
+    @staticmethod
+    def _normalize_anthropic_model(model_name: str) -> str:
+        if not model_name:
+            return "claude-3-5-sonnet-20241022"
+        aliases = {
+            "claude-sonnet-4-5-20250929": "claude-3-5-sonnet-20241022",
+            "claude-sonnet-4.5": "claude-3-5-sonnet-20241022",
+            "claude-haiku-4-5-20251001": "claude-3-5-haiku-20241022",
+            "claude-haiku-4.5": "claude-3-5-haiku-20241022",
+            "claude-3-7-sonnet": "claude-3-7-sonnet-20250219",
+            "claude-3.7-sonnet": "claude-3-7-sonnet-20250219",
+            "claude-3-5-sonnet": "claude-3-5-sonnet-20241022",
+            "claude-3.5-sonnet": "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku": "claude-3-5-haiku-20241022",
+            "claude-3.5-haiku": "claude-3-5-haiku-20241022",
+            "claude-3-opus": "claude-3-opus-20240229",
+        }
+        return aliases.get(model_name, model_name)
+
     def _build_anthropic_headers(self, incoming_headers: Optional[Dict[str, str]] = None, payload: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         headers = {
             "Content-Type": "application/json",
@@ -319,17 +338,21 @@ class UpstreamClient:
                 "anthropic-dangerous-direct-browser-access", "user-agent",
                 "x-anthropic-client", "x-app"
             ) or k_lower.startswith("anthropic-") or k_lower.startswith("x-anthropic-") or k_lower.startswith("x-stainless-"):
-                headers[k_lower] = v
                 if k_lower == "x-api-key":
+                    clean_key = v.removeprefix("Bearer ").strip()
+                    headers["x-api-key"] = clean_key
                     has_x_api_key = True
+                else:
+                    headers[k_lower] = v
             elif k_lower == "authorization":
                 headers["authorization"] = v
                 has_auth = True
-                if v.startswith("Bearer sk-ant-api") and not has_x_api_key:
-                    headers["x-api-key"] = v[7:].strip()
+                clean_auth = v.removeprefix("Bearer ").strip()
+                if (clean_auth.startswith("sk-ant-") or clean_auth.startswith("sk-")) and not has_x_api_key:
+                    headers["x-api-key"] = clean_auth
                     has_x_api_key = True
 
-        if not has_x_api_key and not has_auth and config.ANTHROPIC_API_KEY:
+        if not has_x_api_key and config.ANTHROPIC_API_KEY:
             headers["x-api-key"] = config.ANTHROPIC_API_KEY
 
         # Ensure prompt-caching beta header is attached if cache_control is used in payload
@@ -359,6 +382,9 @@ class UpstreamClient:
             clean_payload["messages"] = self._sanitize_anthropic_messages(clean_payload["messages"])
         if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
             clean_payload["max_tokens"] = 8192
+
+        if "model" in clean_payload:
+            clean_payload["model"] = self._normalize_anthropic_model(clean_payload["model"])
 
         headers = self._build_anthropic_headers(incoming_headers, payload=clean_payload)
         model_name = clean_payload.get("model", "claude")
@@ -427,6 +453,9 @@ class UpstreamClient:
             clean_payload["messages"] = self._sanitize_anthropic_messages(clean_payload["messages"])
         if "max_tokens" not in clean_payload and "max_tokens_to_sample" not in clean_payload:
             clean_payload["max_tokens"] = 8192
+
+        if "model" in clean_payload:
+            clean_payload["model"] = self._normalize_anthropic_model(clean_payload["model"])
 
         headers = self._build_anthropic_headers(incoming_headers, payload=clean_payload)
         model_name = clean_payload.get("model", "claude")

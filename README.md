@@ -2,8 +2,8 @@
 
 # ⚡ OmniCache
 
-### The Deterministic Git-Aware Local AI Agent Acceleration Sidecar
-**Never pay for the same tool call twice. Replay unchanged Claude Code & Cursor operations in `<0.1ms` with `$0.00` token spend.**
+### Cut your Claude Code & Cursor API bills by 40%–70%.
+**Stop burning tokens and hitting rate limits re-reading unchanged files. Replay agent tool calls, file reads, and repeated prompts on localhost in `<0.1ms` for `$0.00`.**
 
 <br/>
 
@@ -15,14 +15,22 @@
 
 <br/>
 
+```bash
+# ⚡ 10-Second Quickstart (Zero Configuration Needed)
+pip install omnicache-proxy
+omnicache run claude
+```
+
+<br/>
+
 <table>
   <tr>
+    <td align="center"><a href="#-why-omnicache"><b>💡 The Problem & Fix</b></a></td>
     <td align="center"><a href="#-60-second-quickstart"><b>🚀 Quick Start</b></a></td>
     <td align="center"><a href="#-architecture"><b>📐 Architecture</b></a></td>
-    <td align="center"><a href="#-why-omnicache-vs-native-provider-caching"><b>💡 Why OmniCache</b></a></td>
     <td align="center"><a href="#-verified-performance-benchmarks"><b>⚡ Benchmarks</b></a></td>
     <td align="center"><a href="#-drop-in-agent-support"><b>🤖 Agent Presets</b></a></td>
-    <td align="center"><a href="#-minimalistic-glassmorphism-dashboard"><b>📊 Dashboard</b></a></td>
+    <td align="center"><a href="#-dashboards-dual-themes"><b>📊 Dashboards</b></a></td>
     <td align="center"><a href="#-command-cheatsheet"><b>🛠️ CLI Tools</b></a></td>
   </tr>
 </table>
@@ -33,7 +41,12 @@
 
 ---
 
-## 💎 At a Glance
+## 💡 Why OmniCache?
+
+When autonomous coding agents (**Claude Code**, **Cursor**, **Aider**, **Cline**) work on your codebase, up to **60%–80% of your token burn and latency** goes into repetitive disk and file reads:
+* Re-reading `package.json`, `tsconfig.json`, directory trees, and lint rules on **every single turn**.
+* Running test suites, git diffs, or bash inspection commands where the underlying code has **not changed**.
+* Paying frontier cloud input prices ($3–$15 per million tokens) and waiting **1,200ms–2,500ms** per roundtrip for identical content.
 
 ```text
 ┌────────────────────────┬────────────────────────┬────────────────────────┬────────────────────────┐
@@ -42,12 +55,17 @@
 └────────────────────────┴────────────────────────┴────────────────────────┴────────────────────────┘
 ```
 
-When autonomous coding agents (**Claude Code**, **Cursor**, **Aider**, **Cline**) execute multi-turn development loops, up to **60%–80% of token burn and latency** goes into repetitive disk reads:
-* Re-reading `package.json`, `tsconfig.json`, directory trees, and lint rules on every conversation turn.
-* Running test suites, git diffs, or bash inspection commands where the underlying code has **not changed**.
-* Incurring **1,000ms–2,500ms** remote cloud roundtrips and paying frontier input token prices for identical context.
+### The Difference:
 
-**OmniCache** sits transparently on `127.0.0.1:8000`. It cryptographically fingerprints your local Git tree and workspace file modification times (`mtime`). If the files haven't changed, the agent receives the exact tool output or cached completion from local SQLite WAL memory in **under 0.1ms** without touching the internet. The second you edit a file or git commit, affected cache entries are **instantly evicted**.
+| Scenario | Without OmniCache | With OmniCache Sidecar |
+| :--- | :--- | :--- |
+| **Re-reading unchanged files & directory trees** | 1,200ms–2,500ms cloud lag + full token cost | **`<0.1ms` local replay + $0.00 token cost** |
+| **Running test suites on unchanged code** | Burns 5k–20k input tokens on repeat | **0 tokens burned** (served from SQLite WAL memory) |
+| **Anthropic & OpenAI Rate Limits** | Frequent `429 Rate Limit` interruptions | **Vastly reduced** (cached turns never touch the cloud) |
+| **Workspace File Edits** | Risk of stale or hallucinated context | **Instant invalidation** (SHA-256 Git & mtime tracking) |
+| **Data Privacy** | Code sent across the wire on every turn | **100% Localhost** with HMAC-SHA256 PII redaction |
+
+**How it works:** OmniCache sits transparently on `127.0.0.1:8000`. It cryptographically fingerprints your local Git tree and workspace file modification times (`mtime`). If the files haven't changed, the agent receives the exact tool output or cached completion from local SQLite WAL memory in **under 0.1ms** without touching the internet. The second you edit a file or git commit, affected cache entries are **instantly evicted**.
 
 ---
 
@@ -199,22 +217,22 @@ export OPENAI_API_BASE="http://127.0.0.1:8000/v1"
 
 ---
 
-## 📊 Minimalistic Glassmorphism Dashboard
+## 📊 Dashboards (Dual Themes)
 
-OmniCache includes an integrated developer observability dashboard styled with a modern frosted glass aesthetic:
+OmniCache includes two built-in real-time developer dashboards served side-by-side:
 
-```text
-http://localhost:8000/dashboard
-```
+### 1. Minimalist Frosted Glass (`http://localhost:8000/dashboard`)
+* **Clean & Executive:** Modern dark monochrome design system with soft elevation.
+* **Token Savings Spline:** Live Chart.js velocity tracker plotting avoided spend over time.
+* **Resolution Distribution Matrix:** Visual breakdown of L1 Exact hits, L2 Semantic matches, and Git Tool replays.
 
-* **Live Financial & Token Telemetry:** Real-time metrics for avoided dollar spend, total tokens avoided, and cache hit rates.
-* **Velocity Stream:** Real-time Chart.js spline graph tracking token savings velocity across active agent turns.
-* **Resolution Doughnut:** Real-time distribution between L1 Exact hits, L2 Semantic matches, and Agent Tool replays.
-* **Interactive Gateway Sandbox:** Test Claude Messages and OpenAI Chat Completions in-browser with live token accounting.
-* **Workspace Git Memory:** View dirty/clean git status and pre-warm repository file caches on demand.
+### 2. Cybernetic Topographic HUD (`http://localhost:8000/omnicache_2`)
+* **Pulsar Wireframe Telemetry:** Interactive 3D HTML5 Canvas topographic wave mountain that undulates with live agent traffic.
+* **Oscilloscope Frequency Visualizer:** Real-time frequency line monitor tracking request throughput and token economics.
+* **Live Sandbox & Upstream Inspection:** Test Claude Messages and OpenAI completions in-browser with instant cache-bypass toggles and transparent billing indicators.
 
 > [!TIP]
-> Run `omnicache demo` to launch an interactive 30-second live simulation that streams realistic agent events directly to your browser dashboard.
+> Run `omnicache demo` in your terminal to launch an automated 30-second live simulation that streams realistic coding agent events directly to your dashboard!
 
 ---
 

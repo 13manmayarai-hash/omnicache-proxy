@@ -1215,7 +1215,7 @@ def main():
         description="OmniCache - Local Acceleration Sidecar for AI Coding Agents."
     )
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {config.VERSION}")
-    parser.add_argument("command", nargs="?", default="start", choices=["start", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync", "mesh", "demo"], help="Action to perform (default: start)")
+    parser.add_argument("command", nargs="?", default="start", choices=["start", "mcp", "run", "init", "doctor", "benchmark", "harness", "verify-agent", "stats", "health", "ci-summary", "reset-circuit", "version", "warm", "sync", "mesh", "demo"], help="Action to perform (default: start)")
     parser.add_argument("-p", "--port", type=int, default=config.PORT, help=f"Port to bind server to (default: {config.PORT})")
     parser.add_argument("-H", "--host", type=str, default=config.HOST, help=f"Host interface (default: {config.HOST})")
     parser.add_argument("--agent", type=str, default="all", choices=["all", "claude", "cursor", "cline", "openhands", "env", "voice", "livekit", "twilio", "audio", "realtime", "multimodal", "cascade", "arbiter", "swarm"], help="Target agent preset for init (default: all)")
@@ -1235,7 +1235,11 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "demo":
+    if args.command == "mcp":
+        from mcp.server import run_stdio_server
+        run_stdio_server()
+        sys.exit(0)
+    elif args.command == "demo":
         run_demo()
         sys.exit(0)
     elif args.command == "init":
@@ -1267,7 +1271,7 @@ def main():
         run_reset_circuit(provider=args.provider)
         sys.exit(0)
     elif args.command == "version":
-        print(f"omnicache {config.VERSION}")
+        print(f"OmniCache {config.VERSION}")
         sys.exit(0)
     elif args.command == "warm":
         run_warm(workspace_dir=args.dir, ref=args.ref, max_files=args.max_files)

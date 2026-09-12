@@ -90,5 +90,31 @@ class TestOmniCacheMCP(unittest.TestCase):
         # Cleanup
         proc.terminate()
 
+    def test_mcp_cli_command(self):
+        cli_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "server", "cli.py"))
+        proc = subprocess.Popen(
+            ["python3", cli_script, "mcp"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}) + "\n")
+        proc.stdin.flush()
+        out_line = proc.stdout.readline()
+        res = json.loads(out_line)
+        self.assertEqual(res["result"]["serverInfo"]["name"], "omnicache-mcp")
+
+        proc.stdin.write(json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}) + "\n")
+        proc.stdin.flush()
+        out_line_tools = proc.stdout.readline()
+        res_tools = json.loads(out_line_tools)
+        tool_names = [t["name"] for t in res_tools["result"]["tools"]]
+        self.assertIn("omnicache_query", tool_names)
+        self.assertIn("omnicache_store", tool_names)
+
+        proc.terminate()
+
 if __name__ == "__main__":
     unittest.main()

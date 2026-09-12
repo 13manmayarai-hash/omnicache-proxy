@@ -348,7 +348,7 @@ class UpstreamClient:
                 headers["authorization"] = v
                 has_auth = True
                 clean_auth = v.removeprefix("Bearer ").strip()
-                if (clean_auth.startswith("sk-ant-") or clean_auth.startswith("sk-")) and not has_x_api_key:
+                if (clean_auth.startswith("sk-ant-") or clean_auth.startswith("sk-")) and not clean_auth.startswith("sk-ant-oat") and not has_x_api_key:
                     headers["x-api-key"] = clean_auth
                     has_x_api_key = True
 

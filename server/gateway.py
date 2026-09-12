@@ -8,6 +8,7 @@ vision perceptual caching, and explainable decision auditing.
 import time
 import json
 import os
+import sys
 import asyncio
 import collections
 from typing import Dict, Any, Optional, Tuple, List, Set
@@ -74,7 +75,7 @@ METRICS_LEDGER = {
 
 loaded_entries = snapshot_store.load_into_cache(cache_instance)
 if loaded_entries > 0:
-    print(f"📦 [OmniCache] Restored {loaded_entries} cached entries from SQLite snapshot.")
+    print(f"📦 [OmniCache] Restored {loaded_entries} cached entries from SQLite snapshot.", file=sys.stderr)
 
 if hasattr(cache_instance.storage, "client") and cache_instance.storage.client is not None:
     flight_bus.set_redis_client(cache_instance.storage.client)

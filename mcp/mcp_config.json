@@ -1,11 +1,8 @@
 {
   "mcpServers": {
     "omnicache": {
-      "command": "python3",
-      "args": ["/root/omnicache_proxy/mcp/server.py"],
-      "env": {
-        "OMNICACHE_PORT": "8000"
-      }
+      "command": "omnicache",
+      "args": ["mcp"]
     }
   }
 }

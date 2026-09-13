@@ -37,8 +37,15 @@ class BaseEmbedder(ABC):
 
 class FastHashEmbedder(BaseEmbedder):
     """
-    Sub-millisecond semantic text embedder using high-dimensional hashed character/word n-gram 
-    content-term frequency projection, synonym canonicalization, and L2-unit normalization.
+    Sub-millisecond near-duplicate and fuzzy-match embedder using high-dimensional hashed
+    character/word n-gram content-term frequency projection, canonical synonym mapping,
+    and L2-unit normalization.
+
+    NOTE ON SCOPE & ARCHITECTURE:
+    This is a lightweight, zero-dependency lexical/subword n-gram projection engine designed for
+    near-duplicate rephrasings, whitespace/punctuation variations, and canonical synonym substitutions.
+    It is NOT a neural sentence-transformer model and intentionally does not perform abstract
+    cross-vocabulary semantic inference.
     """
     DIMENSIONS: int = 512
     
@@ -220,8 +227,13 @@ class AutoEmbedder(BaseEmbedder):
         return self.engine.embed(text)
 
 
-# Backward-compatible class adapter
+# Backward-compatible class adapter for fuzzy near-duplicate matching
 class FastSemanticEmbedder:
+    """
+    Fast Lexical & Near-Duplicate Fuzzy Embedder (aliased as FastSemanticEmbedder for API compatibility).
+    Uses high-speed subword n-gram hashing and canonical synonym canonicalization for local
+    near-duplicate prompt matching without deep learning dependencies.
+    """
     _instance = AutoEmbedder()
     DIMENSIONS = 512
 

@@ -21,6 +21,9 @@ from server.tool_replayer import (
 )
 from server.cascade_router import cascade_router, compute_shannon_entropy
 from core.p2p_mesh import P2PMesh, CRDTTombstone, HybridLogicalClock
+from core.embeddings import FastSemanticEmbedder
+from core.vector_cache import DualTierCache
+from core.config import config
 
 
 def test_01_untracked_file_cache_leak_remediation():
@@ -238,3 +241,151 @@ def test_05_dirty_file_successive_mutations_different_fingerprints():
 
         assert fp_a_scoped != fp_b_scoped, f"Scoped fingerprints matched across two different edits: {fp_a_scoped}"
         assert fp_a_global != fp_b_global, f"Global fingerprints matched across two different edits: {fp_a_global}"
+
+
+def test_06_untracked_external_mutation_self_verifying_invalidation():
+    """
+    Audit Finding 1 Remediation (Self-verifying git debounce):
+    Mutating a file via a path that does NOT go through the proxy's own tracked mutation flow
+    (e.g., a raw open().write() in the test, not a simulated 'tool call') must be detected
+    immediately (sub-100ms) by get_git_workspace_state via self-verifying stat signals,
+    asserting the fingerprint reflects the new state rather than a stale cached one.
+    """
+    with tempfile.TemporaryDirectory() as temp_repo:
+        subprocess.run(["git", "init", temp_repo], check=True, capture_output=True)
+        subprocess.run(["git", "-C", temp_repo, "config", "user.email", "audit@omnicache.ai"], check=True)
+        subprocess.run(["git", "-C", temp_repo, "config", "user.name", "Audit Runner"], check=True)
+
+        app_path = os.path.join(temp_repo, "app.py")
+        with open(app_path, "w") as f:
+            f.write("def main(): return 1\n")
+        subprocess.run(["git", "-C", temp_repo, "add", "."], check=True)
+        subprocess.run(["git", "-C", temp_repo, "commit", "-m", "Initial commit"], check=True)
+
+        invalidate_git_state_cache(temp_repo)
+
+        # 1. First lookup warms the debounce cache
+        state_initial = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+
+        # 2. Raw disk write outside the proxy (not passing through compact_and_record_agent_tools)
+        time.sleep(0.01)
+        with open(app_path, "a") as f:
+            f.write("# external modification outside proxy\n")
+
+        # 3. Immediate query (<50ms, well within any debounce window)
+        # MUST reflect the new state, not a cached stale one!
+        state_after_external_edit = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        assert state_after_external_edit != state_initial, (
+            "Failed: External disk edit was masked by stale debounced git state!"
+        )
+
+
+def test_07_fuzzy_match_curated_paraphrase_and_collision_boundaries():
+    """
+    Audit Finding 2 Remediation (Fuzzy/Lexical Cache Boundaries):
+    Verifies that the lightweight zero-dependency lexical/subword matching engine:
+    1. Rejects false-positive risk pairs (shared keywords, different meaning) -> MUST MISS.
+    2. Recognizes extreme vocabulary-disjoint paraphrases score low, documenting lexical bounds.
+    3. Reliably hits near-duplicate / fuzzy rephrasings with shared roots and canonical synonyms.
+    """
+    cache = DualTierCache()
+    model = "claude-3-5-sonnet-20241022"
+
+    # Part A: False-Positive-Risk Pairs (shared keywords, completely different meaning)
+    # Under DEFAULT_SIMILARITY_THRESHOLD (0.75), these MUST MISS to prevent dangerous cache poisoning.
+    false_positive_pairs = [
+        (
+            "How do I bank a campfire with damp ashes?",
+            "How do I deposit cash into my commercial bank account?",
+            "Coincidental 'bank' keyword collision"
+        ),
+        (
+            "Train a deep neural network on GPU cluster",
+            "Buy a passenger train ticket to London Euston",
+            "Coincidental 'train' keyword collision"
+        ),
+        (
+            "Kill a background Linux process with SIGKILL",
+            "How do antibiotics kill bacterial infections?",
+            "Coincidental 'kill' keyword collision"
+        ),
+        (
+            "Python dictionary key error in loop",
+            "Brass key to open the front door lock",
+            "Coincidental 'key' keyword collision"
+        ),
+    ]
+
+    for p_stored, p_query, label in false_positive_pairs:
+        # Check raw embedding cosine similarity
+        v1 = FastSemanticEmbedder.embed(p_stored)
+        v2 = FastSemanticEmbedder.embed(p_query)
+        sim = FastSemanticEmbedder.cosine_similarity(v1, v2)
+        assert sim < config.DEFAULT_SIMILARITY_THRESHOLD, (
+            f"False-positive risk pair '{label}' produced similarity {sim:.3f} >= {config.DEFAULT_SIMILARITY_THRESHOLD}"
+        )
+
+        # Verify through DualTierCache lookup -> MUST BE MISS!
+        cache.clear()
+        cache.store(
+            payload={"model": model, "messages": [{"role": "user", "content": p_stored}]},
+            response_payload={"choices": [{"message": {"role": "assistant", "content": f"Response for {p_stored}"}}]}
+        )
+        status, entry, lookup_sim, reason = cache.lookup(
+            payload={"model": model, "messages": [{"role": "user", "content": p_query}]}
+        )
+        assert status == "MISS", (
+            f"Collision regression: '{p_query}' triggered {status} (sim={lookup_sim:.3f}) against '{p_stored}'! Reason: {reason}"
+        )
+
+    # Part B: Extreme Vocabulary-Disjoint Paraphrases
+    # Demonstrates honest boundary: pure-Python subword/lexical hash engine does not pretend to have neural reasoning
+    disjoint_paraphrase_pairs = [
+        (
+            "What is the capital of France?",
+            "Which European metropolis serves as the administrative seat of the French Republic?"
+        ),
+        (
+            "How old is the universe?",
+            "What is the estimated cosmic age since the Big Bang?"
+        )
+    ]
+    for p1, p2 in disjoint_paraphrase_pairs:
+        v1 = FastSemanticEmbedder.embed(p1)
+        v2 = FastSemanticEmbedder.embed(p2)
+        sim = FastSemanticEmbedder.cosine_similarity(v1, v2)
+        # Vocabulary is disjoint, so cosine similarity is low (< 0.50)
+        assert sim < 0.50, f"Disjoint vocabulary unexpectedly high: {sim}"
+
+    # Part C: Intended Near-Duplicate / Fuzzy-Match Rephrasings
+    # These contain near-identical n-grams or mapped canonical synonyms -> MUST HIT!
+    fuzzy_hit_pairs = [
+        (
+            "How to reset my forgotten password instructions",
+            "How to recover reset password steps"
+        ),
+        (
+            "Fast sorting algorithms in Python",
+            "Fast Python sorting algorithm"
+        )
+    ]
+    for p_stored, p_query in fuzzy_hit_pairs:
+        v1 = FastSemanticEmbedder.embed(p_stored)
+        v2 = FastSemanticEmbedder.embed(p_query)
+        sim = FastSemanticEmbedder.cosine_similarity(v1, v2)
+        assert sim >= config.DEFAULT_SIMILARITY_THRESHOLD, (
+            f"Fuzzy pair should exceed threshold {config.DEFAULT_SIMILARITY_THRESHOLD}, got {sim:.3f}"
+        )
+
+        cache.clear()
+        cache.store(
+            payload={"model": model, "messages": [{"role": "user", "content": p_stored}]},
+            response_payload={"choices": [{"message": {"role": "assistant", "content": f"Response for {p_stored}"}}]}
+        )
+        status, entry, lookup_sim, reason = cache.lookup(
+            payload={"model": model, "messages": [{"role": "user", "content": p_query}]}
+        )
+        assert status == "HIT_SEMANTIC", (
+            f"Expected HIT_SEMANTIC for near-duplicate '{p_query}', got {status} (sim={lookup_sim:.3f})"
+        )
+

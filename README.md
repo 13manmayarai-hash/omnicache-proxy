@@ -99,7 +99,7 @@ flowchart TD
     GitCheck -->|"Unchanged (Hit)"| ToolStore
     GitCheck -->|"Prompt Re-evaluation"| L1
     L1 -->|"Exact Match"| ToolStore
-    L1 -->|"Semantic Match"| L2
+    L1 -->|"Fuzzy Match"| L2
     ToolStore -->|"Replay in <0.1ms ($0.00)"| Agent
     
     L2 -->|"Cache Miss"| Compactor
@@ -173,7 +173,7 @@ Measured on standard commodity ARM/x86 hardware running Python 3.10–3.14:
 Subsystem                        Est. Upstream Turn   OmniCache Replay   Speedup    Benefit
 ==================================================================================================
 L1 Exact Request Cache           ~450.00 ms (Est.)    0.0609 ms          7,390x     100% Token Savings
-L2 FastHash Semantic Vector      ~450.00 ms (Est.)    1.0232 ms            439x     90%+ Cosine Replay
+L2 FastHash Fuzzy/Near-Duplicate ~450.00 ms (Est.)    1.0232 ms            439x     Fuzzy Subword Match
 Agent Tool Replayer (Git-Aware)  ~1,200.00 ms (Est.)  0.3052 ms          3,931x     $0.00 Disk Thrashing
 Workspace CI/CD Pre-Warming      Cold Repo Scan       2781.43 ms         2 f/s      Pre-warmed 5 files
 ==================================================================================================

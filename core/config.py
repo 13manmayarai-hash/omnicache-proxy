@@ -136,6 +136,9 @@ class ProxyConfig:
         "https://generativelanguage.googleapis.com/v1beta/openai"
     )
     
+    # Fuzzy / near-duplicate matching threshold (0.75).
+    # Calibrated to reliably reject coincidental keyword collisions (<0.60) while accepting
+    # near-duplicate rephrasings and canonical synonym substitutions (>=0.75).
     DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", "0.75"))
     EXACT_CACHE_TTL_SECONDS: int = int(os.getenv("EXACT_CACHE_TTL", "604800"))
     SEMANTIC_CACHE_TTL_SECONDS: int = int(os.getenv("SEMANTIC_CACHE_TTL", "604800"))

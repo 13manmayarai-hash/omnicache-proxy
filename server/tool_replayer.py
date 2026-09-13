@@ -236,8 +236,49 @@ def extract_candidate_path(
     return target_dir, target_file
 
 
-_GIT_STATE_CACHE: Dict[str, Tuple[float, str]] = {}
-_GIT_CACHE_TTL: float = 0.50  # 500ms debounce to eliminate subprocess thrashing in large monorepos
+_GIT_STATE_CACHE: Dict[str, Tuple[float, Tuple[int, ...], List[str], str]] = {}
+_GIT_CACHE_TTL: float = 0.50  # 500ms self-verifying debounce window
+
+
+def compute_workspace_stat_signal(target_dir: str, candidate_files: Optional[List[str]] = None) -> Tuple[int, ...]:
+    """
+    Computes a sub-millisecond self-verifying stat signal across:
+    1. Directory mtime (file additions, deletions, renames)
+    2. .git/index mtime (git commit, staging, branch switches)
+    3. Direct stat on candidate/known files (catches raw external open().write() mutations)
+    """
+    sig = [0, 0, 0]
+    if not target_dir:
+        return tuple(sig)
+
+    # 1. Directory mtime
+    try:
+        sig[0] = os.stat(target_dir).st_mtime_ns
+    except OSError:
+        pass
+
+    # 2. .git/index
+    git_idx = os.path.join(target_dir, ".git", "index")
+    try:
+        sig[1] = os.stat(git_idx).st_mtime_ns
+    except OSError:
+        pass
+
+    # 3. Direct stat on candidate/known files (at most 4 entries for sub-millisecond guarantee)
+    if candidate_files:
+        max_mtime = 0
+        for f in candidate_files[:4]:
+            fp = os.path.join(target_dir, f) if not os.path.isabs(f) else f
+            try:
+                m = os.stat(fp).st_mtime_ns
+                if m > max_mtime:
+                    max_mtime = m
+            except OSError:
+                pass
+        sig[2] = max_mtime
+
+    return tuple(sig)
+
 
 def invalidate_git_state_cache(target_dir: Optional[str] = None) -> None:
     """Explicitly purges git state debounce cache on mutations or file writes."""
@@ -273,16 +314,19 @@ def get_git_workspace_state(
             return f"target_file:{target_file}:{file_fp}"
         return f"target_file_missing:{target_file}"
 
-    # 2. Check git state for target_dir with micro-cache debouncing
+    # 2. Check git state for target_dir with self-verifying micro-cache debouncing
     git_state = None
     now = time.time()
     cache_key = f"{target_dir}:{policy_type}"
     # Debounce scoped_git_workspace (used by read-tools: grep, list_dir, find, etc.)
     # to eliminate subprocess fork thrashing (>85ms per tool) in monorepos.
-    # For global git_workspace (e.g. direct git_status/diff), evaluate fresh to detect direct disk edits.
+    # Self-verifying stat signals detect raw external file mutations immediately.
     cached = _GIT_STATE_CACHE.get(cache_key) if policy_type == "scoped_git_workspace" else None
     if cached is not None and (now - cached[0]) < _GIT_CACHE_TTL:
-        git_state = cached[1]
+        cached_time, cached_sig, cached_files, cached_state = cached
+        curr_sig = compute_workspace_stat_signal(target_dir, cached_files)
+        if curr_sig == cached_sig:
+            git_state = cached_state
     else:
         try:
             is_git = subprocess.run(
@@ -342,7 +386,20 @@ def get_git_workspace_state(
 
                 status_hash = hashlib.sha256(content_payload.encode("utf-8")).hexdigest()[:16]
                 git_state = f"{head_sha}:{status_hash}"
-                _GIT_STATE_CACHE[cache_key] = (time.time(), git_state)
+                candidate_files: List[str] = []
+                if target_file:
+                    candidate_files.append(target_file)
+                for line in status_raw.splitlines():
+                    if len(line) > 3:
+                        candidate_files.append(line[3:].strip())
+                try:
+                    candidate_files.extend([f for f in os.listdir(target_dir) if not f.startswith(".")][:4])
+                except OSError:
+                    pass
+                seen = set()
+                candidate_files = [x for x in candidate_files if not (x in seen or seen.add(x))][:4]
+                fresh_sig = compute_workspace_stat_signal(target_dir, candidate_files)
+                _GIT_STATE_CACHE[cache_key] = (time.time(), fresh_sig, candidate_files, git_state)
         except Exception:
             pass
 

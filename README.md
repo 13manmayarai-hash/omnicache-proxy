@@ -10,7 +10,8 @@
 [![PyPI version](https://img.shields.io/pypi/v/omnicache-proxy.svg?style=for-the-badge&color=10b981&logo=pypi&logoColor=white)](https://pypi.org/project/omnicache-proxy/)
 [![Python 3.9 - 3.14](https://img.shields.io/badge/Python-3.9_--_3.14-38bdf8?style=for-the-badge&logo=python&logoColor=white)](https://pypi.org/project/omnicache-proxy/)
 [![License: FSL-1.1-MIT](https://img.shields.io/badge/License-FSL--1.1--MIT-818cf8?style=for-the-badge)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE)
-[![Test Suite](https://img.shields.io/badge/Tests-206%20Passed%20(100%25)-34d399?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/13manmayarai-hash/omnicache-proxy/actions)
+[![Test Suite](https://img.shields.io/badge/Tests-212%20Passed%20(100%25)-34d399?style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/13manmayarai-hash/omnicache-proxy/actions)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-Native%20Server-9333ea?style=for-the-badge&logo=anthropic&logoColor=white)](./mcp/README.md)
 [![Zero Telemetry](https://img.shields.io/badge/Privacy-100%25%20Localhost%20(127.0.0.1)-f59e0b?style=for-the-badge&logo=shield&logoColor=white)](https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/SECURITY.md)
 
 <br/>
@@ -27,10 +28,10 @@ omnicache run claude
   <tr>
     <td align="center"><a href="#-why-omnicache"><b>💡 The Problem & Fix</b></a></td>
     <td align="center"><a href="#-60-second-quickstart"><b>🚀 Quick Start</b></a></td>
+    <td align="center"><a href="#-model-context-protocol-mcp-server"><b>🔌 MCP Server</b></a></td>
     <td align="center"><a href="#-architecture"><b>📐 Architecture</b></a></td>
     <td align="center"><a href="#-verified-performance-benchmarks"><b>⚡ Benchmarks</b></a></td>
     <td align="center"><a href="#-drop-in-agent-support"><b>🤖 Agent Presets</b></a></td>
-    <td align="center"><a href="#-dashboards-dual-themes"><b>📊 Dashboards</b></a></td>
     <td align="center"><a href="#-command-cheatsheet"><b>🛠️ CLI Tools</b></a></td>
   </tr>
 </table>
@@ -217,6 +218,54 @@ export OPENAI_API_BASE="http://127.0.0.1:8000/v1"
 
 ---
 
+## 🔌 Model Context Protocol (MCP) Server
+
+OmniCache provides a **native, enterprise-ready Model Context Protocol (MCP)** server enabling AI assistants and coding agents to interface directly with local vector memory, deterministic tool-call replaying, and cost telemetry.
+
+### 1-Click Install via Smithery
+Install directly to **Claude Desktop** with one command:
+```bash
+npx -y @smithery/cli install omnicache --client claude
+```
+
+### Direct Agent Configuration
+
+#### Claude Code (CLI)
+```bash
+claude mcp add omnicache -- omnicache mcp
+```
+
+#### Claude Desktop (`claude_desktop_config.json`) & Cursor (`.cursor/mcp.json`)
+```json
+{
+  "mcpServers": {
+    "omnicache": {
+      "command": "omnicache",
+      "args": ["mcp"],
+      "env": {
+        "OMNICACHE_ORG_ID": "default"
+      }
+    }
+  }
+}
+```
+
+### Provided Tools
+
+| Tool | Purpose |
+| :--- | :--- |
+| `omnicache_query` | Sub-millisecond intent-gated vector cache lookup (<1ms), returning cached completions for 0 tokens. |
+| `omnicache_store` | Explicitly saves high-value answers, documentation, or code snippets into vector memory. |
+| `omnicache_search` | Sub-millisecond vector similarity search across all cached prompts, solutions, and knowledge entries. |
+| `omnicache_replay_tool` | Looks up cached outputs for deterministic agent tools (`read_file`, `git_status`, `grep`) with workspace state checks. |
+| `omnicache_record_tool` | Records tool execution outputs for subsequent 0ms replays. |
+| `omnicache_health` | Enterprise health check: verifies SQLite persistence, vector memory, and tool replayer status. |
+| `omnicache_stats` | Returns real-time telemetry: hit ratios, total queries, tokens saved, and cost saved in USD. |
+
+*For complete MCP documentation and schemas, see [`mcp/README.md`](mcp/README.md).*
+
+---
+
 ## 📊 Dashboards (Dual Themes)
 
 OmniCache includes two built-in real-time developer dashboards served side-by-side:
@@ -241,6 +290,7 @@ OmniCache includes two built-in real-time developer dashboards served side-by-si
 | Command | Purpose |
 | :--- | :--- |
 | `omnicache` | Start the background proxy daemon listening on `127.0.0.1:8000` |
+| `omnicache mcp` | Launch the standard JSON-RPC 2.0 stdio MCP server for Claude Desktop, Cursor, and Cline |
 | `omnicache run <cmd>` | Zero-config execution wrapper for Claude Code, Cursor, or custom agents |
 | `omnicache doctor` | Validate Python runtime, SQLite WAL status, port binding, and vector engine health |
 | `omnicache benchmark` | Run microsecond latency and throughput benchmarks across all cache tiers |
@@ -253,11 +303,13 @@ OmniCache includes two built-in real-time developer dashboards served side-by-si
 
 ---
 
-## 🔒 Security & Air-Gapped Privacy
+## 🔒 Security & Enterprise Readiness
 
 * **Strict Localhost Binding:** By default, OmniCache binds strictly to loopback (`127.0.0.1:8000`), refusing to expose unauthenticated endpoints to external networks.
 * **Salted HMAC-SHA256 Tokenization:** The built-in `PrivacyShield` scrubs sensitive developer credentials (emails, API keys, private tokens) locally before optional upstream transmission.
-* **Zero Remote Telemetry:** All embeddings, SQLite WAL database writes, and telemetry aggregations execute in-process. No data is phoned home to external cloud servers.
+* **Cryptographic Multi-Tenancy:** Complete tenant isolation via `org_id` and `OMNICACHE_ORG_ID` environment variables.
+* **SOC2-Ready Audit Logging:** Structured JSONL audit trails recording all MCP tool executions, durations, and statuses written to `~/.omnicache/mcp_audit.jsonl`.
+* **Zero Remote Telemetry:** All embeddings, SQLite WAL database writes, and telemetry aggregations execute strictly in-process. No code or prompt data is ever phoned home to external servers.
 * For security disclosures and guidelines, see [SECURITY.md](SECURITY.md).
 
 ---

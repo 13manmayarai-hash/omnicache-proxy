@@ -36,6 +36,7 @@ class TestOmniCacheMCP(unittest.TestCase):
         self.assertIn("omnicache_store", tool_names)
         self.assertIn("omnicache_search", tool_names)
         self.assertIn("omnicache_stats", tool_names)
+        self.assertIn("omnicache_health", tool_names)
 
         # 3. Store knowledge via MCP
         res_store = send_and_recv({
@@ -113,6 +114,7 @@ class TestOmniCacheMCP(unittest.TestCase):
         tool_names = [t["name"] for t in res_tools["result"]["tools"]]
         self.assertIn("omnicache_query", tool_names)
         self.assertIn("omnicache_store", tool_names)
+        self.assertIn("omnicache_health", tool_names)
 
         proc.terminate()
 

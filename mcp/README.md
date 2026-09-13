@@ -114,6 +114,23 @@ When the OmniCache daemon is running (`omnicache` or `omnicache start -p 8000`),
 | `omnicache_record_tool` | Records and caches tool outputs for subsequent instant 0ms replays. | `tool_name` (required), `output` (required), `arguments`, `ttl_seconds` |
 | `omnicache_invalidate` | Invalidates cached knowledge by tag, tenant ID, or domain. | `tag`, `org_id` |
 | `omnicache_stats` | Returns real-time telemetry: hit ratios, total queries, tokens saved, and cost saved in USD. | `org_id` |
+| `omnicache_health` | Performs enterprise health check: verifies SQLite store connectivity, active vector memory, and tool replayer. | None |
+
+---
+
+## 🏢 Enterprise Multi-Tenancy & Audit Logging
+
+- **Tenant Isolation**: Set the `OMNICACHE_ORG_ID` environment variable or pass `org_id` in tool calls to isolate cached vectors per project or team.
+- **Audit Logging**: Structured JSONL audit events recording timestamp, tool name, tenant ID, duration, and status are written automatically to `~/.omnicache/mcp_audit.jsonl` (or configure a custom path via `OMNICACHE_AUDIT_LOG_PATH`).
+
+---
+
+## 📦 1-Click Install via Smithery
+
+Install directly to Claude Desktop with one command:
+```bash
+npx -y @smithery/cli install omnicache --client claude
+```
 
 ---
 

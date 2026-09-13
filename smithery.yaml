@@ -1,0 +1,20 @@
+# Smithery MCP Server Manifest
+# https://smithery.ai/docs/config
+
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      port:
+        type: number
+        description: Optional port for OmniCache proxy daemon (default: 8000)
+        default: 8000
+      org_id:
+        type: string
+        description: Multi-tenant organization / tenant ID for vector memory isolation
+        default: "default"
+  commandFunction:
+    command: "omnicache"
+    args:
+      - "mcp"

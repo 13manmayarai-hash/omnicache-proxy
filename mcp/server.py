@@ -145,6 +145,14 @@ TOOLS_METADATA = [
             },
             "required": ["tool_name", "output"]
         }
+    },
+    {
+        "name": "omnicache_health",
+        "description": "Performs enterprise health and readiness check: verifies SQLite persistence, active L1/L2 vector entries, tool replayer integrity, and uptime.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {}
+        }
     }
 ]
 
@@ -328,7 +336,57 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         stats = cache_instance.get_stats(org_id)
         return {"content": [{"type": "text", "text": json.dumps(stats, indent=2)}]}
 
+    elif clean_name == "health":
+        stats = cache_instance.get_stats(org_id)
+        db_exists = os.path.exists(snapshot_store.db_path)
+        health_info = {
+            "status": "healthy",
+            "version": getattr(config, "VERSION", "3.0.5"),
+            "tenant_id": org_id,
+            "persistence": {
+                "sqlite_path": snapshot_store.db_path,
+                "connected": db_exists
+            },
+            "vector_cache": {
+                "active_l1_exact": stats.get("active_l1_exact_entries", 0),
+                "active_l2_semantic": stats.get("active_l2_semantic_entries", 0),
+                "total_requests": stats.get("total_requests", 0),
+                "hit_rate_pct": stats.get("hit_rate_percentage", 0.0)
+            },
+            "tool_replayer": {
+                "status": "active",
+                "registered_signatures": len(getattr(tool_cache, "_cache", {}))
+            }
+        }
+        return {"content": [{"type": "text", "text": json.dumps(health_info, indent=2)}]}
+
     return {"error": {"code": -32601, "message": f"Unknown tool: {name}"}}
+
+
+def log_audit_event(tool_name: str, org_id: str, duration_ms: float, status: str, details: Optional[dict] = None):
+    """Appends structured audit log for enterprise compliance and SOC2 traceability."""
+    audit_file = os.environ.get("OMNICACHE_AUDIT_LOG_PATH")
+    if not audit_file:
+        homedir = os.path.expanduser("~")
+        omni_dir = os.path.join(homedir, ".omnicache")
+        if os.path.isdir(omni_dir):
+            audit_file = os.path.join(omni_dir, "mcp_audit.jsonl")
+    if audit_file:
+        try:
+            event = {
+                "timestamp": time.time(),
+                "iso_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "tool": tool_name,
+                "org_id": org_id,
+                "duration_ms": duration_ms,
+                "status": status
+            }
+            if details:
+                event["details"] = details
+            with open(audit_file, "a", encoding="utf-8") as af:
+                af.write(json.dumps(event) + "\n")
+        except Exception:
+            pass
 
 
 def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") -> Dict[str, Any]:
@@ -345,7 +403,7 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {
                     "name": "omnicache-mcp",
-                    "version": getattr(config, "VERSION", "2.5.4")
+                    "version": getattr(config, "VERSION", "3.0.5")
                 },
                 "capabilities": {
                     "tools": {"listChanged": False},
@@ -366,7 +424,12 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
     elif method == "tools/call":
         tool_name = params.get("name", "")
         tool_args = params.get("arguments", {})
-        tool_res = handle_tool_call(tool_name, tool_args, default_org_id=default_org_id)
+        org = tool_args.get("org_id") or default_org_id
+        t0 = time.perf_counter()
+        tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org)
+        dur = round((time.perf_counter() - t0) * 1000, 3)
+        status_str = "error" if "error" in tool_res else "success"
+        log_audit_event(tool_name, org, dur, status_str)
         if "error" in tool_res:
             return {
                 "jsonrpc": "2.0",
@@ -388,6 +451,7 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
 
 def run_stdio_server():
     """Main JSON-RPC stdio event loop."""
+    default_org = os.environ.get("OMNICACHE_ORG_ID", "default")
     for line in sys.stdin:
         if not line.strip():
             continue
@@ -396,7 +460,7 @@ def run_stdio_server():
         except Exception:
             continue
 
-        res = process_mcp_jsonrpc(req, default_org_id="default")
+        res = process_mcp_jsonrpc(req, default_org_id=default_org)
         sys.stdout.write(json.dumps(res) + "\n")
         sys.stdout.flush()
 

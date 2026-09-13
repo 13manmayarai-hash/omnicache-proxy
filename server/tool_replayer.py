@@ -239,7 +239,6 @@ def extract_candidate_path(
 _GIT_STATE_CACHE: Dict[str, Tuple[float, str]] = {}
 _GIT_CACHE_TTL: float = 0.50  # 500ms debounce to eliminate subprocess thrashing in large monorepos
 
-
 def invalidate_git_state_cache(target_dir: Optional[str] = None) -> None:
     """Explicitly purges git state debounce cache on mutations or file writes."""
     global _GIT_STATE_CACHE
@@ -310,9 +309,40 @@ def get_git_workspace_state(
                     )
 
                 status_raw = status_res.stdout if status_res.returncode == 0 else ""
-                status_hash = hashlib.sha256(status_raw.encode("utf-8")).hexdigest()[:16]
+                
+                # When working tree is dirty, also capture content diff so repeated edits to the same dirty file produce distinct fingerprints
+                diff_raw = ""
+                untracked_fps = []
+                if status_raw.strip():
+                    diff_cmd = ["git", "-C", target_dir, "diff", "HEAD"]
+                    if policy_type == "scoped_git_workspace":
+                        diff_cmd.extend(["--", "."])
+                    try:
+                        diff_res = subprocess.run(
+                            diff_cmd,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=1.5
+                        )
+                        diff_raw = diff_res.stdout if diff_res.returncode == 0 else ""
+                    except Exception:
+                        diff_raw = ""
+
+                    # Fingerprint untracked files with mtime and size
+                    for line in status_raw.splitlines():
+                        if line.startswith("?? "):
+                            rel_p = line[3:].strip()
+                            full_p = os.path.join(target_dir, rel_p) if not os.path.isabs(rel_p) else rel_p
+                            try:
+                                st = os.stat(full_p)
+                                untracked_fps.append(f"{rel_p}:{st.st_mtime_ns}:{st.st_size}")
+                            except OSError:
+                                untracked_fps.append(f"{rel_p}:missing")
+                    content_payload = f"{status_raw}\n---DIFF---\n{diff_raw}\n---UNTRACKED---\n" + "\n".join(untracked_fps)
+                else:
+                    content_payload = status_raw
+
+                status_hash = hashlib.sha256(content_payload.encode("utf-8")).hexdigest()[:16]
                 git_state = f"{head_sha}:{status_hash}"
-                _GIT_STATE_CACHE[cache_key] = (now, git_state)
+                _GIT_STATE_CACHE[cache_key] = (time.time(), git_state)
         except Exception:
             pass
 

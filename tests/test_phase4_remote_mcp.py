@@ -504,6 +504,80 @@ class TestPhase4RemoteMCP(unittest.TestCase):
         self.assertNotIn("sk-ant-api03-abcdef1234567890abcdef1234567890-test_token_1234", entry["output"])
         self.assertIn("REDACTED", entry["output"])
 
+    def test_14_mcp_cross_tenant_isolation(self):
+        """Verify that non-admin tenants cannot read, poison, or destroy other tenants' caches via MCP arguments."""
+        # 1. Tenant B stores confidential data in its own organization (mcp_tenant_2_org)
+        store_req = {
+            "jsonrpc": "2.0",
+            "id": "tenant-b-store",
+            "method": "tools/call",
+            "params": {
+                "name": "omnicache_store",
+                "arguments": {
+                    "prompt": "Q4 Strategy and Layoff Plan",
+                    "answer": "TENANT_B_CONFIDENTIAL: Q4 reorganization details",
+                    "model": "gpt-4o"
+                }
+            }
+        }
+        resp_b = self.client.post("/mcp", json=store_req, headers={"x-api-key": "mcp_tenant_2_key"})
+        self.assertEqual(resp_b.status_code, 200)
+
+        # 2. Tenant A attempts to query Tenant B's cache by providing org_id="mcp_tenant_2_org"
+        query_req = {
+            "jsonrpc": "2.0",
+            "id": "tenant-a-query-steal",
+            "method": "tools/call",
+            "params": {
+                "name": "omnicache_query",
+                "arguments": {
+                    "prompt": "Q4 Strategy and Layoff Plan",
+                    "org_id": "mcp_tenant_2_org"
+                }
+            }
+        }
+        resp_steal = self.client.post("/mcp", json=query_req, headers={"x-api-key": "mcp_tenant_key"})
+        self.assertEqual(resp_steal.status_code, 200)
+        steal_json = resp_steal.json()
+        self.assertIn("error", steal_json)
+        self.assertEqual(steal_json["error"]["code"], -32600)
+        self.assertIn("Forbidden", steal_json["error"]["message"])
+
+        # 3. Tenant A attempts to invalidate Tenant B's cache
+        inval_req = {
+            "jsonrpc": "2.0",
+            "id": "tenant-a-inval-destroy",
+            "method": "tools/call",
+            "params": {
+                "name": "omnicache_invalidate",
+                "arguments": {
+                    "org_id": "mcp_tenant_2_org"
+                }
+            }
+        }
+        resp_destroy = self.client.post("/mcp", json=inval_req, headers={"x-api-key": "mcp_tenant_key"})
+        self.assertEqual(resp_destroy.status_code, 200)
+        destroy_json = resp_destroy.json()
+        self.assertIn("error", destroy_json)
+        self.assertEqual(destroy_json["error"]["code"], -32600)
+        self.assertIn("Forbidden", destroy_json["error"]["message"])
+
+        # 4. Verify Tenant B's cache is still completely intact
+        query_b = {
+            "jsonrpc": "2.0",
+            "id": "tenant-b-verify",
+            "method": "tools/call",
+            "params": {
+                "name": "omnicache_query",
+                "arguments": {
+                    "prompt": "Q4 Strategy and Layoff Plan"
+                }
+            }
+        }
+        resp_b_check = self.client.post("/mcp", json=query_b, headers={"x-api-key": "mcp_tenant_2_key"})
+        self.assertEqual(resp_b_check.status_code, 200)
+        self.assertIn("TENANT_B_CONFIDENTIAL", resp_b_check.json()["result"]["content"][0]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()

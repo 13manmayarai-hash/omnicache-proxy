@@ -566,10 +566,14 @@ async def handle_chat_completions(request: Request) -> Response:
             is_vhit, v_response, v_dist = vision_cache.lookup_image(img_hash, prompt_text)
             if is_vhit and v_response is not None:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                savings = upstream_client.calculate_savings(requested_model, 150, 250)
+                v_usage = v_response.get("usage", {}) if isinstance(v_response, dict) else {}
+                prompt_tokens = v_usage.get("prompt_tokens") or 150
+                completion_tokens = v_usage.get("completion_tokens") or 250
+                total_saved_tokens = prompt_tokens + completion_tokens
+                savings = upstream_client.calculate_savings(requested_model, prompt_tokens, completion_tokens)
                 METRICS_LEDGER["vision_cache_hits"] += 1
                 METRICS_LEDGER["total_savings_usd"] += savings
-                METRICS_LEDGER["total_tokens_saved"] += 400
+                METRICS_LEDGER["total_tokens_saved"] += total_saved_tokens
 
                 resp_headers = {
                     "X-OmniCache-Decision": "HIT",
@@ -582,8 +586,8 @@ async def handle_chat_completions(request: Request) -> Response:
                     "X-Cost-Avoided-USD": f"{savings:.6f}",
                     "X-Cost-Saved-USD": f"{savings:.6f}",
                     "X-Tokens-Used": "0",
-                    "X-Tokens-Saved": "400",
-                    "X-Tokens-Accounting": "estimated",
+                    "X-Tokens-Saved": str(total_saved_tokens),
+                    "X-Tokens-Accounting": "exact" if bool(v_usage.get("prompt_tokens")) else "estimated",
                     "X-Requested-Model": requested_model,
                     "X-Served-Model": requested_model,
                     **cors_headers
@@ -610,10 +614,14 @@ async def handle_chat_completions(request: Request) -> Response:
             is_ahit, a_response, a_dist = audio_cache.lookup_audio(aud_hash, prompt_text, model=requested_model)
             if is_ahit and a_response is not None:
                 latency_ms = (time.perf_counter() - start_time) * 1000
-                savings = upstream_client.calculate_savings(requested_model, 200, 150)
+                a_usage = a_response.get("usage", {}) if isinstance(a_response, dict) else {}
+                prompt_tokens = a_usage.get("prompt_tokens") or 200
+                completion_tokens = a_usage.get("completion_tokens") or 150
+                total_saved_tokens = prompt_tokens + completion_tokens
+                savings = upstream_client.calculate_savings(requested_model, prompt_tokens, completion_tokens)
                 METRICS_LEDGER["audio_cache_hits"] += 1
                 METRICS_LEDGER["total_savings_usd"] += savings
-                METRICS_LEDGER["total_tokens_saved"] += 350
+                METRICS_LEDGER["total_tokens_saved"] += total_saved_tokens
 
                 emit_telemetry_event("audio_cache_hit", {
                     "audio_hash": aud_hash,
@@ -751,11 +759,14 @@ async def handle_chat_completions(request: Request) -> Response:
         completion_tokens = usage.get("completion_tokens", entry.completion_tokens or 80)
         total_saved_tokens = prompt_tokens + completion_tokens
         pricing_model = entry.model or requested_model
-        savings = upstream_client.calculate_savings(pricing_model, prompt_tokens, completion_tokens)
+        raw_savings = upstream_client.calculate_savings(pricing_model, prompt_tokens, completion_tokens)
+        is_semantic = (status == "HIT_SEMANTIC")
+        calc_method = "semantic_similarity_weighted" if is_semantic else "exact_model_pricing"
+        savings = (raw_savings * max(0.5, similarity)) if is_semantic else raw_savings
         
         METRICS_LEDGER["total_savings_usd"] += savings
         METRICS_LEDGER["total_tokens_saved"] += total_saved_tokens
-        if entry.is_exact_tokens:
+        if entry.is_exact_tokens and not is_semantic:
             METRICS_LEDGER["exact_tokens_saved"] += total_saved_tokens
         else:
             METRICS_LEDGER["estimated_tokens_saved"] += total_saved_tokens
@@ -781,12 +792,12 @@ async def handle_chat_completions(request: Request) -> Response:
             "X-Cache-Entry-Age-Seconds": f"{entry.age_seconds():.1f}",
             "X-Cost-Avoided-USD": f"{savings:.6f}",
             "X-Cost-Saved-USD": f"{savings:.6f}",
-            "X-Cost-Calculation-Method": "exact_model_pricing",
+            "X-Cost-Calculation-Method": calc_method,
             "X-Avoided-Prompt-Tokens": str(prompt_tokens),
             "X-Avoided-Completion-Tokens": str(completion_tokens),
             "X-Tokens-Used": "0",
             "X-Tokens-Saved": str(total_saved_tokens),
-            "X-Tokens-Accounting": "exact" if entry.is_exact_tokens else "estimated",
+            "X-Tokens-Accounting": "exact" if (entry.is_exact_tokens and not is_semantic) else "estimated",
             "X-Requested-Model": requested_model,
             "X-Served-Model": entry.model,
             "X-Cascade-Applied": "false",
@@ -1387,11 +1398,14 @@ async def handle_anthropic_messages(request: Request) -> Response:
         prompt_tokens = usage.get("prompt_tokens", entry.prompt_tokens or 35)
         completion_tokens = usage.get("completion_tokens", entry.completion_tokens or 65)
         total_saved_tokens = prompt_tokens + completion_tokens
-        savings = upstream_client.calculate_savings(entry.model or requested_model, prompt_tokens, completion_tokens)
+        raw_savings = upstream_client.calculate_savings(entry.model or requested_model, prompt_tokens, completion_tokens)
+        is_semantic = (status == "HIT_SEMANTIC")
+        calc_method = "semantic_similarity_weighted" if is_semantic else "exact_model_pricing"
+        savings = (raw_savings * max(0.5, similarity)) if is_semantic else raw_savings
         
         METRICS_LEDGER["total_savings_usd"] += savings
         METRICS_LEDGER["total_tokens_saved"] += total_saved_tokens
-        if entry.is_exact_tokens:
+        if entry.is_exact_tokens and not is_semantic:
             METRICS_LEDGER["exact_tokens_saved"] += total_saved_tokens
         else:
             METRICS_LEDGER["estimated_tokens_saved"] += total_saved_tokens
@@ -1417,12 +1431,12 @@ async def handle_anthropic_messages(request: Request) -> Response:
             "X-Cache-Entry-Age-Seconds": f"{entry.age_seconds():.1f}",
             "X-Cost-Avoided-USD": f"{savings:.6f}",
             "X-Cost-Saved-USD": f"{savings:.6f}",
-            "X-Cost-Calculation-Method": "exact_model_pricing",
+            "X-Cost-Calculation-Method": calc_method,
             "X-Avoided-Prompt-Tokens": str(prompt_tokens),
             "X-Avoided-Completion-Tokens": str(completion_tokens),
             "X-Tokens-Used": "0",
             "X-Tokens-Saved": str(total_saved_tokens),
-            "X-Tokens-Accounting": "exact" if entry.is_exact_tokens else "estimated",
+            "X-Tokens-Accounting": "exact" if (entry.is_exact_tokens and not is_semantic) else "estimated",
             "X-Requested-Model": requested_model,
             "X-Served-Model": entry.model,
             "X-Cascade-Applied": "false",
@@ -2408,12 +2422,26 @@ async def handle_mesh_peers(request: Request) -> Response:
         endpoint = (body.get("endpoint") or "").strip()
         node_id = (body.get("node_id") or "").strip() or None
         metadata = body.get("metadata", {})
+        verify = request.query_params.get("verify", "false").lower() in ("true", "1") or body.get("verify", False)
         if not endpoint:
             return JSONResponse({"error": "Field 'endpoint' is required"}, status_code=400, headers=cors_headers)
-        peer = mesh_bus.register_peer(endpoint=endpoint, node_id=node_id, metadata=metadata)
+
+        if verify:
+            reachability = await mesh_bus.check_peer_connectivity(endpoint)
+            if not reachability["reachable"]:
+                return JSONResponse({
+                    "error": f"Peer admission rejected: Endpoint '{endpoint}' is unreachable ({reachability.get('error', 'connection refused')})."
+                }, status_code=502, headers=cors_headers)
+            peer = mesh_bus.register_peer(endpoint=endpoint, node_id=node_id, metadata=metadata, status="alive")
+            if peer:
+                peer.mark_seen(reachability.get("rtt_ms"))
+        else:
+            peer = mesh_bus.register_peer(endpoint=endpoint, node_id=node_id, metadata=metadata, status="unverified")
+
         emit_telemetry_event("mesh_peer_registered", {
             "endpoint": endpoint,
-            "node_id": peer.node_id if peer else None
+            "node_id": peer.node_id if peer else None,
+            "verified": bool(verify)
         })
         return JSONResponse({
             "status": "success",
@@ -3441,7 +3469,15 @@ async def handle_mcp(request: Request) -> Response:
                     }
                 }, headers=base_headers)
 
-    res = process_mcp_jsonrpc(req_body, default_org_id=org_id)
+    is_admin = False
+    if key_info:
+        is_admin = (key_info.get("role") == "admin")
+    elif auth_key:
+        is_admin = quota_manager.is_admin(auth_key)
+    elif not getattr(config, "REQUIRE_AUTH", False) and not getattr(config, "ADMIN_API_KEY", "").strip():
+        is_admin = True
+
+    res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin)
 
     # If the client requested SSE response stream on POST, stream it
     if "text/event-stream" in accept_header:
@@ -3548,6 +3584,7 @@ routes = [
     Route("/v1/workspace/sync/export", handle_workspace_sync_export, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/workspace/sync/import", handle_workspace_sync_import, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/sync/status", handle_workspace_sync_status, methods=["GET", "OPTIONS"]),
+    Route("/v1/workspace/sync/redis", handle_workspace_sync_redis, methods=["GET", "POST", "OPTIONS"]),
     Route("/.well-known/oauth-authorization-server", handle_oauth_metadata, methods=["GET", "OPTIONS"]),
     Route("/.well-known/oauth-protected-resource", handle_oauth_protected_resource, methods=["GET", "OPTIONS"]),
     Route("/oauth/authorize", handle_oauth_authorize, methods=["GET", "POST", "OPTIONS"]),

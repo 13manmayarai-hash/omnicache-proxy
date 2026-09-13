@@ -19,9 +19,11 @@ from core.embeddings import BaseEmbedder
 
 class QuantizedEmbedder(BaseEmbedder):
     """
-    Sub-millisecond Hardware-Accelerated Local Quantized Embedder.
-    Uses deterministic orthogonal projection with 8-bit signed integer weights,
-    subword/code n-gram feature hashing, and integer dot-product SIMD acceleration.
+    Sub-millisecond Local Quantized Embedder.
+    Uses deterministic orthogonal projection with 8-bit signed integer weights and
+    subword/code n-gram feature hashing. `embed()` outputs unit-normalized float vectors
+    for BaseEmbedder compatibility, while `embed_int8()` outputs packed 8-bit signed integer
+    byte vectors for 4x memory compression.
     """
     DEFAULT_DIMS: int = 256
     VOCAB_BUCKETS: int = 2048

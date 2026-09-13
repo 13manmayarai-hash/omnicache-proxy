@@ -202,3 +202,39 @@ def test_04_crdt_mesh_hlc_clock_drift_resilience():
     rejected_applied, rej_status = mesh_a.apply_remote_tombstone(tomb_b1)
     assert rejected_applied is False
     assert rej_status == "superseded_by_existing"
+
+
+def test_05_dirty_file_successive_mutations_different_fingerprints():
+    """
+    Empirically verify that successive edits with different content on an already-dirty file
+    produce different workspace fingerprints and avoid replaying stale grep/diff results.
+    """
+    with tempfile.TemporaryDirectory() as temp_repo:
+        subprocess.run(["git", "init", temp_repo], check=True, capture_output=True)
+        subprocess.run(["git", "-C", temp_repo, "config", "user.email", "audit@omnicache.ai"], check=True)
+        subprocess.run(["git", "-C", temp_repo, "config", "user.name", "Audit Runner"], check=True)
+
+        target_file = os.path.join(temp_repo, "service.py")
+        with open(target_file, "w") as f:
+            f.write("def run():\n    return 'initial'\n")
+        subprocess.run(["git", "-C", temp_repo, "add", "service.py"], check=True)
+        subprocess.run(["git", "-C", temp_repo, "commit", "-m", "Initial commit"], check=True)
+
+        # Edit 1: Dirty file with content A
+        time.sleep(0.05)
+        with open(target_file, "w") as f:
+            f.write("def run():\n    return 'Version A edit'\n")
+        invalidate_git_state_cache(temp_repo)
+        fp_a_scoped = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        fp_a_global = get_git_workspace_state(temp_repo, policy_type="git_workspace")
+
+        # Edit 2: Same dirty file modified again with content B (different content diff)
+        time.sleep(0.05)
+        with open(target_file, "w") as f:
+            f.write("def run():\n    return 'Version B completely different code'\n")
+        invalidate_git_state_cache(temp_repo)
+        fp_b_scoped = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        fp_b_global = get_git_workspace_state(temp_repo, policy_type="git_workspace")
+
+        assert fp_a_scoped != fp_b_scoped, f"Scoped fingerprints matched across two different edits: {fp_a_scoped}"
+        assert fp_a_global != fp_b_global, f"Global fingerprints matched across two different edits: {fp_a_global}"

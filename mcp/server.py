@@ -184,8 +184,16 @@ TOOLS_METADATA = [
 ]
 
 
-def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default") -> dict:
-    org_id = arguments.get("org_id") or default_org_id
+def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default", is_admin: bool = False) -> dict:
+    target_org = arguments.get("org_id")
+    if target_org and target_org != default_org_id and not is_admin:
+        return {
+            "error": {
+                "code": -32600,
+                "message": f"Forbidden: Tenant '{default_org_id}' cannot access or manipulate org_id '{target_org}'. Admin privileges required."
+            }
+        }
+    org_id = target_org if is_admin and target_org else default_org_id
     clean_name = name[len("omnicache_"):] if name.startswith("omnicache_") else name
 
     if clean_name == "query":
@@ -419,7 +427,7 @@ def log_audit_event(tool_name: str, org_id: str, duration_ms: float, status: str
             pass
 
 
-def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") -> Dict[str, Any]:
+def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False) -> Dict[str, Any]:
     """Processes a standard JSON-RPC 2.0 MCP message and returns the response dictionary."""
     req_id = req.get("id")
     method = req.get("method")
@@ -454,10 +462,20 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
     elif method == "tools/call":
         tool_name = params.get("name", "")
         tool_args = params.get("arguments", {})
-        org = tool_args.get("org_id") or default_org_id
+        target_org = tool_args.get("org_id")
+        if target_org and target_org != default_org_id and not is_admin:
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32600,
+                    "message": f"Forbidden: Tenant '{default_org_id}' cannot access or manipulate org_id '{target_org}'. Admin privileges required."
+                }
+            }
+        org = target_org if is_admin and target_org else default_org_id
         t0 = time.perf_counter()
         try:
-            tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org)
+            tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org, is_admin=is_admin)
         except Exception as exc:
             dur = round((time.perf_counter() - t0) * 1000, 3)
             log_audit_event(tool_name, org, dur, "error", {"error": str(exc)})
@@ -494,6 +512,9 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
 def run_stdio_server():
     """Main JSON-RPC stdio event loop with comprehensive exception resilience."""
     default_org = os.environ.get("OMNICACHE_ORG_ID", "default")
+    admin_key = os.environ.get("ADMIN_API_KEY", "").strip()
+    is_admin = bool(admin_key) or not getattr(config, "REQUIRE_AUTH", False)
+
     for line in sys.stdin:
         if not line.strip():
             continue
@@ -510,7 +531,7 @@ def run_stdio_server():
             continue
 
         try:
-            res = process_mcp_jsonrpc(req, default_org_id=default_org)
+            res = process_mcp_jsonrpc(req, default_org_id=default_org, is_admin=is_admin)
         except Exception as exc:
             res = {
                 "jsonrpc": "2.0",

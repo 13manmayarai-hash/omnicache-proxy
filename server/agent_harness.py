@@ -643,7 +643,7 @@ class AgentHarness:
                 "passed": passed,
                 "latency_ms": latency_ms,
                 "details": f"Cross-Agent Memory Hit & Mutation Guard (lead ➔ researcher ➔ coder)",
-                "speedup": f"{int(50.0 / max(0.001, latency_ms)):,}x"
+                "speedup": "In-process memory bus"
             })
         except Exception as e:
             results.append({
@@ -733,7 +733,7 @@ class AgentHarness:
                 "passed": passed,
                 "latency_ms": latency_ms,
                 "details": f"CRDT State Sync & Vector Clocks ({peer_id} ➔ local node convergence)",
-                "speedup": f"{int(50.0 / max(0.001, latency_ms)):,}x"
+                "speedup": "Local CRDT convergence"
             })
         except Exception as e:
             results.append({
@@ -813,7 +813,7 @@ class AgentHarness:
                 "passed": passed,
                 "latency_ms": latency_ms,
                 "details": f"256-d Int8/Int4 SIMD (<0.5ms pure CPU, 8x compression, 0 downloads)",
-                "speedup": f"{int(50.0 / max(0.001, latency_ms)):,}x"
+                "speedup": "Zero-download Int8"
             })
         except Exception as e:
             results.append({

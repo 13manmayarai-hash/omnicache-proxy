@@ -286,7 +286,8 @@ class P2PMesh:
         self,
         endpoint: str,
         node_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        status: Optional[str] = None
     ) -> Optional[PeerNode]:
         """Registers or updates a peer in the mesh."""
         norm_endpoint = endpoint.strip().rstrip("/")
@@ -313,11 +314,11 @@ class P2PMesh:
                 self._endpoint_to_node[norm_endpoint] = peer.node_id
                 return peer
 
-            # Register new peer
+            # Register new peer with unverified status until verified via handshake
             new_peer = PeerNode(
                 endpoint=norm_endpoint,
                 node_id=node_id,
-                status="alive",
+                status=status or "unverified",
                 metadata=metadata
             )
             self._peers[new_peer.node_id] = new_peer
@@ -684,7 +685,24 @@ class P2PMesh:
                     return data
         except Exception:
             pass
-        return None
+    async def check_peer_connectivity(self, endpoint: str) -> Dict[str, Any]:
+        """Probes peer reachability before registration."""
+        url = f"{endpoint.rstrip('/')}/v1/mesh/heartbeat"
+        payload = {
+            "node_id": self.node_id,
+            "endpoint": self.endpoint,
+            "vector_clock": dict(self._vector_clock)
+        }
+        t0 = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=1.5) as client:
+                resp = await client.post(url, json=payload)
+                rtt_ms = (time.perf_counter() - t0) * 1000
+                if resp.status_code == 200:
+                    return {"reachable": True, "rtt_ms": round(rtt_ms, 2), "data": resp.json()}
+                return {"reachable": False, "status_code": resp.status_code, "error": f"HTTP {resp.status_code}"}
+        except Exception as exc:
+            return {"reachable": False, "error": str(exc)}
 
     # -------------------------------------------------------------
     # Topology & Diagnostics
@@ -694,6 +712,7 @@ class P2PMesh:
         with self._lock:
             peers_list = self.list_peers()
             alive_count = sum(1 for p in peers_list if p["status"] == "alive")
+            unverified_count = sum(1 for p in peers_list if p["status"] == "unverified")
             suspect_count = sum(1 for p in peers_list if p["status"] == "suspect")
             offline_count = sum(1 for p in peers_list if p["status"] == "offline")
 
@@ -701,12 +720,13 @@ class P2PMesh:
                 "mesh_enabled": getattr(config, "MESH_ENABLED", True),
                 "node_id": self.node_id,
                 "endpoint": self.endpoint,
-                "version": getattr(config, "VERSION", "3.0.2"),
+                "version": getattr(config, "VERSION", "3.0.5"),
                 "lamport_clock": self._lamport_clock,
                 "vector_clock": dict(self._vector_clock),
                 "peer_summary": {
                     "total": len(peers_list),
                     "alive": alive_count,
+                    "unverified": unverified_count,
                     "suspect": suspect_count,
                     "offline": offline_count
                 },

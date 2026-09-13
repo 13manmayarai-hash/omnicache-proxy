@@ -95,14 +95,8 @@ class WorkspaceWarmer:
                 if b_res.returncode == 0:
                     git_branch = b_res.stdout.strip()
 
-                # Get porcelain git status (including all untracked files)
-                p_res = subprocess.run(
-                    ["git", "-C", target_dir, "status", "--porcelain", "-uall"],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=2.0
-                )
-                porcelain_raw = p_res.stdout if p_res.returncode == 0 else ""
-                status_hash = hashlib.sha256(porcelain_raw.encode("utf-8")).hexdigest()[:16]
-                cached_git_state = f"{git_commit}:{status_hash}" if git_commit else None
+                # Get git workspace state
+                cached_git_state = get_git_workspace_state(target_dir, policy_type="git_workspace")
 
                 # Get human-readable git status
                 s_res = subprocess.run(

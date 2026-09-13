@@ -253,6 +253,143 @@ class TestPhase4RemoteMCP(unittest.TestCase):
         self.assertEqual(resp_mcp.status_code, 200)
         self.assertEqual(resp_mcp.json().get("service"), "omnicache-mcp")
 
+    def test_08b_oauth_security_and_pkce_enforcement(self):
+        """Verify strict authorization code redemption, single-use, PKCE, and secretless rejection."""
+        import hashlib
+        import base64
+
+        # 1. Calling /oauth/token directly with client_credentials without a valid secret MUST fail (401)
+        resp_unauth = self.client.post("/oauth/token", json={"grant_type": "client_credentials", "client_id": "attacker_id"})
+        self.assertEqual(resp_unauth.status_code, 401)
+        self.assertEqual(resp_unauth.json().get("error"), "invalid_client")
+
+        # 2. Calling with an invalid client_secret MUST fail (401)
+        resp_bad_secret = self.client.post("/oauth/token", json={"grant_type": "client_credentials", "client_id": "attacker", "client_secret": "wrong_secret"})
+        self.assertEqual(resp_bad_secret.status_code, 401)
+        self.assertEqual(resp_bad_secret.json().get("error"), "invalid_client")
+
+        # 3. Valid client_credentials with registered tenant key MUST succeed
+        resp_good_secret = self.client.post("/oauth/token", json={"grant_type": "client_credentials", "client_id": "mcp_tenant", "client_secret": "mcp_tenant_key"})
+        self.assertEqual(resp_good_secret.status_code, 200)
+        self.assertTrue(resp_good_secret.json().get("access_token").startswith("omni_tok_"))
+
+        # 4. PKCE authorization flow: generate verifier and S256 challenge
+        verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        digest = hashlib.sha256(verifier.encode("ascii")).digest()
+        challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+        resp_auth = self.client.get(f"/oauth/authorize?client_id=claude-pkce&response_type=code&code_challenge={challenge}&code_challenge_method=S256&scope=mcp:read")
+        self.assertEqual(resp_auth.status_code, 200)
+        code = resp_auth.json().get("code")
+
+        # 5. Redeeming with WRONG code_verifier MUST fail (400)
+        resp_bad_pkce = self.client.post("/oauth/token", json={"grant_type": "authorization_code", "code": code, "client_id": "claude-pkce", "code_verifier": "wrong_verifier"})
+        self.assertEqual(resp_bad_pkce.status_code, 400)
+        self.assertEqual(resp_bad_pkce.json().get("error"), "invalid_grant")
+
+        # Re-authorize since bad redemption consumed the code
+        resp_auth2 = self.client.get(f"/oauth/authorize?client_id=claude-pkce&response_type=code&code_challenge={challenge}&code_challenge_method=S256&scope=mcp:read")
+        code2 = resp_auth2.json().get("code")
+
+        # 6. Redeeming with CORRECT code_verifier MUST succeed (200)
+        resp_good_pkce = self.client.post("/oauth/token", json={"grant_type": "authorization_code", "code": code2, "client_id": "claude-pkce", "code_verifier": verifier})
+        self.assertEqual(resp_good_pkce.status_code, 200)
+        tok_data = resp_good_pkce.json()
+        read_token = tok_data.get("access_token")
+
+        # 7. Single-use replay protection: attempting to reuse code2 MUST fail (400)
+        resp_replay = self.client.post("/oauth/token", json={"grant_type": "authorization_code", "code": code2, "client_id": "claude-pkce", "code_verifier": verifier})
+        self.assertEqual(resp_replay.status_code, 400)
+        self.assertEqual(resp_replay.json().get("error"), "invalid_grant")
+
+    def test_08c_oauth_scope_enforcement(self):
+        """Verify token scopes: read-only token cannot call destructive tools like omnicache_invalidate."""
+        # 1. Issue read-only token
+        resp_auth = self.client.get("/oauth/authorize?client_id=readonly-client&response_type=code&scope=mcp:read")
+        code = resp_auth.json().get("code")
+        resp_tok = self.client.post("/oauth/token", json={"grant_type": "authorization_code", "code": code, "client_id": "readonly-client"})
+        read_token = resp_tok.json().get("access_token")
+
+        # 2. Reading via omnicache_query with read_token is PERMITTED
+        query_req = {
+            "jsonrpc": "2.0",
+            "id": "q-scope",
+            "method": "tools/call",
+            "params": {"name": "omnicache_query", "arguments": {"prompt": "test query", "model": "gpt-4o"}}
+        }
+        resp_q = self.client.post("/mcp", json=query_req, headers={"Authorization": f"Bearer {read_token}"})
+        self.assertEqual(resp_q.status_code, 200)
+        self.assertNotIn("error", resp_q.json())
+
+        # 3. Purging/Invalidating with read-only token MUST BE FORBIDDEN (-32600)
+        inv_req = {
+            "jsonrpc": "2.0",
+            "id": "inv-scope",
+            "method": "tools/call",
+            "params": {"name": "omnicache_invalidate", "arguments": {}}
+        }
+        resp_inv = self.client.post("/mcp", json=inv_req, headers={"Authorization": f"Bearer {read_token}"})
+        self.assertEqual(resp_inv.status_code, 200)
+        self.assertIn("error", resp_inv.json())
+        self.assertEqual(resp_inv.json()["error"]["code"], -32600)
+        self.assertIn("Forbidden", resp_inv.json()["error"]["message"])
+
+        # 4. Writing with read-only token MUST ALSO BE FORBIDDEN (-32600)
+        store_req = {
+            "jsonrpc": "2.0",
+            "id": "st-scope",
+            "method": "tools/call",
+            "params": {"name": "omnicache_store", "arguments": {"prompt": "p", "answer": "a"}}
+        }
+        resp_st = self.client.post("/mcp", json=store_req, headers={"Authorization": f"Bearer {read_token}"})
+        self.assertEqual(resp_st.status_code, 200)
+        self.assertIn("error", resp_st.json())
+        self.assertEqual(resp_st.json()["error"]["code"], -32600)
+
+        # 5. Issue admin/write token
+        resp_auth_admin = self.client.get("/oauth/authorize?client_id=admin-client&response_type=code&scope=mcp:admin")
+        code_admin = resp_auth_admin.json().get("code")
+        resp_tok_admin = self.client.post("/oauth/token", json={"grant_type": "authorization_code", "code": code_admin, "client_id": "admin-client"})
+        admin_token = resp_tok_admin.json().get("access_token")
+
+        # 6. Admin token CAN execute omnicache_invalidate
+        resp_admin_inv = self.client.post("/mcp", json=inv_req, headers={"Authorization": f"Bearer {admin_token}"})
+        self.assertEqual(resp_admin_inv.status_code, 200)
+        self.assertNotIn("error", resp_admin_inv.json())
+
+    def test_08d_oauth_authorize_gated_by_authentication(self):
+        """Verify /oauth/authorize requires real authentication when REQUIRE_AUTH=true."""
+        from core.config import config
+        old_require_auth = getattr(config, "REQUIRE_AUTH", False)
+        try:
+            config.REQUIRE_AUTH = True
+            # API request without credentials returns 401
+            resp_no_key = self.client.get(
+                "/oauth/authorize?client_id=claude&response_type=code",
+                headers={"Accept": "application/json"}
+            )
+            self.assertEqual(resp_no_key.status_code, 401)
+            self.assertEqual(resp_no_key.json().get("error"), "access_denied")
+
+            # Browser request without credentials returns HTML consent screen
+            resp_html = self.client.get(
+                "/oauth/authorize?client_id=claude&response_type=code",
+                headers={"Accept": "text/html"}
+            )
+            self.assertEqual(resp_html.status_code, 200)
+            self.assertIn("Authorize MCP Client", resp_html.text)
+            self.assertIn("OmniCache API Key", resp_html.text)
+
+            # Request with valid x-api-key succeeds
+            resp_with_key = self.client.get(
+                "/oauth/authorize?client_id=claude&response_type=code",
+                headers={"x-api-key": "mcp_tenant_key"}
+            )
+            self.assertEqual(resp_with_key.status_code, 200)
+            self.assertEqual(resp_with_key.json().get("status"), "authorized")
+        finally:
+            config.REQUIRE_AUTH = old_require_auth
+
     def test_09_unauthenticated_returns_www_authenticate(self):
         """Verify unauthenticated requests return 401 with RFC 9728 WWW-Authenticate challenge."""
         from core.config import config

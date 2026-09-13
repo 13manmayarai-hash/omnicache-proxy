@@ -12,6 +12,10 @@ import sys
 import asyncio
 import collections
 import uuid
+import hashlib
+import base64
+import hmac
+from urllib.parse import parse_qs
 from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -2872,6 +2876,23 @@ async def handle_omnicache_2(request: Request) -> Response:
 
 MCP_ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 OAUTH_CODES: Dict[str, Dict[str, Any]] = {}
+OAUTH_TOKENS: Dict[str, Dict[str, Any]] = {}
+
+
+def verify_pkce(code_verifier: str, code_challenge: str, method: str = "S256") -> bool:
+    """Verifies PKCE code_verifier against code_challenge per RFC 7636."""
+    if not code_verifier or not code_challenge:
+        return False
+    if method == "plain":
+        return hmac.compare_digest(code_verifier, code_challenge)
+    elif method == "S256":
+        try:
+            digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+            computed = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+            return hmac.compare_digest(computed, code_challenge.rstrip("="))
+        except Exception:
+            return False
+    return False
 
 
 async def handle_oauth_metadata(request: Request) -> Response:
@@ -2912,26 +2933,149 @@ async def handle_oauth_protected_resource(request: Request) -> Response:
 
 
 async def handle_oauth_authorize(request: Request) -> Response:
-    """OAuth 2.0 authorization endpoint for MCP Connectors consent and code issuance."""
+    """
+    OAuth 2.0 authorization endpoint for MCP Connectors.
+    RFC 6749 Section 4.1 & RFC 7636 (PKCE).
+    Enforces real user authentication & consent:
+    - In REQUIRE_AUTH=true mode: requires valid tenant/admin key via header, query param, or interactive login form.
+    - Binds authorization codes to verified tenant identities, redirect_uris, and PKCE challenges.
+    - Single-use codes expire in 10 minutes.
+    """
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
 
-    params = request.query_params
-    client_id = params.get("client_id", "claude-connectors")
-    redirect_uri = params.get("redirect_uri", "")
-    response_type = params.get("response_type", "code")
-    state = params.get("state", "")
-    scope = params.get("scope", "mcp:read mcp:write")
-    code_challenge = params.get("code_challenge", "")
+    params: Dict[str, Any] = {}
+    if request.method == "POST":
+        content_type = request.headers.get("content-type", "").lower()
+        if "application/x-www-form-urlencoded" in content_type:
+            try:
+                raw_body = await request.body()
+                params = {k: v[0] for k, v in parse_qs(raw_body.decode("utf-8", errors="replace")).items()}
+            except Exception:
+                pass
+        elif "application/json" in content_type:
+            try:
+                params = await request.json()
+            except Exception:
+                pass
+    if not params:
+        params = dict(request.query_params)
 
+    client_id = params.get("client_id", "").strip() or "claude-connectors"
+    redirect_uri = params.get("redirect_uri", "").strip()
+    response_type = params.get("response_type", "code").strip()
+    state = params.get("state", "").strip()
+    scope = params.get("scope", "mcp:read mcp:write").strip()
+    code_challenge = params.get("code_challenge", "").strip()
+    code_challenge_method = params.get("code_challenge_method", "S256").strip()
+
+    if response_type != "code":
+        return JSONResponse({
+            "error": "unsupported_response_type",
+            "error_description": "Only response_type='code' is supported"
+        }, status_code=400, headers=cors_headers)
+
+    # Determine user identity & authorization
+    is_authenticated = False
+    auth_org_id = "default"
+    auth_team = "Developer"
+
+    # Check credentials: Authorization header, x-api-key header, or query/form api_key
+    key = extract_auth_key(request)
+    if not key or key == "default":
+        key = params.get("api_key", "").strip()
+
+    if getattr(config, "REQUIRE_AUTH", False):
+        if key:
+            allowed, auth_reason, key_info = quota_manager.check_authorization(key)
+            if allowed and key_info:
+                is_authenticated = True
+                auth_org_id = key_info.get("org_id", "default")
+                auth_team = key_info.get("team_name", "Authorized Tenant")
+
+        if not is_authenticated:
+            # If accessed via web browser requesting HTML, render interactive Consent & Login UI
+            accept = request.headers.get("accept", "").lower()
+            if "text/html" in accept:
+                error_msg = params.get("auth_error", "")
+                error_banner = f'<div class="error-banner">{error_msg}</div>' if error_msg else ''
+                html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OmniCache — Authorize MCP Client</title>
+  <style>
+    body {{ background: #121316; color: #e1e3e6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+    .card {{ background: #1a1c20; border: 1px solid #2a2d34; border-radius: 12px; width: 440px; padding: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }}
+    h2 {{ margin-top: 0; font-size: 20px; font-weight: 600; color: #fff; }}
+    p {{ color: #9aa0a6; font-size: 14px; line-height: 1.5; }}
+    .badge {{ display: inline-block; background: #252830; color: #8ab4f8; padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 13px; }}
+    .form-group {{ margin: 20px 0; }}
+    label {{ display: block; font-size: 13px; margin-bottom: 8px; color: #ccc; }}
+    input[type="password"] {{ width: 100%; box-sizing: border-box; background: #121316; border: 1px solid #3c4043; border-radius: 6px; color: #fff; padding: 10px 12px; font-size: 14px; outline: none; }}
+    input[type="password"]:focus {{ border-color: #8ab4f8; }}
+    .actions {{ display: flex; gap: 12px; margin-top: 24px; }}
+    button {{ flex: 1; padding: 10px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; }}
+    .btn-primary {{ background: #1a73e8; color: #fff; }}
+    .btn-primary:hover {{ background: #1557b0; }}
+    .btn-secondary {{ background: #2a2d34; color: #ccc; }}
+    .btn-secondary:hover {{ background: #353942; }}
+    .error-banner {{ background: #3c1e22; border: 1px solid #d93025; color: #f28b82; padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Authorize MCP Client</h2>
+    <p>Application <span class="badge">{client_id}</span> is requesting permission to access OmniCache vector memory.</p>
+    <p>Requested Scope: <span class="badge">{scope}</span></p>
+    {error_banner}
+    <form method="POST" action="/oauth/authorize">
+      <input type="hidden" name="client_id" value="{client_id}" />
+      <input type="hidden" name="redirect_uri" value="{redirect_uri}" />
+      <input type="hidden" name="state" value="{state}" />
+      <input type="hidden" name="scope" value="{scope}" />
+      <input type="hidden" name="code_challenge" value="{code_challenge}" />
+      <input type="hidden" name="code_challenge_method" value="{code_challenge_method}" />
+      <input type="hidden" name="response_type" value="{response_type}" />
+      <div class="form-group">
+        <label for="api_key">OmniCache API Key or Admin Key:</label>
+        <input type="password" id="api_key" name="api_key" placeholder="Enter API Key to approve..." required autofocus />
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn-primary">Approve & Connect</button>
+        <button type="button" class="btn-secondary" onclick="window.history.back()">Deny</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>"""
+                return HTMLResponse(html, headers=cors_headers)
+            else:
+                auth_headers = dict(cors_headers)
+                auth_headers["WWW-Authenticate"] = 'Bearer realm="OmniCache OAuth", error="access_denied"'
+                return JSONResponse({
+                    "error": "access_denied",
+                    "error_description": "User authentication required. Supply a valid OmniCache API Key to authorize this client."
+                }, status_code=401, headers=auth_headers)
+    else:
+        # In local developer mode (REQUIRE_AUTH=false)
+        is_authenticated = True
+        auth_org_id = request.headers.get("x-org-id", "default").strip() or "default"
+        auth_team = "Local Developer"
+
+    # Mint single-use, time-bound authorization code
     code = f"omni_code_{uuid.uuid4().hex}"
     OAUTH_CODES[code] = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "scope": scope,
         "code_challenge": code_challenge,
-        "created_at": time.time()
+        "code_challenge_method": code_challenge_method,
+        "org_id": auth_org_id,
+        "team_name": auth_team,
+        "created_at": time.time(),
+        "expires_at": time.time() + 600  # 10 minutes
     }
 
     if redirect_uri:
@@ -2947,58 +3091,222 @@ async def handle_oauth_authorize(request: Request) -> Response:
         "state": state,
         "client_id": client_id,
         "scope": scope,
-        "message": "OAuth 2.0 authorization granted. Exchange code at /oauth/token"
+        "expires_in": 600,
+        "message": "Authorization code issued. Exchange code at /oauth/token"
     }, headers=cors_headers)
 
 
 async def handle_oauth_token(request: Request) -> Response:
-    """OAuth 2.0 token issuance endpoint."""
+    """
+    OAuth 2.0 token issuance endpoint.
+    RFC 6749 Section 4.1.3 (Authorization Code Grant), Section 4.4 (Client Credentials), & RFC 7636 (PKCE).
+    Strictly enforces:
+    - Authorization code single-use redemption and expiration.
+    - Client ID and redirect_uri binding validation.
+    - PKCE code_verifier verification.
+    - Client secret verification for client_credentials grant.
+    """
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
 
-    grant_type = "client_credentials"
-    client_id = "default_mcp_client"
-    scope = "mcp:read mcp:write"
-
     content_type = request.headers.get("content-type", "").lower()
+    params: Dict[str, Any] = {}
     if "application/json" in content_type:
         try:
-            body = await request.json()
-            grant_type = body.get("grant_type", grant_type)
-            client_id = body.get("client_id", client_id)
-            scope = body.get("scope", scope)
+            params = await request.json()
         except Exception:
             pass
     elif "application/x-www-form-urlencoded" in content_type:
         try:
-            form = await request.form()
-            grant_type = form.get("grant_type", grant_type)
-            client_id = form.get("client_id", client_id)
-            scope = form.get("scope", scope)
+            raw_body = await request.body()
+            params = {k: v[0] for k, v in parse_qs(raw_body.decode("utf-8", errors="replace")).items()}
+        except Exception:
+            pass
+    else:
+        params = dict(request.query_params)
+
+    grant_type = params.get("grant_type", "").strip()
+    client_id = params.get("client_id", "").strip()
+    client_secret = params.get("client_secret", "").strip()
+
+    # Support HTTP Basic authentication for client_id:client_secret
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Basic "):
+        try:
+            raw_creds = base64.b64decode(auth_header[6:].strip()).decode("utf-8")
+            if ":" in raw_creds:
+                basic_id, basic_secret = raw_creds.split(":", 1)
+                if not client_id:
+                    client_id = basic_id
+                if not client_secret:
+                    client_secret = basic_secret
         except Exception:
             pass
 
-    access_token = f"omni_tok_{uuid.uuid4().hex}"
-    refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+    # =========================================================================
+    # Grant Type 1: authorization_code (RFC 6749 Section 4.1.3 & RFC 7636 PKCE)
+    # =========================================================================
+    if grant_type == "authorization_code":
+        code = params.get("code", "").strip()
+        redirect_uri = params.get("redirect_uri", "").strip()
+        code_verifier = params.get("code_verifier", "").strip()
 
-    # Register the generated OAuth token in quota_manager as an active tenant key
-    tenant_org = f"org_{client_id}" if client_id else "oauth_tenant"
-    quota_manager.register_key(
-        access_token,
-        team_name=f"OAuth Client ({client_id})",
-        org_id=tenant_org,
-        role="tenant"
-    )
+        if not code:
+            return JSONResponse({
+                "error": "invalid_request",
+                "error_description": "Parameter 'code' is required for authorization_code grant."
+            }, status_code=400, headers=cors_headers)
 
-    token_response = {
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_in": 86400,
-        "refresh_token": refresh_token,
-        "scope": scope
-    }
-    return JSONResponse(token_response, headers=cors_headers)
+        if code not in OAUTH_CODES:
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Authorization code is invalid, expired, or has already been redeemed."
+            }, status_code=400, headers=cors_headers)
+
+        # Single-use redemption: pop immediately to prevent replay attacks
+        code_entry = OAUTH_CODES.pop(code)
+
+        # Verify expiration (10 min lifetime)
+        if time.time() > code_entry.get("expires_at", 0):
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Authorization code has expired."
+            }, status_code=400, headers=cors_headers)
+
+        # Verify client_id binding if provided during token exchange
+        if client_id and code_entry.get("client_id") and client_id != code_entry["client_id"]:
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": f"Client ID mismatch. Code was issued for '{code_entry['client_id']}'."
+            }, status_code=400, headers=cors_headers)
+
+        # Verify redirect_uri binding if present in authorization
+        if code_entry.get("redirect_uri") and redirect_uri:
+            if redirect_uri != code_entry["redirect_uri"]:
+                return JSONResponse({
+                    "error": "invalid_grant",
+                    "error_description": "redirect_uri mismatch with the authorization request."
+                }, status_code=400, headers=cors_headers)
+
+        # Verify PKCE if code_challenge was registered
+        code_challenge = code_entry.get("code_challenge")
+        if code_challenge:
+            method = code_entry.get("code_challenge_method", "S256")
+            if not code_verifier or not verify_pkce(code_verifier, code_challenge, method):
+                return JSONResponse({
+                    "error": "invalid_grant",
+                    "error_description": "PKCE verification failed: invalid or missing code_verifier."
+                }, status_code=400, headers=cors_headers)
+
+        # Code redemption and verification successful!
+        target_org = code_entry.get("org_id", "default")
+        target_team = code_entry.get("team_name", f"OAuth Client ({client_id or 'default'})")
+        granted_scope = code_entry.get("scope", "mcp:read mcp:write")
+
+        access_token = f"omni_tok_{uuid.uuid4().hex}"
+        refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+
+        OAUTH_TOKENS[access_token] = {
+            "client_id": client_id or code_entry.get("client_id", "unknown"),
+            "org_id": target_org,
+            "scope": granted_scope,
+            "created_at": time.time(),
+            "expires_at": time.time() + 86400
+        }
+
+        quota_manager.register_key(
+            access_token,
+            team_name=target_team,
+            org_id=target_org,
+            role="tenant"
+        )
+
+        return JSONResponse({
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": 86400,
+            "refresh_token": refresh_token,
+            "scope": granted_scope
+        }, headers=cors_headers)
+
+    # =========================================================================
+    # Grant Type 2: client_credentials (RFC 6749 Section 4.4)
+    # =========================================================================
+    elif grant_type == "client_credentials":
+        # In client_credentials grant, client authentication is MANDATORY.
+        # Arbitrary / unauthenticated token minting is strictly forbidden.
+        if not client_secret:
+            auth_headers = dict(cors_headers)
+            auth_headers["WWW-Authenticate"] = 'Basic realm="OmniCache OAuth", error="invalid_client"'
+            return JSONResponse({
+                "error": "invalid_client",
+                "error_description": "Client authentication failed. A valid client_secret is required for client_credentials grant."
+            }, status_code=401, headers=auth_headers)
+
+        # Validate client_secret against quota_manager or admin key
+        is_valid_client = False
+        target_org = f"org_{client_id}" if client_id else "oauth_tenant"
+        target_team = f"OAuth Client ({client_id})" if client_id else "OAuth Client"
+
+        key_info = quota_manager.storage.get_key(client_secret)
+        if key_info and key_info.get("active", True):
+            is_valid_client = True
+            target_org = key_info.get("org_id", target_org)
+            target_team = key_info.get("team_name", target_team)
+        elif getattr(config, "ADMIN_API_KEY", "").strip() and hmac.compare_digest(client_secret, config.ADMIN_API_KEY):
+            is_valid_client = True
+            target_org = "admin"
+            target_team = "OmniCache Admin"
+        elif not getattr(config, "REQUIRE_AUTH", False) and client_secret == "default":
+            is_valid_client = True
+
+        if not is_valid_client:
+            auth_headers = dict(cors_headers)
+            auth_headers["WWW-Authenticate"] = 'Basic realm="OmniCache OAuth", error="invalid_client"'
+            return JSONResponse({
+                "error": "invalid_client",
+                "error_description": "Client authentication failed. Invalid client_secret."
+            }, status_code=401, headers=auth_headers)
+
+        requested_scope = params.get("scope", "mcp:read mcp:write").strip()
+        access_token = f"omni_tok_{uuid.uuid4().hex}"
+        refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+
+        OAUTH_TOKENS[access_token] = {
+            "client_id": client_id or "client_credentials",
+            "org_id": target_org,
+            "scope": requested_scope,
+            "created_at": time.time(),
+            "expires_at": time.time() + 86400
+        }
+
+        quota_manager.register_key(
+            access_token,
+            team_name=target_team,
+            org_id=target_org,
+            role="tenant"
+        )
+
+        return JSONResponse({
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": 86400,
+            "refresh_token": refresh_token,
+            "scope": requested_scope
+        }, headers=cors_headers)
+
+    elif grant_type == "refresh_token":
+        return JSONResponse({
+            "error": "unsupported_grant_type",
+            "error_description": "refresh_token grant is not yet implemented."
+        }, status_code=400, headers=cors_headers)
+
+    else:
+        return JSONResponse({
+            "error": "unsupported_grant_type",
+            "error_description": f"Grant type '{grant_type}' is unsupported. Supported grant types: 'authorization_code', 'client_credentials'."
+        }, status_code=400, headers=cors_headers)
 
 
 async def handle_mcp(request: Request) -> Response:
@@ -3100,6 +3408,38 @@ async def handle_mcp(request: Request) -> Response:
             "id": None,
             "error": {"code": -32700, "message": f"Parse error: Invalid JSON payload: {str(exc)}"}
         }, status_code=400, headers=base_headers)
+
+    # Scope enforcement for OAuth Bearer tokens
+    auth_key = extract_auth_key(request)
+    oauth_info = OAUTH_TOKENS.get(auth_key)
+    token_scope = oauth_info.get("scope", "mcp:admin") if oauth_info else "mcp:admin"
+
+    method = req_body.get("method")
+    if method == "tools/call":
+        tool_params = req_body.get("params", {})
+        tool_name = tool_params.get("name", "")
+        clean_name = tool_name[len("omnicache_"):] if tool_name.startswith("omnicache_") else tool_name
+
+        if clean_name == "invalidate":
+            if "mcp:admin" not in token_scope and "mcp:write" not in token_scope:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": req_body.get("id"),
+                    "error": {
+                        "code": -32600,
+                        "message": f"Forbidden: Token scope '{token_scope}' does not permit destructive tool '{tool_name}'. Required scope: 'mcp:write' or 'mcp:admin'."
+                    }
+                }, headers=base_headers)
+        elif clean_name in ("store", "record_tool"):
+            if "mcp:write" not in token_scope and "mcp:admin" not in token_scope:
+                return JSONResponse({
+                    "jsonrpc": "2.0",
+                    "id": req_body.get("id"),
+                    "error": {
+                        "code": -32600,
+                        "message": f"Forbidden: Token scope '{token_scope}' does not permit write tool '{tool_name}'. Required scope: 'mcp:write' or 'mcp:admin'."
+                    }
+                }, headers=base_headers)
 
     res = process_mcp_jsonrpc(req_body, default_org_id=org_id)
 

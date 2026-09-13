@@ -264,20 +264,43 @@ def test_06_untracked_external_mutation_self_verifying_invalidation():
 
         invalidate_git_state_cache(temp_repo)
 
-        # 1. First lookup warms the debounce cache
+        # 1. First lookup warms the debounce cache (Baseline)
         state_initial = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        assert not state_initial.startswith("nogit_dir"), f"Baseline unexpectedly fell back to nogit: {state_initial}"
 
-        # 2. Raw disk write outside the proxy (not passing through compact_and_record_agent_tools)
+        # 2. First consecutive raw disk edit outside proxy
         time.sleep(0.01)
-        with open(app_path, "a") as f:
-            f.write("# external modification outside proxy\n")
+        with open(app_path, "w") as f:
+            f.write("def main(): return 'edit_1_version'\n")
 
-        # 3. Immediate query (<50ms, well within any debounce window)
-        # MUST reflect the new state, not a cached stale one!
-        state_after_external_edit = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
-        assert state_after_external_edit != state_initial, (
-            "Failed: External disk edit was masked by stale debounced git state!"
-        )
+        state_edit_1 = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        assert not state_edit_1.startswith("nogit_dir"), f"Edit 1 fell through to nogit_dir fallback: {state_edit_1}"
+        assert state_edit_1 != state_initial, "Edit 1 failed to invalidate cached git state!"
+
+        # Immediate repeat lookup should be debounced and match state_edit_1
+        state_edit_1_debounced = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        assert state_edit_1_debounced == state_edit_1, "Debounced repeat lookup failed!"
+
+        # 3. Second consecutive raw disk edit outside proxy (different content)
+        time.sleep(0.01)
+        with open(app_path, "w") as f:
+            f.write("def main(): return 'edit_2_completely_different_code'\n")
+
+        state_edit_2 = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        assert not state_edit_2.startswith("nogit_dir"), f"Edit 2 fell through to nogit_dir fallback: {state_edit_2}"
+        assert state_edit_2 != state_edit_1, "Edit 2 produced identical fingerprint to Edit 1 (collision bug)!"
+        assert state_edit_2 != state_initial, "Edit 2 matched initial state!"
+
+        # 4. Third consecutive raw disk edit outside proxy (different content)
+        time.sleep(0.01)
+        with open(app_path, "w") as f:
+            f.write("def main(): return 'edit_3_final_modification'\n")
+
+        state_edit_3 = get_git_workspace_state(temp_repo, policy_type="scoped_git_workspace")
+        assert not state_edit_3.startswith("nogit_dir"), f"Edit 3 fell through to nogit_dir fallback: {state_edit_3}"
+        assert state_edit_3 != state_edit_2, "Edit 3 produced identical fingerprint to Edit 2 (collision bug)!"
+        assert state_edit_3 != state_edit_1, "Edit 3 produced identical fingerprint to Edit 1!"
+        assert state_edit_3 != state_initial, "Edit 3 matched initial state!"
 
 
 def test_07_fuzzy_match_curated_paraphrase_and_collision_boundaries():

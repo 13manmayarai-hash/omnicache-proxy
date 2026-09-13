@@ -327,7 +327,11 @@ def get_git_workspace_state(
         curr_sig = compute_workspace_stat_signal(target_dir, cached_files)
         if curr_sig == cached_sig:
             git_state = cached_state
-    else:
+        else:
+            # File modified outside proxy! Invalidate stale entry to compute fresh git state
+            _GIT_STATE_CACHE.pop(cache_key, None)
+
+    if git_state is None:
         try:
             is_git = subprocess.run(
                 ["git", "-C", target_dir, "rev-parse", "--is-inside-work-tree"],

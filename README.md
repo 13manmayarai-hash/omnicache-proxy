@@ -317,6 +317,24 @@ OmniCache includes two built-in real-time developer dashboards served side-by-si
 * For security disclosures and guidelines, see [SECURITY.md](SECURITY.md).
 * For complete data handling, retention policies, and user purge rights under Anthropic Directory Policy, see [PRIVACY.md](PRIVACY.md).
 
+### 🐳 Docker & Container Deployment
+
+OmniCache provides a hardened container image with fail-closed security invariants:
+
+```bash
+# REQUIRED: Pass ADMIN_API_KEY at runtime (do not bake keys into image layers)
+docker run -d \
+  -p 8000:8000 \
+  -e ADMIN_API_KEY="your-secure-random-admin-key" \
+  omnicache-proxy:latest
+
+# Or launch with docker-compose (includes Redis + automated healthchecks)
+docker-compose up -d
+```
+
+> [!IMPORTANT]
+> The container defaults to `OMNICACHE_HOST=0.0.0.0` and `REQUIRE_AUTH=true`. An `ADMIN_API_KEY` **must** be supplied at runtime via `-e ADMIN_API_KEY=...` or your container orchestrator's secrets manager. If omitted, the container immediately refuses to boot with an explicit security error.
+
 ---
 
 ## 📄 Documentation

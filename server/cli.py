@@ -1291,7 +1291,12 @@ def main():
 
     port = args.port
     host = args.host
-    validate_startup_security_invariants(host)
+    try:
+        validate_startup_security_invariants(host)
+    except RuntimeError as e:
+        print(f"\n{e}\n", file=sys.stderr)
+        sys.exit(1)
+
     log_level = "info" if args.verbose else "warning"
     access_log = bool(args.verbose)
 

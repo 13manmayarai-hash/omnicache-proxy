@@ -15,6 +15,10 @@ EXPOSE 8000
 
 ENV OMNICACHE_PORT=8000
 ENV OMNICACHE_HOST=0.0.0.0
-ENV REQUIRE_AUTH=false
+ENV REQUIRE_AUTH=true
+
+# REQUIRED at runtime: pass ADMIN_API_KEY via `docker run -e` or secrets manager.
+# Do not bake a real key into this image.
 
 CMD ["omnicache"]
+

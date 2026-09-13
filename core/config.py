@@ -210,6 +210,7 @@ def validate_startup_security_invariants(host: str = None):
     Validates critical security invariants before proxy boot.
     Fails closed if bound to non-localhost (0.0.0.0 or public IP) without REQUIRE_AUTH=true,
     unless explicitly bypassed with OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE=true.
+    Fails fast if REQUIRE_AUTH=true but no ADMIN_API_KEY is configured.
     """
     target_host = (host or config.HOST).strip().lower()
     is_localhost = target_host in ("127.0.0.1", "localhost", "::1")
@@ -219,6 +220,13 @@ def validate_startup_security_invariants(host: str = None):
             f"with REQUIRE_AUTH=false. This would expose an unauthenticated proxy to the network. "
             f"To fix: Set REQUIRE_AUTH=true (with ADMIN_API_KEY) or set OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE=true."
         )
+
+    if config.REQUIRE_AUTH and not getattr(config, "ADMIN_API_KEY", "").strip():
+        raise RuntimeError(
+            "SECURITY ERROR: REQUIRE_AUTH=true but no ADMIN_API_KEY is set.\n"
+            "Set ADMIN_API_KEY via `docker run -e ADMIN_API_KEY=<your-key>` or your deployment's secrets manager."
+        )
+
 
 
 config = ProxyConfig()

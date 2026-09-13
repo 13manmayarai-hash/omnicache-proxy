@@ -295,23 +295,33 @@ class TestSecurityRemediation(unittest.TestCase):
         # 0.0.0.0 without auth must raise RuntimeError
         orig_req_auth = config.REQUIRE_AUTH
         orig_allow_insecure = config.ALLOW_INSECURE_NETWORK_EXPOSURE
+        orig_admin_key = config.ADMIN_API_KEY
         try:
             config.REQUIRE_AUTH = False
             config.ALLOW_INSECURE_NETWORK_EXPOSURE = False
             with self.assertRaises(RuntimeError):
                 validate_startup_security_invariants("0.0.0.0")
 
-            # Allowed when REQUIRE_AUTH is True
+            # REQUIRE_AUTH=True without ADMIN_API_KEY must raise RuntimeError
             config.REQUIRE_AUTH = True
+            config.ADMIN_API_KEY = ""
+            with self.assertRaises(RuntimeError) as ctx:
+                validate_startup_security_invariants("0.0.0.0")
+            self.assertIn("no ADMIN_API_KEY is set", str(ctx.exception))
+
+            # Allowed when REQUIRE_AUTH is True and ADMIN_API_KEY is configured
+            config.ADMIN_API_KEY = "test-admin-secret"
             validate_startup_security_invariants("0.0.0.0")
 
             # Allowed when explicitly bypassed
             config.REQUIRE_AUTH = False
+            config.ADMIN_API_KEY = ""
             config.ALLOW_INSECURE_NETWORK_EXPOSURE = True
             validate_startup_security_invariants("0.0.0.0")
         finally:
             config.REQUIRE_AUTH = orig_req_auth
             config.ALLOW_INSECURE_NETWORK_EXPOSURE = orig_allow_insecure
+            config.ADMIN_API_KEY = orig_admin_key
 
 
 if __name__ == "__main__":

@@ -266,7 +266,13 @@ claude mcp add omnicache -- omnicache mcp
 | `omnicache_health` | Enterprise health check: verifies SQLite persistence, vector memory, and tool replayer status. |
 | `omnicache_stats` | Returns real-time telemetry: hit ratios, total queries, tokens saved, and cost saved in USD. |
 
-*For complete MCP documentation and schemas, see [`mcp/README.md`](mcp/README.md).*
+#### Example Agent Prompts Exercising MCP Tools
+
+1. **`omnicache_query`**: `"Check OmniCache to see if we have an optimized SQLite WAL connection pool implementation in Python."`
+2. **`omnicache_search`**: `"Search our cached knowledge base for solutions related to OAuth 2.0 token expiration and refresh token rotation."`
+3. **`omnicache_store`**: `"Store our standard API rate limiting configuration in OmniCache under the tag 'networking'."`
+
+*For complete MCP documentation, payloads, and JSON schemas, see [`mcp/README.md`](mcp/README.md).*
 
 ---
 

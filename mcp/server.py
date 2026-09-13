@@ -18,6 +18,7 @@ from core.vector_cache import cache_instance
 from persistence.snapshot_store import snapshot_store
 from server.upstream import upstream_client
 from server.tool_replayer import tool_cache
+from core.privacy_shield import PrivacyShield
 
 # Restore persistent entries into cache
 snapshot_store.load_into_cache(cache_instance)
@@ -35,6 +36,13 @@ TOOLS_METADATA = [
                 "threshold": {"type": "number", "description": "Optional minimum cosine similarity (0.0 - 1.0)."}
             },
             "required": ["prompt"]
+        },
+        "annotations": {
+            "title": "Semantic Cache Query",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False
         }
     },
     {
@@ -50,6 +58,13 @@ TOOLS_METADATA = [
                 "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"}
             },
             "required": ["prompt", "answer"]
+        },
+        "annotations": {
+            "title": "Store Knowledge in Cache",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False
         }
     },
     {
@@ -63,6 +78,13 @@ TOOLS_METADATA = [
                 "top_k": {"type": "integer", "description": "Number of top results to return (default: 5).", "default": 5}
             },
             "required": ["query"]
+        },
+        "annotations": {
+            "title": "Semantic Vector Search",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False
         }
     },
     {
@@ -77,6 +99,13 @@ TOOLS_METADATA = [
                 "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."}
             },
             "required": ["tool_name"]
+        },
+        "annotations": {
+            "title": "Replay Deterministic Tool",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False
         }
     },
     {
@@ -93,6 +122,13 @@ TOOLS_METADATA = [
                 "ttl_seconds": {"type": "integer", "description": "Custom TTL in seconds."}
             },
             "required": ["tool_name", "output"]
+        },
+        "annotations": {
+            "title": "Record Tool Execution",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False
         }
     },
     {
@@ -104,6 +140,13 @@ TOOLS_METADATA = [
                 "tag": {"type": "string", "description": "Tag to invalidate (e.g. 'docs-v1')."},
                 "org_id": {"type": "string", "description": "Tenant ID to purge completely."}
             }
+        },
+        "annotations": {
+            "title": "Invalidate Cache Entries",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": False,
+            "openWorldHint": False
         }
     },
     {
@@ -114,36 +157,13 @@ TOOLS_METADATA = [
             "properties": {
                 "org_id": {"type": "string", "description": "Optional tenant ID filter."}
             }
-        }
-    },
-    {
-        "name": "replay_tool",
-        "description": "Alias for omnicache_replay_tool. Looks up cached execution outputs for deterministic agent tools.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "tool_name": {"type": "string", "description": "Name of the tool (e.g. 'read_file', 'git_status')."},
-                "arguments": {"type": "object", "description": "Arguments passed to the tool."},
-                "workspace_fingerprint": {"type": "string", "description": "Workspace identifier (default: default).", "default": "default"},
-                "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."}
-            },
-            "required": ["tool_name"]
-        }
-    },
-    {
-        "name": "record_tool",
-        "description": "Alias for omnicache_record_tool. Records and caches execution output of a deterministic tool run.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "tool_name": {"type": "string", "description": "Name of the tool."},
-                "arguments": {"type": "object", "description": "Arguments passed to the tool."},
-                "output": {"type": "string", "description": "Execution output of the tool to cache."},
-                "workspace_fingerprint": {"type": "string", "description": "Workspace identifier (default: default).", "default": "default"},
-                "workspace_state": {"type": "string", "description": "Optional explicit git/workspace state."},
-                "ttl_seconds": {"type": "integer", "description": "Custom TTL in seconds."}
-            },
-            "required": ["tool_name", "output"]
+        },
+        "annotations": {
+            "title": "Cache Telemetry Stats",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False
         }
     },
     {
@@ -152,6 +172,13 @@ TOOLS_METADATA = [
         "inputSchema": {
             "type": "object",
             "properties": {}
+        },
+        "annotations": {
+            "title": "System Health & Readiness",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False
         }
     }
 ]
@@ -201,12 +228,14 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
     elif clean_name == "store":
         prompt = arguments.get("prompt", "")
         answer = arguments.get("answer", "")
+        clean_prompt, _, _ = PrivacyShield.sanitize_text(prompt)
+        clean_answer, _, _ = PrivacyShield.sanitize_text(answer)
         model = arguments.get("model", "gpt-4o")
         tag = arguments.get("tag", None)
 
         payload = {
             "model": model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": clean_prompt}],
             "temperature": 0.0
         }
         res_payload = {
@@ -214,8 +243,8 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             "object": "chat.completion",
             "created": int(time.time()),
             "model": model,
-            "choices": [{"message": {"role": "assistant", "content": answer}}],
-            "usage": {"prompt_tokens": len(prompt.split()), "completion_tokens": len(answer.split())}
+            "choices": [{"message": {"role": "assistant", "content": clean_answer}}],
+            "usage": {"prompt_tokens": len(clean_prompt.split()), "completion_tokens": len(clean_answer.split())}
         }
         entry = cache_instance.store(payload, res_payload, org_id=org_id, tag=tag)
         snapshot_store.persist_entry(entry, synchronous=False)
@@ -294,6 +323,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         tool_name = arguments.get("tool_name", "")
         tool_args = arguments.get("arguments", {})
         output = str(arguments.get("output", ""))
+        clean_output, _, _ = PrivacyShield.sanitize_text(output)
         raw_fp = arguments.get("workspace_fingerprint", "default")
         ws_dir = arguments.get("workspace_dir") or arguments.get("cwd") or arguments.get("repo_path") or None
         ws_state = arguments.get("workspace_state", None)
@@ -303,7 +333,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         tool_key = tool_cache.store_tool_call(
             tool_name=tool_name,
             arguments=tool_args,
-            output=output,
+            output=clean_output,
             workspace_fingerprint=env_fp,
             workspace_state=ws_state,
             ttl_seconds=ttl,
@@ -426,7 +456,19 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
         tool_args = params.get("arguments", {})
         org = tool_args.get("org_id") or default_org_id
         t0 = time.perf_counter()
-        tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org)
+        try:
+            tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org)
+        except Exception as exc:
+            dur = round((time.perf_counter() - t0) * 1000, 3)
+            log_audit_event(tool_name, org, dur, "error", {"error": str(exc)})
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32603,
+                    "message": f"Internal error during tool execution: {str(exc)}"
+                }
+            }
         dur = round((time.perf_counter() - t0) * 1000, 3)
         status_str = "error" if "error" in tool_res else "success"
         log_audit_event(tool_name, org, dur, status_str)
@@ -450,17 +492,31 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default") ->
 
 
 def run_stdio_server():
-    """Main JSON-RPC stdio event loop."""
+    """Main JSON-RPC stdio event loop with comprehensive exception resilience."""
     default_org = os.environ.get("OMNICACHE_ORG_ID", "default")
     for line in sys.stdin:
         if not line.strip():
             continue
         try:
             req = json.loads(line)
-        except Exception:
+        except Exception as exc:
+            err_res = {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32700, "message": f"Parse error: {str(exc)}"}
+            }
+            sys.stdout.write(json.dumps(err_res) + "\n")
+            sys.stdout.flush()
             continue
 
-        res = process_mcp_jsonrpc(req, default_org_id=default_org)
+        try:
+            res = process_mcp_jsonrpc(req, default_org_id=default_org)
+        except Exception as exc:
+            res = {
+                "jsonrpc": "2.0",
+                "id": req.get("id") if isinstance(req, dict) else None,
+                "error": {"code": -32603, "message": f"Internal error: {str(exc)}"}
+            }
         sys.stdout.write(json.dumps(res) + "\n")
         sys.stdout.flush()
 

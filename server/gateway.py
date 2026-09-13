@@ -11,10 +11,11 @@ import os
 import sys
 import asyncio
 import collections
+import uuid
 from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse, Response
+from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse, Response, RedirectResponse
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -227,10 +228,12 @@ def authenticate_tenant(request: Request) -> Tuple[bool, Optional[Response], Dic
     allowed, auth_reason, key_info = quota_manager.check_authorization(key)
     if not allowed:
         if key_info is None:
+            auth_headers = dict(cors_headers)
+            auth_headers["WWW-Authenticate"] = 'Bearer realm="OmniCache", error="invalid_token"'
             return False, JSONResponse(
                 {"error": {"message": auth_reason, "type": "authentication_error"}},
                 status_code=401,
-                headers=cors_headers
+                headers=auth_headers
             ), {}, ""
         else:
             return False, JSONResponse(
@@ -2305,7 +2308,7 @@ async def handle_stats(request: Request) -> Response:
         },
         "mesh_network": mesh_bus.get_mesh_topology(),
         "system_info": {
-            "version": getattr(config, "VERSION", "3.0.2"),
+            "version": getattr(config, "VERSION", "3.0.5"),
             "storage_backend": getattr(config, "CACHE_STORAGE_BACKEND", "auto"),
             "persistence": "sqlite3_wal_write_behind",
             "host_binding": config.HOST,
@@ -2778,7 +2781,7 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "3.0.2"),
+        "version": getattr(config, "VERSION", "3.0.5"),
         "service": "omnicache-proxy",
         "circuit_breaker": failover_engine.circuit_breaker.get_status()
     }, headers=cors_headers)
@@ -2800,7 +2803,7 @@ async def handle_root(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "3.0.2"),
+        "version": getattr(config, "VERSION", "3.0.5"),
         "dashboard": "/dashboard",
         "omnicache_2": "/omnicache_2",
         "endpoints": {
@@ -2863,8 +2866,150 @@ async def handle_omnicache_2(request: Request) -> Response:
     return HTMLResponse("<h1>OmniCache 2 Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
 
 
+# =====================================================================
+# Model Context Protocol (MCP) Session & OAuth State
+# =====================================================================
+
+MCP_ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
+OAUTH_CODES: Dict[str, Dict[str, Any]] = {}
+
+
+async def handle_oauth_metadata(request: Request) -> Response:
+    """RFC 8414 OAuth 2.0 Authorization Server Metadata."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    base_url = str(request.base_url).rstrip("/")
+    metadata = {
+        "issuer": base_url,
+        "authorization_endpoint": f"{base_url}/oauth/authorize",
+        "token_endpoint": f"{base_url}/oauth/token",
+        "registration_endpoint": f"{base_url}/oauth/register",
+        "scopes_supported": ["mcp:read", "mcp:write", "mcp:admin"],
+        "response_types_supported": ["code", "token"],
+        "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
+        "code_challenge_methods_supported": ["S256", "plain"]
+    }
+    return JSONResponse(metadata, headers=cors_headers)
+
+
+async def handle_oauth_protected_resource(request: Request) -> Response:
+    """RFC 9728 OAuth 2.0 Protected Resource Metadata."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    base_url = str(request.base_url).rstrip("/")
+    metadata = {
+        "resource": f"{base_url}/mcp",
+        "authorization_servers": [base_url],
+        "scopes_supported": ["mcp:read", "mcp:write", "mcp:admin"],
+        "bearer_methods_supported": ["header"]
+    }
+    return JSONResponse(metadata, headers=cors_headers)
+
+
+async def handle_oauth_authorize(request: Request) -> Response:
+    """OAuth 2.0 authorization endpoint for MCP Connectors consent and code issuance."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    params = request.query_params
+    client_id = params.get("client_id", "claude-connectors")
+    redirect_uri = params.get("redirect_uri", "")
+    response_type = params.get("response_type", "code")
+    state = params.get("state", "")
+    scope = params.get("scope", "mcp:read mcp:write")
+    code_challenge = params.get("code_challenge", "")
+
+    code = f"omni_code_{uuid.uuid4().hex}"
+    OAUTH_CODES[code] = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "scope": scope,
+        "code_challenge": code_challenge,
+        "created_at": time.time()
+    }
+
+    if redirect_uri:
+        delimiter = "&" if "?" in redirect_uri else "?"
+        redirect_target = f"{redirect_uri}{delimiter}code={code}"
+        if state:
+            redirect_target += f"&state={state}"
+        return RedirectResponse(url=redirect_target, status_code=302)
+
+    return JSONResponse({
+        "status": "authorized",
+        "code": code,
+        "state": state,
+        "client_id": client_id,
+        "scope": scope,
+        "message": "OAuth 2.0 authorization granted. Exchange code at /oauth/token"
+    }, headers=cors_headers)
+
+
+async def handle_oauth_token(request: Request) -> Response:
+    """OAuth 2.0 token issuance endpoint."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    grant_type = "client_credentials"
+    client_id = "default_mcp_client"
+    scope = "mcp:read mcp:write"
+
+    content_type = request.headers.get("content-type", "").lower()
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            grant_type = body.get("grant_type", grant_type)
+            client_id = body.get("client_id", client_id)
+            scope = body.get("scope", scope)
+        except Exception:
+            pass
+    elif "application/x-www-form-urlencoded" in content_type:
+        try:
+            form = await request.form()
+            grant_type = form.get("grant_type", grant_type)
+            client_id = form.get("client_id", client_id)
+            scope = form.get("scope", scope)
+        except Exception:
+            pass
+
+    access_token = f"omni_tok_{uuid.uuid4().hex}"
+    refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+
+    # Register the generated OAuth token in quota_manager as an active tenant key
+    tenant_org = f"org_{client_id}" if client_id else "oauth_tenant"
+    quota_manager.register_key(
+        access_token,
+        team_name=f"OAuth Client ({client_id})",
+        org_id=tenant_org,
+        role="tenant"
+    )
+
+    token_response = {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": 86400,
+        "refresh_token": refresh_token,
+        "scope": scope
+    }
+    return JSONResponse(token_response, headers=cors_headers)
+
+
 async def handle_mcp(request: Request) -> Response:
-    """Authenticated Model Context Protocol (MCP) JSON-RPC 2.0 endpoint."""
+    """
+    Model Context Protocol (MCP) JSON-RPC 2.0 endpoint supporting Streamable HTTP.
+    Compliant with Anthropic Connectors Directory Policy:
+    - Negotiates MCP-Protocol-Version: 2024-11-05
+    - Supports Mcp-Session-Id tracking and lifecycle
+    - Handles Server-Sent Events (SSE, text/event-stream) on GET/POST
+    - Authenticates tenants with WWW-Authenticate 401 challenge
+    """
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
@@ -2873,26 +3018,103 @@ async def handle_mcp(request: Request) -> Response:
     if not auth_ok:
         return err_response
 
+    # Protocol version negotiation
+    client_proto_version = request.headers.get("mcp-protocol-version", "2024-11-05")
+    proto_version = "2024-11-05" if "2024-11-05" in client_proto_version else client_proto_version
+
+    # Session ID negotiation
+    session_id = request.headers.get("mcp-session-id") or request.query_params.get("sessionId") or str(uuid.uuid4())
+    if session_id not in MCP_ACTIVE_SESSIONS:
+        MCP_ACTIVE_SESSIONS[session_id] = {
+            "created_at": time.time(),
+            "org_id": org_id,
+            "queue": asyncio.Queue()
+        }
+
+    session_data = MCP_ACTIVE_SESSIONS[session_id]
+
+    base_headers = dict(cors_headers)
+    base_headers["Mcp-Session-Id"] = session_id
+    base_headers["MCP-Protocol-Version"] = proto_version
+
+    accept_header = request.headers.get("accept", "").lower()
+
     if request.method == "GET":
+        # Check if SSE stream requested
+        if "text/event-stream" in accept_header or "sessionId" in request.query_params:
+            sse_headers = dict(base_headers)
+            sse_headers["Content-Type"] = "text/event-stream"
+            sse_headers["Cache-Control"] = "no-cache"
+            sse_headers["Connection"] = "keep-alive"
+
+            max_events = int(request.query_params.get("max_events", 0))
+
+            async def sse_event_stream():
+                # Initial endpoint announcement event per Streamable HTTP MCP spec
+                init_event = f"event: endpoint\ndata: /mcp?sessionId={session_id}\n\n"
+                yield init_event.encode("utf-8")
+                event_count = 1
+
+                while max_events == 0 or event_count < max_events:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        # Wait for queued messages or send periodic keep-alive
+                        msg = await asyncio.wait_for(session_data["queue"].get(), timeout=1.0)
+                        event_payload = f"event: message\ndata: {json.dumps(msg)}\n\n"
+                        yield event_payload.encode("utf-8")
+                        event_count += 1
+                    except asyncio.TimeoutError:
+                        if await request.is_disconnected():
+                            break
+                        # Stream keepalive ping per SSE specification
+                        yield b": keepalive\n\n"
+                        event_count += 1
+                    except asyncio.CancelledError:
+                        break
+
+            return StreamingResponse(sse_event_stream(), media_type="text/event-stream", headers=sse_headers)
+
+        # Standard discovery JSON response for REST / health probes
         return JSONResponse({
             "service": "omnicache-mcp",
             "protocol": "jsonrpc-2.0",
-            "mcp_version": "2024-11-05",
+            "mcp_version": proto_version,
+            "transport": "streamable-http",
+            "session_id": session_id,
             "tenant_org_id": org_id,
-            "tools_count": len(TOOLS_METADATA)
-        }, headers=cors_headers)
+            "tools_count": len(TOOLS_METADATA),
+            "sse_endpoint": f"/mcp?sessionId={session_id}"
+        }, headers=base_headers)
 
+    elif request.method == "DELETE":
+        MCP_ACTIVE_SESSIONS.pop(session_id, None)
+        return Response(status_code=204, headers=base_headers)
+
+    # POST JSON-RPC handler
     try:
         req_body = await request.json()
-    except Exception:
+    except Exception as exc:
         return JSONResponse({
             "jsonrpc": "2.0",
             "id": None,
-            "error": {"code": -32700, "message": "Parse error: Invalid JSON payload"}
-        }, status_code=400, headers=cors_headers)
+            "error": {"code": -32700, "message": f"Parse error: Invalid JSON payload: {str(exc)}"}
+        }, status_code=400, headers=base_headers)
 
     res = process_mcp_jsonrpc(req_body, default_org_id=org_id)
-    return JSONResponse(res, headers=cors_headers)
+
+    # If the client requested SSE response stream on POST, stream it
+    if "text/event-stream" in accept_header:
+        sse_headers = dict(base_headers)
+        sse_headers["Content-Type"] = "text/event-stream"
+        sse_headers["Cache-Control"] = "no-cache"
+
+        async def single_sse_stream():
+            yield f"event: message\ndata: {json.dumps(res)}\n\n".encode("utf-8")
+
+        return StreamingResponse(single_sse_stream(), media_type="text/event-stream", headers=sse_headers)
+
+    return JSONResponse(res, headers=base_headers)
 
 
 async def handle_ws_http(request: Request) -> Response:
@@ -2903,7 +3125,7 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "3.0.2"),
+        "version": getattr(config, "VERSION", "3.0.5"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
@@ -2917,7 +3139,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "3.0.2"),
+            "version": getattr(config, "VERSION", "3.0.5"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })
@@ -2986,9 +3208,12 @@ routes = [
     Route("/v1/workspace/sync/export", handle_workspace_sync_export, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/workspace/sync/import", handle_workspace_sync_import, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/sync/status", handle_workspace_sync_status, methods=["GET", "OPTIONS"]),
-    Route("/v1/workspace/sync/redis", handle_workspace_sync_redis, methods=["POST", "OPTIONS"]),
-    Route("/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
-    Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "OPTIONS"]),
+    Route("/.well-known/oauth-authorization-server", handle_oauth_metadata, methods=["GET", "OPTIONS"]),
+    Route("/.well-known/oauth-protected-resource", handle_oauth_protected_resource, methods=["GET", "OPTIONS"]),
+    Route("/oauth/authorize", handle_oauth_authorize, methods=["GET", "POST", "OPTIONS"]),
+    Route("/oauth/token", handle_oauth_token, methods=["POST", "OPTIONS"]),
+    Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+    Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/invalidate-tag", handle_invalidate_tag, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/stats", handle_stats, methods=["GET", "OPTIONS"]),

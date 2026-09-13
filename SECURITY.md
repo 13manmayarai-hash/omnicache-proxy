@@ -34,3 +34,8 @@ We take the security and integrity of OmniCache AI Proxy seriously. If you disco
 
 ### PII Redaction & Salted Tokenization
 * **Privacy Shield:** When enabled, the `PrivacyShield` module performs deterministic regex-based scrubbing of sensitive patterns (SSNs, credit cards, emails, API keys, phone numbers) before requests leave the machine. Scrubbed values are replaced with HMAC-SHA256 salted tokens (`[REDACTED_<TYPE>_<HASH>]`) and rehydrated in-flight upon response arrival.
+
+---
+
+## 4. Privacy Policy & Data Handling
+For complete disclosure regarding data storage scopes, local SQLite retention, zero-cloud-telemetry guarantees, and user purge rights under Anthropic Directory requirements, refer to our official [Privacy Policy](PRIVACY.md) (mirrored at [docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md)).

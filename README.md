@@ -220,7 +220,11 @@ export OPENAI_API_BASE="http://127.0.0.1:8000/v1"
 
 ## 🔌 Model Context Protocol (MCP) Server
 
-OmniCache provides a **native, enterprise-ready Model Context Protocol (MCP)** server enabling AI assistants and coding agents to interface directly with local vector memory, deterministic tool-call replaying, and cost telemetry.
+OmniCache provides a **native, enterprise-ready Model Context Protocol (MCP)** server compliant with Anthropic's Connectors Directory Policy. It supports both **Local Stdio** (`omnicache mcp`) for desktop workflows and **Streamable HTTP** (`GET/POST /mcp`) with Server-Sent Events (SSE), `Mcp-Session-Id` session tracking, and RFC 8414 / RFC 9728 OAuth 2.0 discovery metadata.
+
+### Transports Supported
+* **Local Stdio Transport:** Standard JSON-RPC 2.0 loop via `omnicache mcp` for Claude Desktop, Claude Code, Cursor, and Cline.
+* **Streamable HTTP Transport:** Hosted/remote endpoint at `http://127.0.0.1:8000/mcp` with persistent SSE streams (`Accept: text/event-stream`), protocol version negotiation (`2024-11-05`), and automated OAuth 2.0 discovery (`/.well-known/oauth-authorization-server`).
 
 ### 1-Click Install via Smithery
 Install directly to **Claude Desktop** with one command:
@@ -311,11 +315,13 @@ OmniCache includes two built-in real-time developer dashboards served side-by-si
 * **SOC2-Ready Audit Logging:** Structured JSONL audit trails recording all MCP tool executions, durations, and statuses written to `~/.omnicache/mcp_audit.jsonl`.
 * **Zero Remote Telemetry:** All embeddings, SQLite WAL database writes, and telemetry aggregations execute strictly in-process. No code or prompt data is ever phoned home to external servers.
 * For security disclosures and guidelines, see [SECURITY.md](SECURITY.md).
+* For complete data handling, retention policies, and user purge rights under Anthropic Directory Policy, see [PRIVACY.md](PRIVACY.md).
 
 ---
 
 ## 📄 Documentation
 
+* 📜 [Privacy Policy](PRIVACY.md) & [Full Policy Document](docs/PRIVACY_POLICY.md)
 * 📖 [Architecture Deep Dive](docs/ARCHITECTURE.md)
 * 🤖 [Agent Integrations Guide (Claude Code, Cursor, Cline)](docs/AGENT_INTEGRATIONS.md)
 * 📡 [API Reference](docs/API_REFERENCE.md)

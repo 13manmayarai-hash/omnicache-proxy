@@ -492,6 +492,74 @@
     .feed-item-hud:hover {
       border-color: rgba(255, 255, 255, 0.4);
     }
+
+    /* HUD Cybernetic Auth Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.88);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      padding: 1.5rem;
+    }
+
+    .modal-card {
+      background: #0d0d0d;
+      border: 1px solid var(--border-hud);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 1px rgba(255, 255, 255, 0.3);
+      max-width: 480px;
+      width: 100%;
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.96) translateY(6px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      border-bottom: 1px solid var(--border-hud);
+      padding-bottom: 0.85rem;
+    }
+
+    .modal-icon {
+      width: 36px;
+      height: 36px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hud);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-family: var(--font-mono);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-white);
+      letter-spacing: 0.05em;
+    }
+
+    .modal-sub {
+      color: var(--text-dim);
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -534,6 +602,10 @@
         <button onclick="refreshData()" class="btn-hud">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           [ SYNC ]
+        </button>
+        <button id="btn-auth-lock" onclick="openAuthModal()" class="btn-hud" title="OmniCache API Key Settings">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span id="auth-status-label">[ AUTH_KEY ]</span>
         </button>
       </div>
     </header>
@@ -841,9 +913,157 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     </section>
   </div>
 
+  <!-- HUD Cybernetic Auth Modal -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="modal-title">// GATEWAY_AUTH_LOCK</div>
+          <div style="font-size: 0.72rem; color: var(--text-dim); font-family: var(--font-mono);">SECURE TENANT VERIFICATION</div>
+        </div>
+      </div>
+      <p class="modal-sub">
+        Gateway authentication is required (<code style="font-family: var(--font-mono); color: var(--text-white);">REQUIRE_AUTH=true</code>). Enter your OmniCache Admin Key or Tenant API Key to unlock cybernetic telemetry, radix index memory, and playground execution.
+      </p>
+      <div class="input-group">
+        <div class="input-label">
+          <span>// AUTH_CREDENTIAL</span>
+        </div>
+        <input type="password" id="auth-modal-input" class="input-hud" placeholder="oc_live_... or Admin Key" onkeydown="if(event.key==='Enter') submitAuthKey();" />
+      </div>
+      <div id="auth-modal-error" style="min-height: 1.2rem; font-size: 0.8rem; color: #ff6b6b; font-family: var(--font-mono); font-weight: 700;"></div>
+      <div style="display: flex; gap: 0.85rem; justify-content: space-between; align-items: center;">
+        <button id="auth-modal-clear-btn" onclick="clearAuthKey()" class="btn-hud" style="display: none; color: #ff6b6b; font-size: 0.75rem;">[ PURGE_KEY ]</button>
+        <div style="display: flex; gap: 0.85rem; margin-left: auto;">
+          <button id="auth-modal-cancel-btn" onclick="closeAuthModal()" class="btn-hud" style="display: none;">[ DISMISS ]</button>
+          <button onclick="submitAuthKey()" class="btn-hud" style="background: var(--text-white); color: #000; font-weight: 800;">[ UNLOCK_GATEWAY ]</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = (window.location.protocol === 'file:' || !window.location.host) ? 'http://localhost:8000' : '';
     let currentMode = 'claude';
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+      return '';
+    }
+
+    function getAuthKey() {
+      return localStorage.getItem('omnicache_key') || getCookie('omnicache_key') || '';
+    }
+
+    function authHeaders(extra = {}) {
+      const key = getAuthKey();
+      const headers = { ...extra };
+      if (key) {
+        headers['Authorization'] = `Bearer ${key}`;
+        headers['x-api-key'] = key;
+      }
+      return headers;
+    }
+
+    function updateAuthBadge() {
+      const key = getAuthKey();
+      const btn = document.getElementById('btn-auth-lock');
+      const label = document.getElementById('auth-status-label');
+      if (key) {
+        const masked = key.length > 12 ? (key.slice(0, 7) + '...' + key.slice(-4)) : 'KEY_SET';
+        if (label) label.textContent = `[ ${masked} ]`;
+        if (btn) btn.title = `Authenticated with key: ${masked}. Click to change or lock.`;
+      } else {
+        if (label) label.textContent = '[ AUTH_KEY ]';
+        if (btn) btn.title = 'Click to configure OmniCache API Key';
+      }
+    }
+
+    function openAuthModal() {
+      const modal = document.getElementById('auth-modal');
+      const input = document.getElementById('auth-modal-input');
+      const errElem = document.getElementById('auth-modal-error');
+      const cancelBtn = document.getElementById('auth-modal-cancel-btn');
+      const clearBtn = document.getElementById('auth-modal-clear-btn');
+      if (errElem) errElem.textContent = '';
+      const currentKey = getAuthKey();
+      if (input) input.value = currentKey;
+      if (cancelBtn) cancelBtn.style.display = currentKey ? 'inline-block' : 'none';
+      if (clearBtn) clearBtn.style.display = currentKey ? 'inline-block' : 'none';
+      if (modal) modal.style.display = 'flex';
+      if (input) setTimeout(() => input.focus(), 50);
+    }
+
+    function showAuthModal(errMsg = '') {
+      openAuthModal();
+      const errElem = document.getElementById('auth-modal-error');
+      if (errElem && errMsg) errElem.textContent = errMsg;
+    }
+
+    function closeAuthModal() {
+      const modal = document.getElementById('auth-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function clearAuthKey() {
+      localStorage.removeItem('omnicache_key');
+      document.cookie = 'omnicache_key=; path=/; max-age=0; SameSite=Lax';
+      const playKey = document.getElementById('playground-api-key');
+      if (playKey) {
+        playKey.value = '';
+        updateKeyIndicator('');
+      }
+      updateAuthBadge();
+      const errElem = document.getElementById('auth-modal-error');
+      if (errElem) errElem.textContent = '// KEY_PURGED. ENTER VALID KEY TO RECONNECT.';
+      const clearBtn = document.getElementById('auth-modal-clear-btn');
+      if (clearBtn) clearBtn.style.display = 'none';
+      const cancelBtn = document.getElementById('auth-modal-cancel-btn');
+      if (cancelBtn) cancelBtn.style.display = 'none';
+    }
+
+    async function submitAuthKey() {
+      const input = document.getElementById('auth-modal-input');
+      const errElem = document.getElementById('auth-modal-error');
+      const key = input ? input.value.trim() : '';
+      if (!key) {
+        if (errElem) errElem.textContent = '// ERROR: API key string required.';
+        return;
+      }
+      if (errElem) errElem.textContent = '// VERIFYING KEY AGAINST GATEWAY...';
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/cache/stats`, {
+          headers: { 'Authorization': `Bearer ${key}` }
+        });
+        if (res.ok) {
+          localStorage.setItem('omnicache_key', key);
+          document.cookie = `omnicache_key=${encodeURIComponent(key)}; path=/; max-age=2592000; SameSite=Lax`;
+          const playKey = document.getElementById('playground-api-key');
+          if (playKey) {
+            playKey.value = key;
+            updateKeyIndicator(key);
+          }
+          updateAuthBadge();
+          closeAuthModal();
+          await refreshData();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          const msg = data.error?.message || 'Invalid API key or insufficient permissions.';
+          if (errElem) errElem.textContent = `❌ ${msg}`;
+        }
+      } catch (err) {
+        if (errElem) errElem.textContent = `❌ Network error: ${err.message}`;
+      }
+    }
 
     // --- Interactive Topographic Wireframe Engine (Pulsar Mountain) ---
     function initTopographicWave() {
@@ -1250,7 +1470,11 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function refreshData() {
       try {
-        const res = await fetch(`${API_BASE}/v1/cache/stats`);
+        const res = await fetch(`${API_BASE}/v1/cache/stats`, { headers: authHeaders() });
+        if (res.status === 401) {
+          showAuthModal('// GATEWAY_AUTH_REQUIRED: Invalid or missing API key.');
+          return;
+        }
         const data = await res.json();
 
         const sys = data.system_info || {};
@@ -1288,7 +1512,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         updateCharts(totalSavedUsd, totalTokensSaved, exact, semantic, toolHits, visionHits, misses);
 
         // Quotas
-        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`);
+        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`, { headers: authHeaders() });
         const qData = await qRes.json();
         const qContainer = document.getElementById('quotas-container');
         if (qContainer && typeof qData === 'object' && !qData.error) {
@@ -1312,7 +1536,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       try {
         const res = await fetch(`${API_BASE}/v1/workspace/warm`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ directory: '.', max_files: 50 })
         });
         const data = await res.json();
@@ -1331,7 +1555,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function refreshWorkspaceData() {
       try {
-        const wsRes = await fetch(`${API_BASE}/v1/workspace/sync/status`);
+        const wsRes = await fetch(`${API_BASE}/v1/workspace/sync/status`, { headers: authHeaders() });
         if (wsRes.ok) {
           const wsData = await wsRes.json();
           const refElem = document.getElementById('ws-git-ref');
@@ -1348,7 +1572,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           if (tokensElem) tokensElem.textContent = `${(wsData.estimated_tokens_saved || 0).toLocaleString()} tokens`;
         }
 
-        const polRes = await fetch(`${API_BASE}/v1/agent/tools/policies`);
+        const polRes = await fetch(`${API_BASE}/v1/agent/tools/policies`, { headers: authHeaders() });
         if (polRes.ok) {
           const polData = await polRes.json();
           const pList = document.getElementById('tool-policies-list');
@@ -1377,7 +1601,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = (window.location.protocol === 'file:' || !window.location.host) ? 'localhost:8000' : window.location.host;
-      const wsUrl = `${protocol}//${host}/ws`;
+      const key = getAuthKey();
+      const wsUrl = `${protocol}//${host}/ws${key ? '?key=' + encodeURIComponent(key) : ''}`;
 
       try {
         ws = new WebSocket(wsUrl);
@@ -1473,7 +1698,22 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     // --- Resilient Initialization ---
     function initApp() {
-      const savedKey = localStorage.getItem('omnicache_key');
+      // 1. Process URL query parameters (?key=... or ?api_key=...)
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlKey = urlParams.get('key') || urlParams.get('api_key');
+        if (urlKey) {
+          localStorage.setItem('omnicache_key', urlKey);
+          document.cookie = `omnicache_key=${encodeURIComponent(urlKey)}; path=/; max-age=2592000; SameSite=Lax`;
+          urlParams.delete('key');
+          urlParams.delete('api_key');
+          const newSearch = urlParams.toString();
+          const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+          window.history.replaceState({}, document.title, newUrl);
+        }
+      } catch (e) {}
+
+      const savedKey = getAuthKey();
       if (savedKey) {
         const keyInput = document.getElementById('playground-api-key');
         if (keyInput) {
@@ -1481,6 +1721,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           updateKeyIndicator(savedKey);
         }
       }
+      updateAuthBadge();
 
       initTopographicWave();
       initCharts();

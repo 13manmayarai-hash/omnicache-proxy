@@ -190,7 +190,7 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
 
 
 def extract_auth_key(request: Request) -> str:
-    """Extracts API key from standard HTTP authorization headers."""
+    """Extracts API key from standard HTTP authorization headers, cookies, or query parameters."""
     auth_header = request.headers.get("authorization", "")
     if auth_header.startswith("Bearer "):
         key = auth_header[7:].strip()
@@ -208,6 +208,16 @@ def extract_auth_key(request: Request) -> str:
     x_admin_key = request.headers.get("x-admin-key", "").strip()
     if x_admin_key:
         return x_admin_key
+
+    # Check cookies for browser sessions
+    cookie_key = request.cookies.get("omnicache_key", "").strip() or request.cookies.get("api_key", "").strip()
+    if cookie_key:
+        return cookie_key
+
+    # Check query params (?key=... or ?api_key=...)
+    query_key = request.query_params.get("api_key", "").strip() or request.query_params.get("key", "").strip()
+    if query_key:
+        return query_key
 
     # Fallback to default key if REQUIRE_AUTH is False
     if not getattr(config, "REQUIRE_AUTH", False):
@@ -2863,14 +2873,18 @@ async def handle_root(request: Request) -> Response:
 
 async def handle_dashboard(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
-    if getattr(config, "REQUIRE_AUTH", False):
-        key = extract_auth_key(request)
-        if not key:
-            key = request.query_params.get("api_key") or request.query_params.get("key") or ""
+    accept = request.headers.get("accept", "").lower()
+    key = extract_auth_key(request)
+    allowed = False
+    auth_reason = ""
+    if key:
         allowed, auth_reason, key_info = quota_manager.check_authorization(key)
+
+    # If auth is required, client requested non-HTML (e.g. JSON API client or curl), and not allowed:
+    if getattr(config, "REQUIRE_AUTH", False) and "text/html" not in accept:
         if not allowed:
             return JSONResponse(
-                {"error": {"message": f"Dashboard authentication required: {auth_reason}", "type": "authentication_error"}},
+                {"error": {"message": f"Dashboard authentication required: {auth_reason or 'Missing API key in Authorization header, cookie, or query param'}", "type": "authentication_error"}},
                 status_code=401,
                 headers=cors_headers
             )
@@ -2879,20 +2893,34 @@ async def handle_dashboard(request: Request) -> Response:
     if os.path.exists(dashboard_path):
         with open(dashboard_path, "r", encoding="utf-8") as f:
             html = f.read()
-        return HTMLResponse(html, headers=cors_headers)
+        response = HTMLResponse(html, headers=cors_headers)
+        if allowed and key and (request.query_params.get("key") or request.query_params.get("api_key")):
+            response.set_cookie(
+                key="omnicache_key",
+                value=key,
+                max_age=86400 * 30,
+                httponly=False,
+                samesite="lax",
+                secure=(request.url.scheme == "https")
+            )
+        return response
     return HTMLResponse("<h1>OmniCache Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
 
 
 async def handle_omnicache_2(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
-    if getattr(config, "REQUIRE_AUTH", False):
-        key = extract_auth_key(request)
-        if not key:
-            key = request.query_params.get("api_key") or request.query_params.get("key") or ""
+    accept = request.headers.get("accept", "").lower()
+    key = extract_auth_key(request)
+    allowed = False
+    auth_reason = ""
+    if key:
         allowed, auth_reason, key_info = quota_manager.check_authorization(key)
+
+    # If auth is required, client requested non-HTML (e.g. JSON API client or curl), and not allowed:
+    if getattr(config, "REQUIRE_AUTH", False) and "text/html" not in accept:
         if not allowed:
             return JSONResponse(
-                {"error": {"message": f"Dashboard authentication required: {auth_reason}", "type": "authentication_error"}},
+                {"error": {"message": f"Dashboard authentication required: {auth_reason or 'Missing API key in Authorization header, cookie, or query param'}", "type": "authentication_error"}},
                 status_code=401,
                 headers=cors_headers
             )
@@ -2901,7 +2929,17 @@ async def handle_omnicache_2(request: Request) -> Response:
     if os.path.exists(dash2_path):
         with open(dash2_path, "r", encoding="utf-8") as f:
             html = f.read()
-        return HTMLResponse(html, headers=cors_headers)
+        response = HTMLResponse(html, headers=cors_headers)
+        if allowed and key and (request.query_params.get("key") or request.query_params.get("api_key")):
+            response.set_cookie(
+                key="omnicache_key",
+                value=key,
+                max_age=86400 * 30,
+                httponly=False,
+                samesite="lax",
+                secure=(request.url.scheme == "https")
+            )
+        return response
     return HTMLResponse("<h1>OmniCache 2 Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
 
 

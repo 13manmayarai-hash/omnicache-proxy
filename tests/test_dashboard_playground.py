@@ -90,11 +90,55 @@ def test_dashboards_endpoints(client):
     r_dash = client.get("/dashboard")
     assert r_dash.status_code == 200
     assert "text/html" in r_dash.headers.get("content-type", "")
+    assert "auth-modal" in r_dash.text
 
     # OmniCache 2 redesign
     r_dash2 = client.get("/omnicache_2")
     assert r_dash2.status_code == 200
     assert "text/html" in r_dash2.headers.get("content-type", "")
-    assert "OmniCache 2" in r_dash2.text
+    assert "OmniCache 2" in r_dash2.text or "OMNICACHE_2" in r_dash2.text
     assert "topoCanvas" in r_dash2.text
+    assert "auth-modal" in r_dash2.text
+
+
+def test_dashboard_require_auth_modes(client):
+    """Verify dashboard behavior under REQUIRE_AUTH=True for browser HTML vs JSON API callers."""
+    from core.config import config
+    from server.quotas import quota_manager
+
+    old_auth = config.REQUIRE_AUTH
+    try:
+        config.REQUIRE_AUTH = True
+        test_admin_key = "oc_live_dashboard_test_key_12345"
+        quota_manager.register_key(
+            key_id=test_admin_key,
+            team_name="Dashboard Admin",
+            org_id="admin",
+            role="admin"
+        )
+
+        # 1. Non-HTML API request without auth must return 401 JSON
+        r_json_unauth = client.get("/dashboard", headers={"accept": "application/json"})
+        assert r_json_unauth.status_code == 401
+        assert "authentication_error" in r_json_unauth.json()["error"]["type"]
+
+        # 2. Browser request (Accept: text/html) without auth serves HTML with auth modal
+        r_html_unauth = client.get("/dashboard", headers={"accept": "text/html,application/xhtml+xml"})
+        assert r_html_unauth.status_code == 200
+        assert "text/html" in r_html_unauth.headers.get("content-type", "")
+        assert "auth-modal" in r_html_unauth.text
+
+        # 3. Request with valid query parameter ?key= sets omnicache_key cookie and returns 200
+        r_query_auth = client.get(f"/dashboard?key={test_admin_key}", headers={"accept": "text/html"})
+        assert r_query_auth.status_code == 200
+        assert "set-cookie" in r_query_auth.headers
+        assert "omnicache_key=" in r_query_auth.headers["set-cookie"]
+
+        # 4. Request using cookie authenticates correctly
+        r_cookie_auth = client.get("/v1/cache/stats", cookies={"omnicache_key": test_admin_key})
+        assert r_cookie_auth.status_code == 200
+        assert "cache_stats" in r_cookie_auth.json()
+
+    finally:
+        config.REQUIRE_AUTH = old_auth
 

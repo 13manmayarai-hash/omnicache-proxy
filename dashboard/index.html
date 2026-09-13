@@ -469,6 +469,74 @@
       margin-bottom: 0.45rem;
       border: 1px solid rgba(74, 92, 106, 0.35);
     }
+
+    /* Neumorphic Dark Monochrome Auth Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(6, 20, 27, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      padding: 1.5rem;
+    }
+
+    .modal-card {
+      background: var(--c-midnight);
+      border-radius: var(--radius-card);
+      border: 1px solid rgba(74, 92, 106, 0.5);
+      box-shadow: var(--neu-flat-3);
+      max-width: 480px;
+      width: 100%;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      animation: modalFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .modal-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: var(--radius-pill);
+      background: var(--c-navy);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--neu-flat-1);
+      border: 1px solid rgba(74, 92, 106, 0.4);
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--c-frost);
+      line-height: 1.2;
+    }
+
+    .modal-sub {
+      color: var(--c-silver);
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
@@ -507,6 +575,10 @@
         <button onclick="refreshData()" class="btn-neu">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           Refresh
+        </button>
+        <button id="btn-auth-lock" onclick="openAuthModal()" class="btn-neu" title="OmniCache API Key Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          <span id="auth-status-label">Auth Key</span>
         </button>
       </div>
     </header>
@@ -792,9 +864,157 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     </section>
   </div>
 
+  <!-- Neumorphic Dark Monochrome Auth Modal -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#CCD0CF" stroke-width="2.2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="modal-title">Gateway Authentication</div>
+          <div style="font-size: 0.75rem; color: var(--c-silver);">OmniCache API Key Protection</div>
+        </div>
+      </div>
+      <p class="modal-sub">
+        This gateway requires authentication (<code style="font-family: 'JetBrains Mono'; color: var(--c-frost);">REQUIRE_AUTH=true</code>). Enter your OmniCache Admin Key or Tenant API Key to unlock live telemetry, metrics, and playground sandbox.
+      </p>
+      <div class="input-group">
+        <div class="input-label">
+          <span>API Key or Admin Key</span>
+        </div>
+        <input type="password" id="auth-modal-input" class="input-neu" style="font-family: 'JetBrains Mono', monospace;" placeholder="oc_live_... or Admin Key" onkeydown="if(event.key==='Enter') submitAuthKey();" />
+      </div>
+      <div id="auth-modal-error" style="min-height: 1.2rem; font-size: 0.8rem; color: #E06C75; font-weight: 600;"></div>
+      <div style="display: flex; gap: 0.85rem; justify-content: space-between; align-items: center;">
+        <button id="auth-modal-clear-btn" onclick="clearAuthKey()" class="btn-neu" style="display: none; color: #E06C75; font-size: 0.75rem;">Clear Key</button>
+        <div style="display: flex; gap: 0.85rem; margin-left: auto;">
+          <button id="auth-modal-cancel-btn" onclick="closeAuthModal()" class="btn-neu" style="display: none;">Cancel</button>
+          <button onclick="submitAuthKey()" class="btn-neu" style="background: var(--c-frost); color: var(--c-obsidian); font-weight: 700; box-shadow: var(--neu-flat-2);">Unlock Dashboard</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const API_BASE = (window.location.protocol === 'file:' || !window.location.host) ? 'http://localhost:8000' : '';
     let currentMode = 'claude';
+
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+      return '';
+    }
+
+    function getAuthKey() {
+      return localStorage.getItem('omnicache_key') || getCookie('omnicache_key') || '';
+    }
+
+    function authHeaders(extra = {}) {
+      const key = getAuthKey();
+      const headers = { ...extra };
+      if (key) {
+        headers['Authorization'] = `Bearer ${key}`;
+        headers['x-api-key'] = key;
+      }
+      return headers;
+    }
+
+    function updateAuthBadge() {
+      const key = getAuthKey();
+      const btn = document.getElementById('btn-auth-lock');
+      const label = document.getElementById('auth-status-label');
+      if (key) {
+        const masked = key.length > 12 ? (key.slice(0, 7) + '...' + key.slice(-4)) : 'KEY SET';
+        if (label) label.textContent = masked;
+        if (btn) {
+          btn.title = `Authenticated with key: ${masked}. Click to change or lock.`;
+          btn.style.color = 'var(--c-frost)';
+        }
+      } else {
+        if (label) label.textContent = 'Auth Key';
+        if (btn) {
+          btn.title = 'Click to configure OmniCache API Key';
+          btn.style.color = 'var(--c-silver)';
+        }
+      }
+    }
+
+    function openAuthModal() {
+      const modal = document.getElementById('auth-modal');
+      const input = document.getElementById('auth-modal-input');
+      const errElem = document.getElementById('auth-modal-error');
+      const cancelBtn = document.getElementById('auth-modal-cancel-btn');
+      const clearBtn = document.getElementById('auth-modal-clear-btn');
+      if (errElem) errElem.textContent = '';
+      const currentKey = getAuthKey();
+      if (input) input.value = currentKey;
+      if (cancelBtn) cancelBtn.style.display = currentKey ? 'inline-block' : 'none';
+      if (clearBtn) clearBtn.style.display = currentKey ? 'inline-block' : 'none';
+      if (modal) modal.style.display = 'flex';
+      if (input) setTimeout(() => input.focus(), 50);
+    }
+
+    function showAuthModal(errMsg = '') {
+      openAuthModal();
+      const errElem = document.getElementById('auth-modal-error');
+      if (errElem && errMsg) errElem.textContent = errMsg;
+    }
+
+    function closeAuthModal() {
+      const modal = document.getElementById('auth-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function clearAuthKey() {
+      localStorage.removeItem('omnicache_key');
+      document.cookie = 'omnicache_key=; path=/; max-age=0; SameSite=Lax';
+      const playKey = document.getElementById('playground-api-key');
+      if (playKey) playKey.value = '';
+      updateAuthBadge();
+      const errElem = document.getElementById('auth-modal-error');
+      if (errElem) errElem.textContent = 'API key removed. Enter a new key to reconnect.';
+      const clearBtn = document.getElementById('auth-modal-clear-btn');
+      if (clearBtn) clearBtn.style.display = 'none';
+      const cancelBtn = document.getElementById('auth-modal-cancel-btn');
+      if (cancelBtn) cancelBtn.style.display = 'none';
+    }
+
+    async function submitAuthKey() {
+      const input = document.getElementById('auth-modal-input');
+      const errElem = document.getElementById('auth-modal-error');
+      const key = input ? input.value.trim() : '';
+      if (!key) {
+        if (errElem) errElem.textContent = 'Please enter an OmniCache API Key or Admin Key.';
+        return;
+      }
+      if (errElem) errElem.textContent = 'Verifying key against gateway...';
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/cache/stats`, {
+          headers: { 'Authorization': `Bearer ${key}` }
+        });
+        if (res.ok) {
+          localStorage.setItem('omnicache_key', key);
+          document.cookie = `omnicache_key=${encodeURIComponent(key)}; path=/; max-age=2592000; SameSite=Lax`;
+          const playKey = document.getElementById('playground-api-key');
+          if (playKey) playKey.value = key;
+          updateAuthBadge();
+          closeAuthModal();
+          await refreshData();
+        } else {
+          const data = await res.json().catch(() => ({}));
+          const msg = data.error?.message || 'Invalid API key or insufficient permissions.';
+          if (errElem) errElem.textContent = `⚠️ ${msg}`;
+        }
+      } catch (err) {
+        if (errElem) errElem.textContent = `⚠️ Network error: ${err.message}`;
+      }
+    }
 
     function setApiMode(mode) {
       currentMode = mode;
@@ -1080,7 +1300,11 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function refreshData() {
       try {
-        const res = await fetch(`${API_BASE}/v1/cache/stats`);
+        const res = await fetch(`${API_BASE}/v1/cache/stats`, { headers: authHeaders() });
+        if (res.status === 401) {
+          showAuthModal('Authentication required: Please enter your OmniCache API Key or Admin Key.');
+          return;
+        }
         const data = await res.json();
 
         const sys = data.system_info || {};
@@ -1118,7 +1342,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         updateCharts(totalSavedUsd, totalTokensSaved, exact, semantic, toolHits, visionHits, misses);
 
         // Quotas
-        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`);
+        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`, { headers: authHeaders() });
         const qData = await qRes.json();
         const qContainer = document.getElementById('quotas-container');
         if (qContainer && typeof qData === 'object' && !qData.error) {
@@ -1142,7 +1366,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       try {
         const res = await fetch(`${API_BASE}/v1/workspace/warm`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ directory: '.', max_files: 50 })
         });
         const data = await res.json();
@@ -1161,7 +1385,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function refreshWorkspaceData() {
       try {
-        const wsRes = await fetch(`${API_BASE}/v1/workspace/sync/status`);
+        const wsRes = await fetch(`${API_BASE}/v1/workspace/sync/status`, { headers: authHeaders() });
         if (wsRes.ok) {
           const wsData = await wsRes.json();
           const refElem = document.getElementById('ws-git-ref');
@@ -1178,7 +1402,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           if (tokensElem) tokensElem.textContent = `${(wsData.estimated_tokens_saved || 0).toLocaleString()} tokens`;
         }
 
-        const polRes = await fetch(`${API_BASE}/v1/agent/tools/policies`);
+        const polRes = await fetch(`${API_BASE}/v1/agent/tools/policies`, { headers: authHeaders() });
         if (polRes.ok) {
           const polData = await polRes.json();
           const pList = document.getElementById('tool-policies-list');
@@ -1207,7 +1431,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = (window.location.protocol === 'file:' || !window.location.host) ? 'localhost:8000' : window.location.host;
-      const wsUrl = `${protocol}//${host}/ws`;
+      const key = getAuthKey();
+      const wsUrl = `${protocol}//${host}/ws${key ? '?key=' + encodeURIComponent(key) : ''}`;
 
       try {
         ws = new WebSocket(wsUrl);
@@ -1303,11 +1528,27 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     // --- Resilient Initialization ---
     function initApp() {
-      const savedKey = localStorage.getItem('omnicache_key');
+      // 1. Process URL query parameters (?key=... or ?api_key=...)
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlKey = urlParams.get('key') || urlParams.get('api_key');
+        if (urlKey) {
+          localStorage.setItem('omnicache_key', urlKey);
+          document.cookie = `omnicache_key=${encodeURIComponent(urlKey)}; path=/; max-age=2592000; SameSite=Lax`;
+          urlParams.delete('key');
+          urlParams.delete('api_key');
+          const newSearch = urlParams.toString();
+          const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+          window.history.replaceState({}, document.title, newUrl);
+        }
+      } catch (e) {}
+
+      const savedKey = getAuthKey();
       if (savedKey) {
         const keyInput = document.getElementById('playground-api-key');
         if (keyInput) keyInput.value = savedKey;
       }
+      updateAuthBadge();
 
       initCharts();
       refreshData();

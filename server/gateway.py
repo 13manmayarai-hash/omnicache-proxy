@@ -171,7 +171,12 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
 
     if allow_all:
         allow_origin = "*"
-    elif origin and (origin in allowed_origins or "*" in allowed_origins):
+    elif origin and (
+        origin in allowed_origins
+        or "*" in allowed_origins
+        or origin.endswith("rawwgrid.com")
+        or origin.endswith(".onrender.com")
+    ):
         allow_origin = origin
     else:
         allow_origin = allowed_origins[0] if allowed_origins else "http://localhost:8000"
@@ -3561,6 +3566,7 @@ async def handle_ws(websocket: WebSocket):
 
 routes = [
     Route("/", handle_root, methods=["GET", "OPTIONS"]),
+    Route("/health", handle_healthz, methods=["GET", "OPTIONS"]),
     Route("/healthz", handle_healthz, methods=["GET", "OPTIONS"]),
     Route("/models", handle_models, methods=["GET", "OPTIONS"]),
     Route("/v1/models", handle_models, methods=["GET", "OPTIONS"]),

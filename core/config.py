@@ -207,6 +207,11 @@ class ProxyConfig:
     QUANTIZED_EMBEDDER_DIMS: int = int(os.getenv("OMNICACHE_QUANTIZED_EMBEDDER_DIMS", "256"))
     QUANTIZED_EMBEDDER_BITS: int = int(os.getenv("OMNICACHE_QUANTIZED_EMBEDDER_BITS", "8"))
 
+    # Google OAuth 2.0 Identity Federation
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
+
 
 def validate_startup_security_invariants(host: str = None):
     """

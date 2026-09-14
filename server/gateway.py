@@ -12,12 +12,14 @@ import sys
 import asyncio
 import collections
 import uuid
+import secrets
+import httpx
 import hashlib
 import base64
 import hmac
 import re
 import threading
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode, quote_plus
 from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -3235,6 +3237,30 @@ async def handle_omnicache_2(request: Request) -> Response:
 MCP_ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 OAUTH_CODES: Dict[str, Dict[str, Any]] = {}
 OAUTH_TOKENS: Dict[str, Dict[str, Any]] = {}
+GOOGLE_OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
+
+
+def cleanup_google_oauth_states() -> None:
+    """Evicts expired Google OAuth state tokens to prevent memory leaks."""
+    now = time.time()
+    expired = [k for k, v in GOOGLE_OAUTH_STATES.items() if v.get("expires_at", 0) < now]
+    for k in expired:
+        GOOGLE_OAUTH_STATES.pop(k, None)
+
+
+def get_effective_google_redirect_uri(request: Request) -> str:
+    """
+    Computes the canonical Google OAuth callback URL.
+    Prefers explicit GOOGLE_REDIRECT_URI, otherwise dynamically respects
+    reverse proxy headers (x-forwarded-proto and x-forwarded-host).
+    """
+    configured = getattr(config, "GOOGLE_REDIRECT_URI", "").strip()
+    if configured:
+        return configured
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.url.netloc)
+    return f"{proto}://{host}/auth/google/callback"
+
 
 
 def verify_pkce(code_verifier: str, code_challenge: str, method: str = "S256") -> bool:
@@ -3358,6 +3384,16 @@ async def handle_oauth_authorize(request: Request) -> Response:
             if "text/html" in accept:
                 error_msg = params.get("auth_error", "")
                 error_banner = f'<div class="error-banner">{error_msg}</div>' if error_msg else ''
+                google_qs = urlencode({
+                    "client_id": client_id,
+                    "redirect_uri": redirect_uri,
+                    "state": state,
+                    "scope": scope,
+                    "code_challenge": code_challenge,
+                    "code_challenge_method": code_challenge_method,
+                    "response_type": response_type
+                })
+                google_login_href = f"/auth/google/login?{google_qs}"
                 html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3369,7 +3405,12 @@ async def handle_oauth_authorize(request: Request) -> Response:
     h2 {{ margin-top: 0; font-size: 20px; font-weight: 600; color: #fff; }}
     p {{ color: #9aa0a6; font-size: 14px; line-height: 1.5; }}
     .badge {{ display: inline-block; background: #252830; color: #8ab4f8; padding: 4px 10px; border-radius: 6px; font-family: monospace; font-size: 13px; }}
-    .form-group {{ margin: 20px 0; }}
+    .btn-google {{ display: flex; align-items: center; justify-content: center; gap: 12px; background: #ffffff; color: #3c4043; text-decoration: none; font-size: 14px; font-weight: 500; padding: 11px 16px; border-radius: 6px; border: 1px solid #dadce0; transition: background 0.2s, box-shadow 0.2s; margin-top: 20px; box-sizing: border-box; width: 100%; }}
+    .btn-google:hover {{ background: #f8f9fa; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }}
+    .divider {{ display: flex; align-items: center; text-align: center; margin: 22px 0 18px 0; color: #5f6368; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }}
+    .divider::before, .divider::after {{ content: ''; flex: 1; border-bottom: 1px solid #2a2d34; }}
+    .divider span {{ padding: 0 12px; }}
+    .form-group {{ margin: 16px 0; }}
     label {{ display: block; font-size: 13px; margin-bottom: 8px; color: #ccc; }}
     input[type="password"] {{ width: 100%; box-sizing: border-box; background: #121316; border: 1px solid #3c4043; border-radius: 6px; color: #fff; padding: 10px 12px; font-size: 14px; outline: none; }}
     input[type="password"]:focus {{ border-color: #8ab4f8; }}
@@ -3388,6 +3429,11 @@ async def handle_oauth_authorize(request: Request) -> Response:
     <p>Application <span class="badge">{client_id}</span> is requesting permission to access OmniCache vector memory.</p>
     <p>Requested Scope: <span class="badge">{scope}</span></p>
     {error_banner}
+    <a href="{google_login_href}" class="btn-google">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      <span>Sign in with Google</span>
+    </a>
+    <div class="divider"><span>OR USE API KEY</span></div>
     <form method="POST" action="/oauth/authorize">
       <input type="hidden" name="client_id" value="{client_id}" />
       <input type="hidden" name="redirect_uri" value="{redirect_uri}" />
@@ -3667,6 +3713,313 @@ async def handle_oauth_token(request: Request) -> Response:
         }, status_code=400, headers=cors_headers)
 
 
+async def handle_google_login(request: Request) -> Response:
+    """
+    Initiates Google OAuth 2.0 Identity Federation for OmniCache.
+    Preserves incoming MCP client parameters (client_id, redirect_uri, state, PKCE challenge)
+    in an ephemeral, cryptographic CSRF state token.
+    Redirects user to Google's OAuth 2.0 authorization endpoint.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    client_id = request.query_params.get("client_id", "").strip() or "claude-connectors"
+    redirect_uri = request.query_params.get("redirect_uri", "").strip()
+    response_type = request.query_params.get("response_type", "code").strip()
+    state = request.query_params.get("state", "").strip()
+    scope = request.query_params.get("scope", "mcp:read mcp:write").strip()
+    code_challenge = request.query_params.get("code_challenge", "").strip()
+    code_challenge_method = request.query_params.get("code_challenge_method", "S256").strip()
+
+    # Check if Google OAuth is configured
+    google_client_id = getattr(config, "GOOGLE_CLIENT_ID", "").strip()
+    google_client_secret = getattr(config, "GOOGLE_CLIENT_SECRET", "").strip()
+    if not google_client_id or not google_client_secret:
+        accept = request.headers.get("accept", "").lower()
+        if "text/html" in accept:
+            html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OmniCache — Google Sign-In Not Configured</title>
+  <style>
+    body {{ background: #121316; color: #e1e3e6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+    .card {{ background: #1a1c20; border: 1px solid #2a2d34; border-radius: 12px; width: 440px; padding: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); text-align: center; }}
+    h2 {{ margin-top: 0; font-size: 20px; color: #fff; }}
+    p {{ color: #9aa0a6; font-size: 14px; line-height: 1.5; text-align: left; }}
+    .btn {{ display: inline-block; margin-top: 20px; padding: 10px 20px; background: #1a73e8; color: #fff; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; }}
+    .btn:hover {{ background: #1557b0; }}
+    code {{ background: #252830; color: #8ab4f8; padding: 2px 6px; border-radius: 4px; font-size: 13px; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Google Sign-In Unconfigured</h2>
+    <p>Google OAuth is not yet enabled on this OmniCache deployment. To enable it, set <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code> in the environment variables.</p>
+    <p>You can still authenticate using your OmniCache API key or Admin key.</p>
+    <a class="btn" href="/oauth/authorize?client_id={quote_plus(client_id)}&redirect_uri={quote_plus(redirect_uri)}&response_type={quote_plus(response_type)}&state={quote_plus(state)}&scope={quote_plus(scope)}&code_challenge={quote_plus(code_challenge)}&code_challenge_method={quote_plus(code_challenge_method)}">Return to Manual Login</a>
+  </div>
+</body>
+</html>"""
+            return HTMLResponse(html, status_code=503, headers=cors_headers)
+        return JSONResponse({
+            "error": "server_error",
+            "error_description": "Google OAuth is not configured on this server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        }, status_code=503, headers=cors_headers)
+
+    cleanup_google_oauth_states()
+    state_token = f"gstate_{secrets.token_urlsafe(32)}"
+    GOOGLE_OAUTH_STATES[state_token] = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "client_state": state,
+        "scope": scope,
+        "code_challenge": code_challenge,
+        "code_challenge_method": code_challenge_method,
+        "response_type": response_type,
+        "created_at": time.time(),
+        "expires_at": time.time() + 600
+    }
+
+    google_redirect_uri = get_effective_google_redirect_uri(request)
+    google_params = {
+        "client_id": google_client_id,
+        "redirect_uri": google_redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state_token,
+        "access_type": "offline",
+        "prompt": "select_account"
+    }
+    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(google_params)}"
+    return RedirectResponse(url=google_auth_url, status_code=302)
+
+
+async def handle_google_callback(request: Request) -> Response:
+    """
+    Receives authorization code from Google OAuth, exchanges it for tokens,
+    retrieves verified email identity, auto-provisions or looks up tenant account,
+    and seamlessly returns to the MCP client OAuth flow with an authorized OmniCache code.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    query_params = request.query_params
+    code = query_params.get("code", "").strip()
+    state_token = query_params.get("state", "").strip()
+    error = query_params.get("error", "").strip()
+    error_description = query_params.get("error_description", "").strip()
+
+    if error:
+        return JSONResponse({
+            "error": error,
+            "error_description": error_description or "Google authorization failed"
+        }, status_code=400, headers=cors_headers)
+
+    cleanup_google_oauth_states()
+    if not state_token or state_token not in GOOGLE_OAUTH_STATES:
+        return JSONResponse({
+            "error": "invalid_request",
+            "error_description": "Invalid, expired, or missing OAuth state parameter. Please try logging in again."
+        }, status_code=400, headers=cors_headers)
+
+    state_info = GOOGLE_OAUTH_STATES.pop(state_token)
+    if time.time() > state_info.get("expires_at", 0):
+        return JSONResponse({
+            "error": "invalid_request",
+            "error_description": "OAuth state has expired. Please try logging in again."
+        }, status_code=400, headers=cors_headers)
+
+    if not code:
+        return JSONResponse({
+            "error": "invalid_request",
+            "error_description": "Missing authorization code from Google."
+        }, status_code=400, headers=cors_headers)
+
+    google_client_id = getattr(config, "GOOGLE_CLIENT_ID", "").strip()
+    google_client_secret = getattr(config, "GOOGLE_CLIENT_SECRET", "").strip()
+    google_redirect_uri = get_effective_google_redirect_uri(request)
+
+    # Exchange Google authorization code for access token
+    token_url = "https://oauth2.googleapis.com/token"
+    token_payload = {
+        "code": code,
+        "client_id": google_client_id,
+        "client_secret": google_client_secret,
+        "redirect_uri": google_redirect_uri,
+        "grant_type": "authorization_code"
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http_client:
+            token_resp = await http_client.post(token_url, data=token_payload)
+            if token_resp.status_code != 200:
+                logger.error(f"[Google Auth] Token exchange failed: {token_resp.status_code} - {token_resp.text}")
+                return JSONResponse({
+                    "error": "invalid_grant",
+                    "error_description": "Failed to exchange authorization code with Google."
+                }, status_code=400, headers=cors_headers)
+
+            token_data = token_resp.json()
+            access_token = token_data.get("access_token")
+            if not access_token:
+                return JSONResponse({
+                    "error": "server_error",
+                    "error_description": "No access_token returned by Google."
+                }, status_code=502, headers=cors_headers)
+
+            # Fetch verified user profile
+            userinfo_resp = await http_client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            if userinfo_resp.status_code != 200:
+                return JSONResponse({
+                    "error": "server_error",
+                    "error_description": "Failed to fetch user profile from Google."
+                }, status_code=502, headers=cors_headers)
+
+            user_info = userinfo_resp.json()
+    except Exception as exc:
+        logger.error(f"[Google Auth] Exception communicating with Google: {exc}")
+        return JSONResponse({
+            "error": "server_error",
+            "error_description": f"Internal communication error with Google: {str(exc)}"
+        }, status_code=502, headers=cors_headers)
+
+    email = user_info.get("email", "").strip().lower()
+    email_verified = user_info.get("email_verified", False)
+
+    if not email or not email_verified:
+        return JSONResponse({
+            "error": "access_denied",
+            "error_description": "Google account email is not verified or unavailable."
+        }, status_code=403, headers=cors_headers)
+
+    client_ip = extract_client_ip(request)
+
+    # Tenant Resolution & Auto-Provisioning
+    existing_signup = snapshot_store.get_signup_by_email(email)
+    if existing_signup:
+        org_id = existing_signup["org_id"]
+        team_name = existing_signup["team_name"]
+        key_id = existing_signup["key_id"]
+        if not quota_manager.get_key(key_id):
+            quota_manager.register_key(
+                key_id=key_id,
+                team_name=team_name,
+                org_id=org_id,
+                monthly_budget_usd=FREE_TIER_MONTHLY_BUDGET_USD,
+                rate_limit_rpm=FREE_TIER_RATE_LIMIT_RPM,
+                role=FREE_TIER_ROLE
+            )
+    else:
+        name = user_info.get("name", "").strip()
+        if name:
+            team_name = f"{name} Workspace"[:64]
+        else:
+            team_name = f"{email.split('@')[0].title()} Workspace"[:64]
+
+        org_id = f"org_{uuid.uuid4().hex[:12]}"
+        key_id = f"omni_live_{uuid.uuid4().hex}"
+
+        quota_manager.register_key(
+            key_id=key_id,
+            team_name=team_name,
+            org_id=org_id,
+            monthly_budget_usd=FREE_TIER_MONTHLY_BUDGET_USD,
+            rate_limit_rpm=FREE_TIER_RATE_LIMIT_RPM,
+            role=FREE_TIER_ROLE
+        )
+        snapshot_store.record_signup(
+            email=email,
+            team_name=team_name,
+            org_id=org_id,
+            key_id=key_id,
+            ip_address=client_ip,
+            created_at=time.time(),
+            synchronous=True
+        )
+        print(f"👤 [OmniCache Google Auth] Auto-provisioned free tenant: email={email}, org_id={org_id}, team='{team_name}', ip={client_ip}", file=sys.stderr)
+        emit_telemetry_event("user_signup", {
+            "email": email,
+            "org_id": org_id,
+            "team_name": team_name,
+            "provider": "google",
+            "ip": client_ip,
+            "timestamp": time.time()
+        })
+        asyncio.create_task(broadcast_ws_event("new_signup", {
+            "org_id": org_id,
+            "team_name": team_name,
+            "provider": "google",
+            "timestamp": time.time()
+        }))
+
+    # Seamless redirect back into client OAuth flow if redirect_uri was present
+    client_redirect = state_info.get("redirect_uri", "").strip()
+    if client_redirect:
+        code = f"omni_code_{uuid.uuid4().hex}"
+        OAUTH_CODES[code] = {
+            "client_id": state_info.get("client_id", "claude-connectors"),
+            "redirect_uri": client_redirect,
+            "scope": state_info.get("scope", "mcp:read mcp:write"),
+            "code_challenge": state_info.get("code_challenge", ""),
+            "code_challenge_method": state_info.get("code_challenge_method", "S256"),
+            "org_id": org_id,
+            "team_name": team_name,
+            "email": email,
+            "created_at": time.time(),
+            "expires_at": time.time() + 600
+        }
+        delimiter = "&" if "?" in client_redirect else "?"
+        redirect_target = f"{client_redirect}{delimiter}code={code}"
+        if state_info.get("client_state"):
+            redirect_target += f"&state={quote_plus(state_info['client_state'])}"
+        return RedirectResponse(url=redirect_target, status_code=302)
+
+    # If no client redirect_uri (direct browser sign-in): render modern dark confirmation page
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OmniCache — Authenticated</title>
+  <style>
+    body {{ background: #121316; color: #e1e3e6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }}
+    .card {{ background: #1a1c20; border: 1px solid #2a2d34; border-radius: 12px; width: 460px; padding: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }}
+    h2 {{ margin-top: 0; font-size: 20px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px; }}
+    .icon-check {{ color: #34a853; font-size: 24px; }}
+    p {{ color: #9aa0a6; font-size: 14px; line-height: 1.5; }}
+    .info-box {{ background: #121316; border: 1px solid #2a2d34; border-radius: 8px; padding: 16px; margin: 20px 0; font-family: monospace; font-size: 13px; }}
+    .info-row {{ display: flex; justify-content: space-between; margin-bottom: 8px; }}
+    .info-row:last-child {{ margin-bottom: 0; }}
+    .label {{ color: #9aa0a6; }}
+    .val {{ color: #8ab4f8; word-break: break-all; }}
+    .key-display {{ background: #252830; padding: 10px; border-radius: 6px; border: 1px dashed #3c4043; color: #a8c7fa; font-weight: 600; font-size: 13px; text-align: center; margin-top: 12px; user-select: all; }}
+    .btn {{ display: block; text-align: center; background: #1a73e8; color: #fff; padding: 10px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; text-decoration: none; margin-top: 20px; }}
+    .btn:hover {{ background: #1557b0; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2><span class="icon-check">✓</span> Google Sign-In Successful</h2>
+    <p>Your Google account has been verified and mapped to your OmniCache tenant workspace.</p>
+    <div class="info-box">
+      <div class="info-row"><span class="label">Email:</span> <span class="val">{email}</span></div>
+      <div class="info-row"><span class="label">Organization:</span> <span class="val">{org_id}</span></div>
+      <div class="info-row"><span class="label">Team:</span> <span class="val">{team_name}</span></div>
+      <div class="info-row"><span class="label">Plan Tier:</span> <span class="val">Free Tier ($5.00/mo, 30 RPM)</span></div>
+      <div class="key-display">{key_id}</div>
+    </div>
+    <a class="btn" href="/dashboard?key={key_id}">Open OmniCache Dashboard</a>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(html, status_code=200, headers=cors_headers)
+
+
 async def handle_mcp(request: Request) -> Response:
     """
     Model Context Protocol (MCP) JSON-RPC 2.0 endpoint supporting Streamable HTTP.
@@ -3920,6 +4273,8 @@ routes = [
     Route("/.well-known/oauth-protected-resource", handle_oauth_protected_resource, methods=["GET", "OPTIONS"]),
     Route("/oauth/authorize", handle_oauth_authorize, methods=["GET", "POST", "OPTIONS"]),
     Route("/oauth/token", handle_oauth_token, methods=["POST", "OPTIONS"]),
+    Route("/auth/google/login", handle_google_login, methods=["GET", "OPTIONS"]),
+    Route("/auth/google/callback", handle_google_callback, methods=["GET", "OPTIONS"]),
     Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),

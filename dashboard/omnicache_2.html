@@ -1180,8 +1180,8 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       };
 
       const t0 = performance.now();
-      try {
         const storedKey = document.getElementById('playground-api-key')?.value.trim() || '';
+        const authKey = storedKey || (typeof getAuthKey === 'function' ? getAuthKey() : '') || localStorage.getItem('omnicache_key') || '';
         const bypassCache = document.getElementById('bypass-cache-toggle')?.checked || false;
 
         const reqHeaders = {
@@ -1194,13 +1194,16 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           reqHeaders['x-cache-bypass'] = 'true';
         }
 
-        if (storedKey) {
-          const cleanKey = storedKey.replace(/^Bearer\s+/i, '').trim();
+        if (authKey) {
+          const cleanKey = authKey.replace(/^Bearer\s+/i, '').trim();
           if (currentMode === 'claude') {
             reqHeaders['x-api-key'] = cleanKey;
           } else {
             reqHeaders['Authorization'] = `Bearer ${cleanKey}`;
           }
+        }
+        if (storedKey) {
+          reqHeaders['x-upstream-provider-key'] = storedKey;
         }
 
         const res = await fetch(endpoint, {
@@ -1208,6 +1211,15 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           headers: reqHeaders,
           body: JSON.stringify(payload)
         });
+
+        if (res.status === 401) {
+          if (typeof showAuthModal === 'function') {
+            showAuthModal('Authentication required: Enter your OmniCache API Key or Admin Key to use the playground.');
+          } else {
+            alert('Authentication required: Missing or invalid API key.');
+          }
+          return;
+        }
 
         const dt = (performance.now() - t0).toFixed(2);
         const data = await res.json();

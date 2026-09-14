@@ -142,3 +142,116 @@ def test_dashboard_require_auth_modes(client):
     finally:
         config.REQUIRE_AUTH = old_auth
 
+
+def test_dashboard_playground_with_require_auth_and_virtual_admin_key(client):
+    """
+    Critical regression test:
+    When REQUIRE_AUTH=True and dashboard playground requests are sent with the
+    OmniCache virtual Admin Key (which is not an upstream OpenAI/Anthropic key),
+    the proxy must authenticate the request, serve the sandbox playground response,
+    cache it, and yield a semantic hit with token savings on subsequent requests.
+    """
+    from core.config import config
+    from server.quotas import quota_manager
+    from server.gateway import METRICS_LEDGER
+
+    old_auth = config.REQUIRE_AUTH
+    old_admin_key = config.ADMIN_API_KEY
+    try:
+        config.REQUIRE_AUTH = True
+        test_key = "8f8bd7befea4c369efa9eb8dc362af97"
+        config.ADMIN_API_KEY = test_key
+        quota_manager.register_key(
+            key_id=test_key,
+            team_name="OmniCache Admin",
+            org_id="admin",
+            role="admin"
+        )
+
+        initial_tokens_saved = METRICS_LEDGER["total_tokens_saved"]
+        initial_savings_usd = METRICS_LEDGER["total_savings_usd"]
+
+        # --- 1. Claude Mode Test ---
+        p1 = "Write a python function to sort a list using quicksort."
+        r1 = client.post("/v1/messages", json={
+            "model": "claude-sonnet-4-5-20250929",
+            "messages": [{"role": "user", "content": p1}],
+            "max_tokens": 1024
+        }, headers={
+            "x-org-id": "enterprise_user",
+            "x-dashboard-playground": "true",
+            "x-api-key": test_key
+        })
+
+        assert r1.status_code == 200
+        assert r1.headers.get("X-Cache-Status") == "MISS"
+        assert "content" in r1.json()
+
+        # Rephrased test in Claude mode
+        p2 = "Please write a python function to sort a list using quicksort."
+        r2 = client.post("/v1/messages", json={
+            "model": "claude-sonnet-4-5-20250929",
+            "messages": [{"role": "user", "content": p2}],
+            "max_tokens": 1024
+        }, headers={
+            "x-org-id": "enterprise_user",
+            "x-dashboard-playground": "true",
+            "x-api-key": test_key
+        })
+
+        assert r2.status_code == 200
+        assert r2.headers.get("X-Cache-Status") == "HIT_SEMANTIC"
+        claude_tokens_saved = int(r2.headers.get("X-Tokens-Saved", "0"))
+        assert claude_tokens_saved > 0
+        assert float(r2.headers.get("X-Cost-Saved-USD", "0.0")) > 0.0
+
+        # --- 2. OpenAI Mode Test ---
+        p3 = "Explain how to reverse a linked list in Python."
+        r3 = client.post("/v1/chat/completions", json={
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": p3}],
+            "temperature": 0.0
+        }, headers={
+            "x-org-id": "enterprise_user",
+            "x-dashboard-playground": "true",
+            "Authorization": f"Bearer {test_key}"
+        })
+
+        assert r3.status_code == 200
+        assert r3.headers.get("X-Cache-Status") == "MISS"
+        assert "choices" in r3.json()
+
+        # Rephrased test in OpenAI mode
+        p4 = "Please explain how to reverse a linked list in Python."
+        r4 = client.post("/v1/chat/completions", json={
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": p4}],
+            "temperature": 0.0
+        }, headers={
+            "x-org-id": "enterprise_user",
+            "x-dashboard-playground": "true",
+            "Authorization": f"Bearer {test_key}"
+        })
+
+        assert r4.status_code == 200
+        assert r4.headers.get("X-Cache-Status") == "HIT_SEMANTIC"
+        openai_tokens_saved = int(r4.headers.get("X-Tokens-Saved", "0"))
+        assert openai_tokens_saved > 0
+        assert float(r4.headers.get("X-Cost-Saved-USD", "0.0")) > 0.0
+
+        # Total ledger must have increased
+        assert METRICS_LEDGER["total_tokens_saved"] > initial_tokens_saved
+        assert METRICS_LEDGER["total_savings_usd"] > initial_savings_usd
+
+        # Stats endpoint must return updated values
+        r_stats = client.get("/v1/cache/stats", headers={"Authorization": f"Bearer {test_key}"})
+        assert r_stats.status_code == 200
+        stats = r_stats.json()
+        assert stats["financial_telemetry"]["total_tokens_saved"] > initial_tokens_saved
+        assert stats["cache_stats"]["semantic_hits"] > 0
+
+    finally:
+        config.REQUIRE_AUTH = old_auth
+        config.ADMIN_API_KEY = old_admin_key
+
+

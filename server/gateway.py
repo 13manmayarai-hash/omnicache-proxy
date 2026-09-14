@@ -858,30 +858,51 @@ async def handle_chat_completions(request: Request) -> Response:
     exact_flight_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
 
     if not is_stream:
-        async def _fetch_non_stream():
-            code, data, hdrs = await upstream_client.forward_non_stream(payload, auth_header=auth_header)
-            return {"status_code": code, "res_data": data, "headers": hdrs}, None
-
-        flight_result, _, is_leader = await flight_bus.execute(
-            exact_flight_key,
-            _fetch_non_stream,
-            timeout_seconds=config.SINGLEFLIGHT_TIMEOUT_SECONDS
-        )
-
-        status_code = flight_result["status_code"]
-        res_data = flight_result["res_data"]
-        latency_ms = (time.perf_counter() - start_time) * 1000
-
         is_playground = request.headers.get("x-dashboard-playground") == "true" or org_id == "enterprise_user"
         supplied_key = (request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("Bearer ")).strip()
-        has_client_key = bool(supplied_key and supplied_key not in ("default", ""))
+        is_internal_key = bool(
+            supplied_key in (getattr(config, "ADMIN_API_KEY", ""), "default", "")
+            or (quota_manager.storage.get_key(supplied_key) is not None)
+        )
+        has_real_provider_key = bool(supplied_key and not is_internal_key and (supplied_key.startswith("sk-") or len(supplied_key) > 20))
 
-        if status_code != 200 and is_playground:
-            if not has_client_key and not config.OPENAI_API_KEY:
+        if is_playground and not has_real_provider_key and not config.OPENAI_API_KEY:
+            user_text = ""
+            for m in payload.get("messages", []):
+                if isinstance(m, dict) and m.get("role") == "user":
+                    c = m.get("content", "")
+                    if isinstance(c, list):
+                        user_text = " ".join(str(b.get("text", "")) for b in c if isinstance(b, dict))
+                    else:
+                        user_text = str(c)
+            res_data = generate_sandbox_playground_completion(user_text, routed_model, is_claude=False)
+            status_code = 200
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            is_leader = True
+        else:
+            async def _fetch_non_stream():
+                code, data, hdrs = await upstream_client.forward_non_stream(payload, auth_header=auth_header)
+                return {"status_code": code, "res_data": data, "headers": hdrs}, None
+
+            flight_result, _, is_leader = await flight_bus.execute(
+                exact_flight_key,
+                _fetch_non_stream,
+                timeout_seconds=config.SINGLEFLIGHT_TIMEOUT_SECONDS
+            )
+
+            status_code = flight_result["status_code"]
+            res_data = flight_result["res_data"]
+            latency_ms = (time.perf_counter() - start_time) * 1000
+
+            if status_code != 200 and is_playground:
                 user_text = ""
                 for m in payload.get("messages", []):
                     if isinstance(m, dict) and m.get("role") == "user":
-                        user_text = str(m.get("content", ""))
+                        c = m.get("content", "")
+                        if isinstance(c, list):
+                            user_text = " ".join(str(b.get("text", "")) for b in c if isinstance(b, dict))
+                        else:
+                            user_text = str(c)
                 res_data = generate_sandbox_playground_completion(user_text, routed_model, is_claude=False)
                 status_code = 200
 
@@ -1633,30 +1654,47 @@ async def handle_anthropic_messages(request: Request) -> Response:
     # Non-streaming forward with SingleFlight coalescing
     exact_flight_key = RequestHasher.compute_exact_hash(normalized_payload, org_id=org_id)
 
-    async def _fetch_anthropic_non_stream():
-        code, data, hdrs = await upstream_client.forward_anthropic_messages(
-            anthropic_payload,
-            incoming_headers=dict(request.headers),
-            params=req_params
-        )
-        return {"status_code": code, "res_data": data, "headers": hdrs}, None
-
-    flight_result, _, is_leader = await flight_bus.execute(
-        exact_flight_key,
-        _fetch_anthropic_non_stream,
-        timeout_seconds=config.SINGLEFLIGHT_TIMEOUT_SECONDS
-    )
-
-    status_code = flight_result["status_code"]
-    anthropic_res = flight_result["res_data"]
-    latency_ms = (time.perf_counter() - start_time) * 1000
-
     is_playground = request.headers.get("x-dashboard-playground") == "true" or org_id == "enterprise_user"
     supplied_key = (request.headers.get("x-api-key") or request.headers.get("authorization", "").removeprefix("Bearer ")).strip()
-    has_client_key = bool(supplied_key and supplied_key not in ("default", ""))
+    is_internal_key = bool(
+        supplied_key in (getattr(config, "ADMIN_API_KEY", ""), "default", "")
+        or (quota_manager.storage.get_key(supplied_key) is not None)
+    )
+    has_real_provider_key = bool(supplied_key and not is_internal_key and (supplied_key.startswith("sk-") or len(supplied_key) > 20))
 
-    if status_code != 200 and is_playground:
-        if not has_client_key and not config.ANTHROPIC_API_KEY:
+    if is_playground and not has_real_provider_key and not config.ANTHROPIC_API_KEY:
+        user_text = ""
+        for m in messages:
+            if isinstance(m, dict) and m.get("role") == "user":
+                c = m.get("content", "")
+                if isinstance(c, list):
+                    user_text = " ".join(str(b.get("text", "")) for b in c if isinstance(b, dict))
+                else:
+                    user_text = str(c)
+        status_code = 200
+        anthropic_res = generate_sandbox_playground_completion(user_text, requested_model, is_claude=True)
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        is_leader = True
+    else:
+        async def _fetch_anthropic_non_stream():
+            code, data, hdrs = await upstream_client.forward_anthropic_messages(
+                anthropic_payload,
+                incoming_headers=dict(request.headers),
+                params=req_params
+            )
+            return {"status_code": code, "res_data": data, "headers": hdrs}, None
+
+        flight_result, _, is_leader = await flight_bus.execute(
+            exact_flight_key,
+            _fetch_anthropic_non_stream,
+            timeout_seconds=config.SINGLEFLIGHT_TIMEOUT_SECONDS
+        )
+
+        status_code = flight_result["status_code"]
+        anthropic_res = flight_result["res_data"]
+        latency_ms = (time.perf_counter() - start_time) * 1000
+
+        if status_code != 200 and is_playground:
             user_text = ""
             for m in messages:
                 if isinstance(m, dict) and m.get("role") == "user":

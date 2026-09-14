@@ -1044,19 +1044,22 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       };
 
       const t0 = performance.now();
-      try {
         const storedKey = document.getElementById('playground-api-key')?.value.trim() || '';
+        const authKey = storedKey || getAuthKey() || '';
         const reqHeaders = {
           'Content-Type': 'application/json',
           'x-org-id': 'enterprise_user',
           'x-dashboard-playground': 'true'
         };
-        if (storedKey) {
+        if (authKey) {
           if (currentMode === 'claude') {
-            reqHeaders['x-api-key'] = storedKey;
+            reqHeaders['x-api-key'] = authKey;
           } else {
-            reqHeaders['Authorization'] = `Bearer ${storedKey}`;
+            reqHeaders['Authorization'] = `Bearer ${authKey}`;
           }
+        }
+        if (storedKey) {
+          reqHeaders['x-upstream-provider-key'] = storedKey;
         }
 
         const res = await fetch(endpoint, {
@@ -1064,6 +1067,11 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           headers: reqHeaders,
           body: JSON.stringify(payload)
         });
+
+        if (res.status === 401) {
+          showAuthModal('Authentication required: Enter your OmniCache API Key or Admin Key to use the playground.');
+          return;
+        }
 
         const dt = (performance.now() - t0).toFixed(2);
         const data = await res.json();

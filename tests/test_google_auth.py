@@ -283,3 +283,45 @@ def test_oauth_authorize_consent_screen_displays_google_sign_in(client, monkeypa
     assert "client_id=test-mcp" in resp.text
     assert "OR USE API KEY" in resp.text
     assert "OmniCache API Key or Admin Key:" in resp.text
+
+
+def test_google_callback_survives_container_restart(client, monkeypatch):
+    """Validates that HMAC-signed state tokens remain valid even if in-memory state is wiped."""
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_ID", "mock-google-id")
+    monkeypatch.setattr(config, "GOOGLE_CLIENT_SECRET", "mock-google-secret")
+
+    # Step 1: Initiate login to get a signed state token
+    resp = client.get("/auth/google/login?client_id=claude-test&redirect_uri=https://claude.ai/cb&state=mystate", follow_redirects=False)
+    assert resp.status_code == 302
+    q = parse_qs(urlparse(resp.headers["location"]).query)
+    signed_state = q["state"][0]
+
+    # Step 2: SIMULATE SERVER RESTART / REDEPLOY by wiping in-memory dictionary
+    GOOGLE_OAUTH_STATES.clear()
+
+    # Step 3: Callback arrives at the newly started server
+    mock_token_resp = MagicMock()
+    mock_token_resp.status_code = 200
+    mock_token_resp.json.return_value = {"access_token": "mock_token"}
+
+    mock_userinfo_resp = MagicMock()
+    mock_userinfo_resp.status_code = 200
+    mock_userinfo_resp.json.return_value = {
+        "email": "restart_test@example.com",
+        "email_verified": True,
+        "name": "Restart Tester"
+    }
+
+    class MockAsyncClient:
+        def __init__(self, *args, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, url, data=None, **kwargs): return mock_token_resp
+        async def get(self, url, headers=None, **kwargs): return mock_userinfo_resp
+
+    with patch("server.gateway.httpx.AsyncClient", MockAsyncClient):
+        cb_resp = client.get(f"/auth/google/callback?code=mock_code&state={signed_state}", follow_redirects=False)
+
+    # Must succeed and redirect to claude.ai with minted code!
+    assert cb_resp.status_code == 302
+    assert cb_resp.headers["location"].startswith("https://claude.ai/cb")

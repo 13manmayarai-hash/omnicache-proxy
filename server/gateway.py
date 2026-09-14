@@ -3248,6 +3248,63 @@ def cleanup_google_oauth_states() -> None:
         GOOGLE_OAUTH_STATES.pop(k, None)
 
 
+def generate_google_oauth_state(client_info: Dict[str, Any]) -> str:
+    """
+    Mints a tamper-proof, self-contained, HMAC-SHA256 signed OAuth state token.
+    Contains client parameters and expiry. Immune to server restarts, multi-worker
+    process boundaries, and container redeployments.
+    """
+    payload = {
+        "nonce": secrets.token_hex(16),
+        "client_id": client_info.get("client_id", ""),
+        "redirect_uri": client_info.get("redirect_uri", ""),
+        "client_state": client_info.get("client_state", ""),
+        "scope": client_info.get("scope", "mcp:read mcp:write"),
+        "code_challenge": client_info.get("code_challenge", ""),
+        "code_challenge_method": client_info.get("code_challenge_method", "S256"),
+        "response_type": client_info.get("response_type", "code"),
+        "expires_at": time.time() + 900  # 15 minutes
+    }
+    raw_bytes = json.dumps(payload, sort_keys=True).encode("utf-8")
+    payload_b64 = base64.urlsafe_b64encode(raw_bytes).decode("ascii").rstrip("=")
+    signing_key = (getattr(config, "ADMIN_API_KEY", "") or getattr(config, "PRIVACY_SALT", "") or "omnicache_secret_salt").encode("utf-8")
+    sig = hmac.new(signing_key, payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+    token = f"{payload_b64}.{sig}"
+    GOOGLE_OAUTH_STATES[token] = payload
+    return token
+
+
+def verify_google_oauth_state(state_token: str) -> Optional[Dict[str, Any]]:
+    """
+    Verifies the HMAC signature and timestamp of an OAuth state token.
+    Returns decoded client parameters if valid and unexpired, None otherwise.
+    First checks in-memory state; if missing (e.g. across container restart),
+    cryptographically validates the HMAC signature so login flows never break.
+    """
+    if not state_token:
+        return None
+    # 1. Fast path: check in-memory dictionary
+    if state_token in GOOGLE_OAUTH_STATES:
+        state_data = GOOGLE_OAUTH_STATES.pop(state_token)
+        if time.time() <= state_data.get("expires_at", 0):
+            return state_data
+    # 2. Cryptographic signature verification (survives restarts and redeployments)
+    if "." in state_token:
+        try:
+            parts = state_token.split(".", 1)
+            payload_b64, provided_sig = parts[0], parts[1]
+            signing_key = (getattr(config, "ADMIN_API_KEY", "") or getattr(config, "PRIVACY_SALT", "") or "omnicache_secret_salt").encode("utf-8")
+            expected_sig = hmac.new(signing_key, payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(provided_sig, expected_sig):
+                padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+                data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+                if time.time() <= data.get("expires_at", 0):
+                    return data
+        except Exception as exc:
+            logger.warning(f"[OAuth State] Signature verification failed: {exc}")
+    return None
+
+
 def get_effective_google_redirect_uri(request: Request) -> str:
     """
     Computes the canonical Google OAuth callback URL.
@@ -3769,18 +3826,15 @@ async def handle_google_login(request: Request) -> Response:
         }, status_code=503, headers=cors_headers)
 
     cleanup_google_oauth_states()
-    state_token = f"gstate_{secrets.token_urlsafe(32)}"
-    GOOGLE_OAUTH_STATES[state_token] = {
+    state_token = generate_google_oauth_state({
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "client_state": state,
         "scope": scope,
         "code_challenge": code_challenge,
         "code_challenge_method": code_challenge_method,
-        "response_type": response_type,
-        "created_at": time.time(),
-        "expires_at": time.time() + 600
-    }
+        "response_type": response_type
+    })
 
     google_redirect_uri = get_effective_google_redirect_uri(request)
     google_params = {
@@ -3819,17 +3873,11 @@ async def handle_google_callback(request: Request) -> Response:
         }, status_code=400, headers=cors_headers)
 
     cleanup_google_oauth_states()
-    if not state_token or state_token not in GOOGLE_OAUTH_STATES:
+    state_info = verify_google_oauth_state(state_token)
+    if not state_info:
         return JSONResponse({
             "error": "invalid_request",
             "error_description": "Invalid, expired, or missing OAuth state parameter. Please try logging in again."
-        }, status_code=400, headers=cors_headers)
-
-    state_info = GOOGLE_OAUTH_STATES.pop(state_token)
-    if time.time() > state_info.get("expires_at", 0):
-        return JSONResponse({
-            "error": "invalid_request",
-            "error_description": "OAuth state has expired. Please try logging in again."
         }, status_code=400, headers=cors_headers)
 
     if not code:

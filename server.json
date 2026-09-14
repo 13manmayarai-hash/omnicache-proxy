@@ -1,0 +1,29 @@
+{
+  "": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.13manmayarai-hash/omnicache-proxy",
+  "title": "OmniCache AI Proxy & Semantic Cache",
+  "description": "Sub-millisecond intent-gated semantic cache, hardware-accelerated quantized vector search, and Git-aware agent tool replayer for Claude Code, Cursor, and MCP clients.",
+  "version": "3.0.5",
+  "license": "FSL-1.1-MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/13manmayarai-hash/omnicache-proxy"
+  },
+  "homepage": "https://omnicache-proxy.onrender.com",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "omnicache-proxy",
+      "version": "3.0.5",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://omnicache-proxy.onrender.com/mcp"
+    }
+  ]
+}

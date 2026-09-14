@@ -99,6 +99,21 @@ class SnapshotStore:
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_vkey_org ON virtual_keys(org_id)")
 
+            # Durable signups audit table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS signups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL,
+                    team_name TEXT NOT NULL,
+                    org_id TEXT NOT NULL,
+                    key_id TEXT NOT NULL,
+                    ip_address TEXT NOT NULL,
+                    created_at REAL NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_email ON signups(email)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_ip ON signups(ip_address)")
+
     def _start_worker(self):
         self._running = True
         self._worker_thread = threading.Thread(
@@ -167,6 +182,7 @@ class SnapshotStore:
                 cache_inserts = []
                 key_inserts = []
                 spend_updates = []
+                signup_inserts = []
                 tag_deletes = []
                 purge_orgs = []
 
@@ -205,6 +221,15 @@ class SnapshotStore:
                         ))
                     elif op == "spend_key":
                         spend_updates.append((it["spend_usd"], it["key_id"]))
+                    elif op == "signup":
+                        signup_inserts.append((
+                            it["email"],
+                            it["team_name"],
+                            it["org_id"],
+                            it["key_id"],
+                            it["ip_address"],
+                            it["created_at"]
+                        ))
                     elif op == "delete_tag":
                         tag_deletes.append((it["tag"], it.get("org_id")))
                     elif op == "purge":
@@ -233,6 +258,13 @@ class SnapshotStore:
                         SET current_spend_usd = current_spend_usd + ?
                         WHERE key_id = ?
                     """, spend_updates)
+
+                if signup_inserts:
+                    conn.executemany("""
+                        INSERT INTO signups (
+                            email, team_name, org_id, key_id, ip_address, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, signup_inserts)
 
                 for tag, org_id in tag_deletes:
                     if org_id:
@@ -449,6 +481,77 @@ class SnapshotStore:
         except Exception as e:
             logger.warning(f"[SnapshotStore] Failed to load virtual keys: {e}")
         return result
+
+    # =========================================================================
+    # Tenant Signup Audit API
+    # =========================================================================
+
+    def record_signup(
+        self,
+        email: str,
+        team_name: str,
+        org_id: str,
+        key_id: str,
+        ip_address: str,
+        created_at: float,
+        synchronous: bool = True
+    ):
+        """Records a new tenant signup into durable SQLite audit storage."""
+        item = {
+            "op": "signup",
+            "email": email,
+            "team_name": team_name,
+            "org_id": org_id,
+            "key_id": key_id,
+            "ip_address": ip_address,
+            "created_at": created_at
+        }
+        if synchronous or not self._enable_write_behind:
+            self._process_batch([item])
+        else:
+            self._write_queue.put(item)
+
+    def get_signup_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Retrieves existing signup record by email (case-insensitive)."""
+        self.flush()
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT email, team_name, org_id, key_id, ip_address, created_at FROM signups WHERE LOWER(email) = ? ORDER BY id DESC LIMIT 1",
+                (email.strip().lower(),)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "email": row[0],
+                    "team_name": row[1],
+                    "org_id": row[2],
+                    "key_id": row[3],
+                    "ip_address": row[4],
+                    "created_at": row[5]
+                }
+            return None
+        except Exception as exc:
+            logger.warning(f"[SnapshotStore] Error querying signup by email: {exc}")
+            return None
+
+    def count_signups_by_ip(self, ip_address: str, window_seconds: float = 3600.0) -> int:
+        """Counts the number of signups originating from an IP within the sliding time window."""
+        self.flush()
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cutoff = time.time() - window_seconds
+            cursor.execute(
+                "SELECT COUNT(*) FROM signups WHERE ip_address = ? AND created_at >= ?",
+                (ip_address, cutoff)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else 0
+        except Exception as exc:
+            logger.warning(f"[SnapshotStore] Error counting signups by ip: {exc}")
+            return 0
 
     # =========================================================================
     # Lifecycle & Cleanup

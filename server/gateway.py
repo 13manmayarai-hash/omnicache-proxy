@@ -15,6 +15,8 @@ import uuid
 import hashlib
 import base64
 import hmac
+import re
+import threading
 from urllib.parse import parse_qs
 from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
@@ -2730,6 +2732,251 @@ async def handle_quotas(request: Request) -> Response:
     return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
 
 
+# =====================================================================
+# Public Self-Service Signup (Free Tier)
+# =====================================================================
+
+FREE_TIER_MONTHLY_BUDGET_USD: float = 5.0
+FREE_TIER_RATE_LIMIT_RPM: int = 30
+FREE_TIER_ROLE: str = "tenant"
+SIGNUP_IP_RATE_LIMIT_PER_HOUR: int = 5
+SIGNUP_IP_WINDOW_SECONDS: float = 3600.0
+
+_SIGNUP_IP_TIMESTAMPS: Dict[str, List[float]] = {}
+_SIGNUP_LOCK = threading.RLock()
+
+DISPOSABLE_EMAIL_DOMAINS: Set[str] = {
+    "mailinator.com", "tempmail.com", "10minutemail.com", "guerrillamail.com",
+    "sharklasers.com", "trashmail.com", "dispostable.com", "yopmail.com",
+    "getairmail.com", "throwawaymail.com", "temp-mail.org", "fakeinbox.com",
+    "burnermail.io", "maildrop.cc", "inboxkitten.com"
+}
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+
+def extract_client_ip(request: Request) -> str:
+    """Safely extracts client IP address, respecting reverse proxies and headers."""
+    cf_ip = request.headers.get("cf-connecting-ip", "").strip()
+    if cf_ip:
+        return cf_ip
+    real_ip = request.headers.get("x-real-ip", "").strip()
+    if real_ip:
+        return real_ip
+    xff = request.headers.get("x-forwarded-for", "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "127.0.0.1"
+
+
+def check_signup_rate_limit(client_ip: str) -> Tuple[bool, int]:
+    """
+    In-memory and durable sliding window rate limiter: max 5 signups/hr per IP.
+    Returns (is_allowed, count).
+    """
+    now = time.time()
+    cutoff = now - SIGNUP_IP_WINDOW_SECONDS
+
+    with _SIGNUP_LOCK:
+        timestamps = [ts for ts in _SIGNUP_IP_TIMESTAMPS.get(client_ip, []) if ts > cutoff]
+        durable_count = snapshot_store.count_signups_by_ip(client_ip, window_seconds=SIGNUP_IP_WINDOW_SECONDS)
+        effective_count = max(len(timestamps), durable_count)
+
+        if effective_count >= SIGNUP_IP_RATE_LIMIT_PER_HOUR:
+            return False, effective_count
+
+        return True, effective_count
+
+
+def record_signup_rate_limit(client_ip: str) -> None:
+    """Records a completed signup timestamp for the client IP address."""
+    now = time.time()
+    cutoff = now - SIGNUP_IP_WINDOW_SECONDS
+    with _SIGNUP_LOCK:
+        timestamps = [ts for ts in _SIGNUP_IP_TIMESTAMPS.get(client_ip, []) if ts > cutoff]
+        timestamps.append(now)
+        _SIGNUP_IP_TIMESTAMPS[client_ip] = timestamps
+
+
+def validate_signup_email(email: Any) -> Tuple[bool, str]:
+    """Validates email format, length, domain structure, and disposable domain blocklist."""
+    if not email or not isinstance(email, str):
+        return False, "Field 'email' is required and must be a string."
+
+    email_clean = email.strip()
+    if len(email_clean) < 5 or len(email_clean) > 254:
+        return False, "Email must be between 5 and 254 characters in length."
+
+    if not EMAIL_REGEX.match(email_clean):
+        return False, "Invalid email format. Must be a valid email address (e.g. user@example.com)."
+
+    parts = email_clean.split("@")
+    if len(parts) != 2:
+        return False, "Invalid email address format."
+
+    domain = parts[1].lower()
+    if "." not in domain or domain.endswith(".") or domain.startswith("."):
+        return False, "Email domain must contain a valid top-level domain."
+
+    if domain in DISPOSABLE_EMAIL_DOMAINS:
+        return False, f"Email domain '{domain}' is not allowed for free tier registration. Please use a permanent email address."
+
+    return True, ""
+
+
+async def handle_signup(request: Request) -> Response:
+    """
+    Public Self-Service Tenant Registration Endpoint (POST /v1/signup).
+    Allows new users to create a free-tier virtual key with strictly enforced server-side guardrails:
+    - No authentication required.
+    - Accepts only 'email' and optional 'team_name'.
+    - Rejects tampering: ignores any caller-specified monthly_budget_usd, rate_limit_rpm, role, or org_id.
+    - Uses hardcoded server constants for free tier (monthly_budget_usd=5.0, rate_limit_rpm=30, role='tenant').
+    - Client IP rate limiting (max 5 signups/hr per IP).
+    - Format and disposable email validation.
+    - Server-side generated org_id and key_id to prevent collision or privilege escalation.
+    - Audit logging to durable SQLite storage and telemetry bus.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    if request.method != "POST":
+        return JSONResponse(
+            {"error": {"message": "Method not allowed. Use POST.", "type": "invalid_request_error"}},
+            status_code=405,
+            headers=cors_headers
+        )
+
+    client_ip = extract_client_ip(request)
+
+    # 1. Enforce IP Rate Limiting (5 signups / hr / IP)
+    rate_ok, current_count = check_signup_rate_limit(client_ip)
+    if not rate_ok:
+        return JSONResponse(
+            {
+                "error": {
+                    "message": f"Signup rate limit exceeded ({SIGNUP_IP_RATE_LIMIT_PER_HOUR} signups per hour per IP). Please try again later.",
+                    "type": "rate_limit_exceeded"
+                }
+            },
+            status_code=429,
+            headers=cors_headers
+        )
+
+    # 2. Parse and Validate Request Body
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse(
+                {"error": {"message": "Request body must be a valid JSON object.", "type": "invalid_request_error"}},
+                status_code=400,
+                headers=cors_headers
+            )
+    except Exception:
+        return JSONResponse(
+            {"error": {"message": "Invalid JSON in request body.", "type": "invalid_request_error"}},
+            status_code=400,
+            headers=cors_headers
+        )
+
+    raw_email = body.get("email")
+    is_valid_email, email_err = validate_signup_email(raw_email)
+    if not is_valid_email:
+        return JSONResponse(
+            {"error": {"message": email_err, "type": "invalid_request_error"}},
+            status_code=400,
+            headers=cors_headers
+        )
+
+    email = str(raw_email).strip().lower()
+
+    # 3. Check for Duplicate Email Registration
+    existing_signup = snapshot_store.get_signup_by_email(email)
+    if existing_signup:
+        return JSONResponse(
+            {
+                "error": {
+                    "message": "An account with this email address already exists. Please use your existing API key or contact support.",
+                    "type": "duplicate_email"
+                }
+            },
+            status_code=409,
+            headers=cors_headers
+        )
+
+    # 4. Derive Team Name and Generate Server-Side Identifiers
+    raw_team = body.get("team_name")
+    if raw_team and isinstance(raw_team, str) and raw_team.strip():
+        team_name = raw_team.strip()[:64]
+    else:
+        local_part = email.split("@")[0]
+        cleaned_part = "".join(c if c.isalnum() else " " for c in local_part).title()
+        team_name = f"{cleaned_part} Workspace".strip() or "Developer Workspace"
+
+    # Server-generated identifiers: never accept org_id or key_id from user request
+    org_id = f"org_{uuid.uuid4().hex[:12]}"
+    key_id = f"omni_live_{uuid.uuid4().hex}"
+
+    # 5. Register Virtual Key in Quota Manager with Hardcoded Free-Tier Constants
+    quota_manager.register_key(
+        key_id=key_id,
+        team_name=team_name,
+        org_id=org_id,
+        monthly_budget_usd=FREE_TIER_MONTHLY_BUDGET_USD,
+        rate_limit_rpm=FREE_TIER_RATE_LIMIT_RPM,
+        role=FREE_TIER_ROLE
+    )
+    record_signup_rate_limit(client_ip)
+
+    now = time.time()
+
+    # 6. Audit Log (Never log raw secret key in plaintext logs)
+    snapshot_store.record_signup(
+        email=email,
+        team_name=team_name,
+        org_id=org_id,
+        key_id=key_id,
+        ip_address=client_ip,
+        created_at=now,
+        synchronous=True
+    )
+
+    print(f"👤 [OmniCache Signup] Registered free tenant: email={email}, org_id={org_id}, team='{team_name}', ip={client_ip}", file=sys.stderr)
+    emit_telemetry_event("user_signup", {
+        "email": email,
+        "org_id": org_id,
+        "team_name": team_name,
+        "ip": client_ip,
+        "timestamp": now
+    })
+    asyncio.create_task(broadcast_ws_event("new_signup", {
+        "org_id": org_id,
+        "team_name": team_name,
+        "timestamp": now
+    }))
+
+    # 7. Return Result (Fast Path MVP: return key immediately in JSON response)
+    return JSONResponse(
+        {
+            "status": "success",
+            "message": "Free tier account created successfully. Store your API key securely — it will not be shown again.",
+            "api_key": key_id,
+            "org_id": org_id,
+            "team_name": team_name,
+            "tier": "free",
+            "monthly_budget_usd": FREE_TIER_MONTHLY_BUDGET_USD,
+            "rate_limit_rpm": FREE_TIER_RATE_LIMIT_RPM,
+            "role": FREE_TIER_ROLE,
+            "created_at": now
+        },
+        status_code=201,
+        headers=cors_headers
+    )
+
+
 async def handle_export_csv(request: Request) -> Response:
     """Protected Cache CSV Export Endpoint (Admin Only)."""
     cors_headers = get_cors_headers(request)
@@ -3682,6 +3929,7 @@ routes = [
     Route("/v1/system/circuit/reset", handle_circuit_reset, methods=["POST", "OPTIONS"]),
     Route("/v1/cache/export", handle_export_csv, methods=["GET", "OPTIONS"]),
     Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "POST", "OPTIONS"]),
+    Route("/v1/signup", handle_signup, methods=["POST", "OPTIONS"]),
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
     Route("/omnicache_2", handle_omnicache_2, methods=["GET"]),

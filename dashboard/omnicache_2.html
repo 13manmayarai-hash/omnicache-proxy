@@ -1180,6 +1180,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       };
 
       const t0 = performance.now();
+      try {
         const storedKey = document.getElementById('playground-api-key')?.value.trim() || '';
         const authKey = storedKey || (typeof getAuthKey === 'function' ? getAuthKey() : '') || localStorage.getItem('omnicache_key') || '';
         const bypassCache = document.getElementById('bypass-cache-toggle')?.checked || false;
@@ -1307,14 +1308,19 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     const timelineTokens = [];
 
     function initCharts() {
-      if (timelineChart) {
-        timelineChart.destroy();
-        timelineChart = null;
+      if (typeof Chart === 'undefined') {
+        setTimeout(initCharts, 400);
+        return;
       }
-      if (distributionChart) {
-        distributionChart.destroy();
-        distributionChart = null;
-      }
+      try {
+        if (timelineChart) {
+          timelineChart.destroy();
+          timelineChart = null;
+        }
+        if (distributionChart) {
+          distributionChart.destroy();
+          distributionChart = null;
+        }
 
       const ctxTimeline = document.getElementById('savingsTimelineChart')?.getContext('2d');
       if (ctxTimeline) {
@@ -1432,6 +1438,9 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             cutout: '72%'
           }
         });
+      }
+      } catch (e) {
+        console.warn('initCharts error:', e);
       }
     }
 

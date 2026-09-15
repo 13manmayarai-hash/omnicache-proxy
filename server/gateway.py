@@ -3146,10 +3146,8 @@ async def handle_root(request: Request) -> Response:
         "service": "OmniCache AI Proxy",
         "version": getattr(config, "VERSION", "3.0.5"),
         "dashboard": "/dashboard",
-        "omnicache_2": "/omnicache_2",
         "endpoints": {
             "dashboard": "/dashboard",
-            "omnicache_2": "/omnicache_2",
             "health": "/healthz",
             "stats": "/v1/cache/stats",
             "openai_chat": "/v1/chat/completions",
@@ -3212,9 +3210,6 @@ async def handle_landing(request: Request) -> Response:
     return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
-async def handle_omnicache_2(request: Request) -> Response:
-    """Seamlessly routes legacy omnicache_2 requests to the unified Blueprint Dashboard."""
-    return await handle_dashboard(request)
 
 
 # =====================================================================
@@ -4323,10 +4318,6 @@ routes = [
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
     Route("/landing", handle_landing, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
-    Route("/omnicache_2", handle_omnicache_2, methods=["GET"]),
-    Route("/omnicache-2", handle_omnicache_2, methods=["GET"]),
-    Route("/dashboard_2", handle_omnicache_2, methods=["GET"]),
-    Route("/dashboard/omnicache_2", handle_omnicache_2, methods=["GET"]),
     Route("/ws", handle_ws_http, methods=["GET", "POST", "OPTIONS"]),
     WebSocketRoute("/ws", handle_ws),
     Route("/{rest_of_path:path}", handle_catchall, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])

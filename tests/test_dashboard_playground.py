@@ -85,19 +85,16 @@ def test_dashboard_playground_openai_flow(client):
 
 
 def test_dashboards_endpoints(client):
-    """Verify original dashboard and omnicache_2 redesign both serve 200 OK."""
-    # Original dashboard
+    """Verify unified Blueprint dashboard serves 200 OK and legacy omnicache_2 is removed (404)."""
+    # Unified Blueprint dashboard
     r_dash = client.get("/dashboard")
     assert r_dash.status_code == 200
     assert "text/html" in r_dash.headers.get("content-type", "")
     assert "auth-modal" in r_dash.text
 
-    # OmniCache 2 legacy route forwards to unified Blueprint dashboard
+    # Verify omnicache_2 endpoint is removed
     r_dash2 = client.get("/omnicache_2")
-    assert r_dash2.status_code == 200
-    assert "text/html" in r_dash2.headers.get("content-type", "")
-    assert "OmniCache" in r_dash2.text
-    assert "auth-modal" in r_dash2.text
+    assert r_dash2.status_code == 404
 
 
 def test_dashboard_require_auth_modes(client):

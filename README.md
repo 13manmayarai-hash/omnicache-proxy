@@ -276,19 +276,15 @@ claude mcp add omnicache -- omnicache mcp
 
 ---
 
-## 📊 Dashboards (Dual Themes)
+## 📊 Engineering Telemetry Dashboard
 
-OmniCache includes two built-in real-time developer dashboards served side-by-side:
+OmniCache includes a real-time developer telemetry dashboard:
 
-### 1. Minimalist Frosted Glass (`http://localhost:8000/dashboard`)
-* **Clean & Executive:** Modern dark monochrome design system with soft elevation.
-* **Token Savings Spline:** Live Chart.js velocity tracker plotting avoided spend over time.
-* **Resolution Distribution Matrix:** Visual breakdown of L1 Exact hits, L2 Semantic matches, and Git Tool replays.
-
-### 2. Cybernetic Topographic HUD (`http://localhost:8000/omnicache_2`)
-* **Pulsar Wireframe Telemetry:** Interactive 3D HTML5 Canvas topographic wave mountain that undulates with live agent traffic.
-* **Oscilloscope Frequency Visualizer:** Real-time frequency line monitor tracking request throughput and token economics.
-* **Live Sandbox & Upstream Inspection:** Test Claude Messages and OpenAI completions in-browser with instant cache-bypass toggles and transparent billing indicators.
+### Engineering Blueprint Dashboard (`http://localhost:8000/dashboard`)
+* **Dark Neo-Brutalist Architecture:** High-contrast schematic blueprint layout matching the production frontend.
+* **Single-Frame Mobile KPI Matrix:** All 6 core performance and financial metrics visible above the fold on mobile screens without scrolling.
+* **Twin Telemetry Monitors:** Streaming financial savings spline + resolution distribution breakdown (L1 Exact, L2 Semantic, and Git Tool replays).
+* **Live Sandbox & Upstream Inspection:** Test Claude Messages and OpenAI completions in-browser with synthetic PII generation, hot routing, and transparent billing indicators.
 
 > [!TIP]
 > Run `omnicache demo` in your terminal to launch an automated 30-second live simulation that streams realistic coding agent events directly to your dashboard!

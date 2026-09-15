@@ -22,7 +22,7 @@ How it works:
 1. Git-Aware Workspace Tracking: When an agent inspects a file or asks for directory status, OmniCache checks local Git commit SHAs and file mtimes. If no file in that path has changed, it replays the response instantly from local SQLite WAL memory (~0.06ms vs ~1,500ms cloud roundtrip).
 2. Instant Invalidation: The second you edit a file, stage changes, or git commit, affected cache entries are immediately evicted. The agent never hallucinates outdated code state.
 3. 100% Localhost & Air-Gapped: Uses Int8 quantized embeddings on CPU/ARM without needing remote embedding APIs or sending code to third parties.
-4. Dual Real-Time Dashboards: Includes both a clean Minimalist Glassmorphism dashboard (/dashboard) and a Cybernetic Topographic Telemetry HUD (/omnicache_2) to track tokens and money saved in real time.
+4. Real-Time Telemetry Dashboard: Includes a Dark Neo-Brutalist Engineering Blueprint dashboard (/dashboard) with single-frame mobile KPI metrics to track tokens and money saved in real time.
 
 Quickstart (Takes 30 seconds):
 

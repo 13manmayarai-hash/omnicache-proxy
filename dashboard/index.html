@@ -1366,15 +1366,22 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           method: 'POST',
           headers: authHeaders()
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
           showToast(`Purged ${data.purged_entries || 0} entries and ${data.purged_db_records || 0} DB snapshots.`);
           await refreshData();
         } else {
-          showToast(`Purge error: ${data.error?.message || 'Unauthorized'}`);
+          if (res.status === 401) {
+            showToast('⚠️ Unauthorized: Admin API key required to purge cache.');
+          } else if (res.status === 429) {
+            showToast('⚠️ Quota depleted: Monthly budget limit reached.');
+          } else {
+            const msg = data.error?.message || data.error || 'Permission denied.';
+            showToast(`⚠️ Purge failed: ${msg}`);
+          }
         }
       } catch (e) {
-        showToast(`Purge failed: ${e.message}`);
+        showToast('⚠️ Network error: Failed to reach cache service.');
       }
     }
 
@@ -1437,7 +1444,47 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         }
 
         const dt = (performance.now() - t0).toFixed(2);
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+
+        const container = document.getElementById('test-result-container');
+        container.style.display = 'block';
+
+        if (!res.ok) {
+          const badge = document.getElementById('res-status-badge');
+          let errorTitle = 'GATEWAY ERROR';
+          let userExplanation = '';
+
+          if (res.status === 401) {
+            errorTitle = 'UNAUTHORIZED';
+            userExplanation = '⚠️ Authentication required: Enter your OmniCache API Key or Admin Key to use the execution sandbox.';
+            badge.className = 'chip-badge chip-orange';
+            badge.textContent = errorTitle;
+            showAuthModal(userExplanation);
+          } else if (res.status === 429) {
+            errorTitle = 'QUOTA DEPLETED';
+            const reason = data.error?.message || 'Monthly budget cap or rate limit exceeded.';
+            userExplanation = `⚠️ Workspace Quota Depleted: ${reason}\n\nTo increase spend limits or upgrade tier, check the Workspace Quotas section or contact your workspace administrator.`;
+            badge.className = 'chip-badge chip-danger';
+            badge.textContent = errorTitle;
+          } else {
+            errorTitle = `HTTP ${res.status}`;
+            const detail = data.error?.message || data.error || 'The model proxy request could not be completed.';
+            userExplanation = `⚠️ Request Failed: ${detail}`;
+            badge.className = 'chip-badge chip-orange';
+            badge.textContent = errorTitle;
+          }
+
+          document.getElementById('res-latency').textContent = `${dt} ms`;
+          document.getElementById('res-sim').textContent = 'Sim: 0.0000';
+          document.getElementById('res-tokens-saved').textContent = '0 tokens';
+          document.getElementById('res-saved-usd').textContent = '$0.000000 avoided';
+          document.getElementById('res-tokens-used').textContent = '0 tokens';
+          document.getElementById('res-routed').textContent = 'None';
+          document.getElementById('res-content').textContent = userExplanation;
+          await refreshData();
+          return;
+        }
+
         const cacheStatus = res.headers.get('X-Cache-Status') || 'MISS';
         const similarity = res.headers.get('X-Cache-Similarity') || '1.0000';
         const costSaved = res.headers.get('X-Cost-Saved-USD') || '0.000000';
@@ -1447,13 +1494,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
         let textContent = '';
         if (currentMode === 'claude') {
-          textContent = data.content?.[0]?.text || JSON.stringify(data, null, 2);
+          textContent = data.content?.[0]?.text || 'No text content returned.';
         } else {
-          textContent = data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
+          textContent = data.choices?.[0]?.message?.content || 'No completion choices returned.';
         }
-
-        const container = document.getElementById('test-result-container');
-        container.style.display = 'block';
 
         const badge = document.getElementById('res-status-badge');
         badge.textContent = cacheStatus;
@@ -1480,7 +1524,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
         await refreshData();
       } catch (err) {
-        alert('Playground Request Failed: ' + err.message);
+        showToast('⚠️ Network error: Gateway unreachable or disconnected.');
       }
     }
 
@@ -1728,19 +1772,41 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
         try {
           const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`, { headers: authHeaders() });
+          const qContainer = document.getElementById('quotas-container');
           if (qRes.ok) {
-            const qData = await qRes.json();
-            const qContainer = document.getElementById('quotas-container');
+            const qData = await qRes.json().catch(() => ({}));
             if (qContainer && typeof qData === 'object' && !qData.error) {
               qContainer.innerHTML = '';
               for (const [k, v] of Object.entries(qData)) {
+                const usedPct = v.budget_used_pct || 0;
+                const isOverBudget = usedPct >= 100;
+                const spendColor = isOverBudget ? 'var(--orange)' : 'var(--volt)';
+                const statusTag = isOverBudget ? ' [DEPLETED]' : '';
                 qContainer.innerHTML += `
                   <div class="spec-row">
-                    <span class="spec-key">${v.team_name || k}</span>
-                    <span class="spec-val" style="color: var(--volt);">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+                    <span class="spec-key">${v.team_name || k}${statusTag}</span>
+                    <span class="spec-val" style="color: ${spendColor};">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${usedPct}%)</span>
                   </div>
                 `;
               }
+            }
+          } else if (qRes.status === 401 || qRes.status === 403) {
+            if (qContainer) {
+              qContainer.innerHTML = `
+                <div class="spec-row" style="color: var(--text-muted); font-size: 10px;">
+                  <span>Quotas Locked</span>
+                  <span style="color: var(--orange); cursor: pointer; text-decoration: underline;" onclick="openAuthModal()">Enter Key ↗</span>
+                </div>
+              `;
+            }
+          } else if (qRes.status === 429) {
+            if (qContainer) {
+              qContainer.innerHTML = `
+                <div class="spec-row" style="color: var(--orange); font-size: 10px;">
+                  <span>Quota Depleted</span>
+                  <span>100% Used</span>
+                </div>
+              `;
             }
           }
         } catch (qErr) {}
@@ -1753,24 +1819,42 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
     async function triggerWarmWorkspace() {
       const btn = document.getElementById('btn-warm-ws');
-      if (btn) btn.textContent = 'Warming...';
+      if (btn) {
+        btn.textContent = 'Warming...';
+        btn.disabled = true;
+      }
       try {
         const res = await fetch(`${API_BASE}/v1/workspace/warm`, {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ directory: '.', max_files: 50 })
         });
-        const data = await res.json();
-        if (btn) btn.textContent = 'Pre-Warm';
-        if (data.status === 'ok') {
+        const data = await res.json().catch(() => ({}));
+        if (btn) {
+          btn.textContent = 'Pre-Warm';
+          btn.disabled = false;
+        }
+        if (res.ok && data.status === 'ok') {
           showToast(`Pre-warmed ${data.files_warmed} files, recorded ${data.entries_recorded} tools in ${data.duration_ms}ms.`);
           refreshWorkspaceData();
         } else {
-          showToast('Warm status: ' + JSON.stringify(data));
+          if (res.status === 401) {
+            showToast('⚠️ Authentication required: Please configure your API key.');
+            showAuthModal('Authentication required to pre-warm workspace.');
+          } else if (res.status === 429) {
+            const reason = data.error?.message || 'Monthly budget cap exceeded.';
+            showToast(`⚠️ Quota Depleted: ${reason}`);
+          } else {
+            const msg = data.error?.message || data.error || 'Workspace pre-warming could not be completed.';
+            showToast(`⚠️ Pre-warm failed: ${msg}`);
+          }
         }
       } catch (e) {
-        if (btn) btn.textContent = 'Pre-Warm';
-        showToast('Warm error: ' + e.message);
+        if (btn) {
+          btn.textContent = 'Pre-Warm';
+          btn.disabled = false;
+        }
+        showToast('⚠️ Network error: Failed to connect to workspace warmer.');
       }
     }
 

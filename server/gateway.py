@@ -19,7 +19,8 @@ import base64
 import hmac
 import re
 import threading
-from urllib.parse import parse_qs, urlencode, quote_plus
+import html
+from urllib.parse import parse_qs, urlencode, quote_plus, urlparse
 from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -167,6 +168,44 @@ def emit_telemetry_event(event_type: str, data: Dict[str, Any]) -> None:
 # Security & Identity Helpers
 # =====================================================================
 
+ALLOWED_REDIRECT_ORIGINS = {
+    "https://claude.ai",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://omnicache.rawwgrid.com",
+}
+
+def is_allowed_redirect_uri(uri: str) -> bool:
+    """Validates that OAuth redirect_uri belongs to an allowed origin or relative path."""
+    if not uri:
+        return True
+    if uri.startswith("/"):
+        return True
+    try:
+        parsed = urlparse(uri)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = (parsed.hostname or "").lower()
+        if not hostname:
+            return False
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin in ALLOWED_REDIRECT_ORIGINS:
+            return True
+        if hostname in ("localhost", "127.0.0.1", "example.com") or hostname.endswith(".example.com"):
+            return True
+        if hostname == "rawwgrid.com" or hostname.endswith(".rawwgrid.com"):
+            return True
+        if hostname == "onrender.com" or hostname.endswith(".onrender.com"):
+            return True
+        if hostname == "claude.ai" or hostname.endswith(".claude.ai"):
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def get_cors_headers(request: Request) -> Dict[str, str]:
     """Computes restricted, origin-verified CORS headers."""
     origin = request.headers.get("origin", "")
@@ -175,13 +214,21 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
 
     if allow_all:
         allow_origin = "*"
-    elif origin and (
-        origin in allowed_origins
-        or "*" in allowed_origins
-        or origin.endswith("rawwgrid.com")
-        or origin.endswith(".onrender.com")
-    ):
-        allow_origin = origin
+    elif origin:
+        parsed = urlparse(origin)
+        hostname = (parsed.hostname or "").lower()
+        if (
+            origin in allowed_origins
+            or "*" in allowed_origins
+            or hostname == "rawwgrid.com"
+            or hostname.endswith(".rawwgrid.com")
+            or hostname == "onrender.com"
+            or hostname.endswith(".onrender.com")
+            or hostname in ("localhost", "127.0.0.1")
+        ):
+            allow_origin = origin
+        else:
+            allow_origin = allowed_origins[0] if allowed_origins else "http://localhost:8000"
     else:
         allow_origin = allowed_origins[0] if allowed_origins else "http://localhost:8000"
 
@@ -2265,6 +2312,8 @@ async def handle_purge(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
+    if request.method == "GET":
+        return JSONResponse({"error": "Method not allowed. Use POST or DELETE to purge cache."}, status_code=405, headers=cors_headers)
 
     auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
     if not auth_ok:
@@ -2296,6 +2345,8 @@ async def handle_invalidate_tag(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
+    if request.method == "GET":
+        return JSONResponse({"error": "Method not allowed. Use POST or DELETE to invalidate tag."}, status_code=405, headers=cors_headers)
 
     auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
     if not auth_ok:
@@ -3185,13 +3236,14 @@ async def handle_dashboard(request: Request) -> Response:
             html = f.read()
         response = HTMLResponse(html, headers=cors_headers)
         if allowed and key and (request.query_params.get("key") or request.query_params.get("api_key")):
+            is_https = (request.url.scheme == "https" or request.headers.get("x-forwarded-proto", "").lower() == "https")
             response.set_cookie(
                 key="omnicache_key",
                 value=key,
                 max_age=86400 * 30,
                 httponly=False,
                 samesite="lax",
-                secure=(request.url.scheme == "https")
+                secure=is_https
             )
         return response
     return HTMLResponse("<h1>OmniCache Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
@@ -3393,6 +3445,12 @@ async def handle_oauth_authorize(request: Request) -> Response:
     code_challenge = params.get("code_challenge", "").strip()
     code_challenge_method = params.get("code_challenge_method", "S256").strip()
 
+    if redirect_uri and not is_allowed_redirect_uri(redirect_uri):
+        return JSONResponse({
+            "error": "invalid_request",
+            "error_description": "Invalid or untrusted redirect_uri"
+        }, status_code=400, headers=cors_headers)
+
     if response_type != "code":
         return JSONResponse({
             "error": "unsupported_response_type",
@@ -3421,7 +3479,7 @@ async def handle_oauth_authorize(request: Request) -> Response:
             # If accessed via web browser requesting HTML, render interactive Consent & Login UI
             accept = request.headers.get("accept", "").lower()
             if "text/html" in accept:
-                error_msg = params.get("auth_error", "")
+                error_msg = html.escape(params.get("auth_error", ""), quote=True)
                 error_banner = f'<div class="error-banner">{error_msg}</div>' if error_msg else ''
                 google_qs = urlencode({
                     "client_id": client_id,
@@ -3433,7 +3491,14 @@ async def handle_oauth_authorize(request: Request) -> Response:
                     "response_type": response_type
                 })
                 google_login_href = f"/auth/google/login?{google_qs}"
-                html = f"""<!DOCTYPE html>
+                safe_client_id = html.escape(client_id, quote=True)
+                safe_redirect_uri = html.escape(redirect_uri, quote=True)
+                safe_state = html.escape(state, quote=True)
+                safe_scope = html.escape(scope, quote=True)
+                safe_code_challenge = html.escape(code_challenge, quote=True)
+                safe_code_challenge_method = html.escape(code_challenge_method, quote=True)
+                safe_response_type = html.escape(response_type, quote=True)
+                html_body = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -3465,8 +3530,8 @@ async def handle_oauth_authorize(request: Request) -> Response:
 <body>
   <div class="card">
     <h2>Authorize MCP Client</h2>
-    <p>Application <span class="badge">{client_id}</span> is requesting permission to access OmniCache vector memory.</p>
-    <p>Requested Scope: <span class="badge">{scope}</span></p>
+    <p>Application <span class="badge">{safe_client_id}</span> is requesting permission to access OmniCache vector memory.</p>
+    <p>Requested Scope: <span class="badge">{safe_scope}</span></p>
     {error_banner}
     <a href="{google_login_href}" class="btn-google">
       <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
@@ -3474,13 +3539,13 @@ async def handle_oauth_authorize(request: Request) -> Response:
     </a>
     <div class="divider"><span>OR USE API KEY</span></div>
     <form method="POST" action="/oauth/authorize">
-      <input type="hidden" name="client_id" value="{client_id}" />
-      <input type="hidden" name="redirect_uri" value="{redirect_uri}" />
-      <input type="hidden" name="state" value="{state}" />
-      <input type="hidden" name="scope" value="{scope}" />
-      <input type="hidden" name="code_challenge" value="{code_challenge}" />
-      <input type="hidden" name="code_challenge_method" value="{code_challenge_method}" />
-      <input type="hidden" name="response_type" value="{response_type}" />
+      <input type="hidden" name="client_id" value="{safe_client_id}" />
+      <input type="hidden" name="redirect_uri" value="{safe_redirect_uri}" />
+      <input type="hidden" name="state" value="{safe_state}" />
+      <input type="hidden" name="scope" value="{safe_scope}" />
+      <input type="hidden" name="code_challenge" value="{safe_code_challenge}" />
+      <input type="hidden" name="code_challenge_method" value="{safe_code_challenge_method}" />
+      <input type="hidden" name="response_type" value="{safe_response_type}" />
       <div class="form-group">
         <label for="api_key">OmniCache API Key or Admin Key:</label>
         <input type="password" id="api_key" name="api_key" placeholder="Enter API Key to approve..." required autofocus />
@@ -3493,7 +3558,7 @@ async def handle_oauth_authorize(request: Request) -> Response:
   </div>
 </body>
 </html>"""
-                return HTMLResponse(html, headers=cors_headers)
+                return HTMLResponse(html_body, headers=cors_headers)
             else:
                 auth_headers = dict(cors_headers)
                 auth_headers["WWW-Authenticate"] = 'Bearer realm="OmniCache OAuth", error="access_denied"'
@@ -3991,6 +4056,11 @@ async def handle_google_callback(request: Request) -> Response:
     # Seamless redirect back into client OAuth flow if redirect_uri was present
     client_redirect = state_info.get("redirect_uri", "").strip()
     if client_redirect:
+        if not is_allowed_redirect_uri(client_redirect):
+            return JSONResponse({
+                "error": "invalid_request",
+                "error_description": "Invalid or untrusted client redirect_uri"
+            }, status_code=400, headers=cors_headers)
         code = f"omni_code_{uuid.uuid4().hex}"
         OAUTH_CODES[code] = {
             "client_id": state_info.get("client_id", "claude-connectors"),
@@ -4191,6 +4261,8 @@ async def handle_mcp(request: Request) -> Response:
         is_admin = True
 
     res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin)
+    if res is None:
+        return Response(status_code=204, headers=base_headers)
 
     # If the client requested SSE response stream on POST, stream it
     if "text/event-stream" in accept_header:
@@ -4274,6 +4346,7 @@ routes = [
     Route("/", handle_root, methods=["GET", "OPTIONS"]),
     Route("/health", handle_healthz, methods=["GET", "OPTIONS"]),
     Route("/healthz", handle_healthz, methods=["GET", "OPTIONS"]),
+    Route("/readyz", handle_healthz, methods=["GET", "OPTIONS"]),
     Route("/models", handle_models, methods=["GET", "OPTIONS"]),
     Route("/v1/models", handle_models, methods=["GET", "OPTIONS"]),
     Route("/v1/chat/completions", handle_chat_completions, methods=["POST", "OPTIONS"]),

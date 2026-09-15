@@ -6,6 +6,7 @@ Enables conversation branching, prefix sub-tree reuse, and 1024-token ephemeral 
 import hashlib
 import json
 import time
+import threading
 from typing import Dict, List, Any, Optional, Tuple
 
 from core.hasher import RequestHasher
@@ -30,11 +31,21 @@ class RadixNode:
 
 class RadixPrefixTree:
     """In-memory Radix Prefix Tree for multi-turn conversations and agent loops."""
-    def __init__(self):
+    def __init__(self, max_nodes: int = 100000):
+        self._lock = threading.RLock()
         self.root = RadixNode(node_id="root", role="system", content_hash="root", turn_index=-1)
         self.total_nodes = 1
+        self.max_nodes = max_nodes
         self.prefix_hits = 0
         self.exact_hits = 0
+
+    def clear(self):
+        """Thread-safe reset of the entire trie for cache purges and CRDT mesh tombstones."""
+        with self._lock:
+            self.root = RadixNode(node_id="root", role="system", content_hash="root", turn_index=-1)
+            self.total_nodes = 1
+            self.prefix_hits = 0
+            self.exact_hits = 0
 
     @staticmethod
     def hash_turn(turn: Dict[str, Any]) -> str:
@@ -74,23 +85,24 @@ class RadixPrefixTree:
         Traverses the tree to find the longest matching prefix of message turns.
         Returns (matched_turn_count, last_matched_node).
         """
-        curr = self.root
-        matched_turns = 0
+        with self._lock:
+            curr = self.root
+            matched_turns = 0
 
-        for i, turn in enumerate(messages):
-            turn_hash = self.hash_turn(turn)
-            if turn_hash in curr.children:
-                curr = curr.children[turn_hash]
-                curr.access_count += 1
-                curr.last_accessed = time.time()
-                matched_turns += 1
-            else:
-                break
+            for i, turn in enumerate(messages):
+                turn_hash = self.hash_turn(turn)
+                if turn_hash in curr.children:
+                    curr = curr.children[turn_hash]
+                    curr.access_count += 1
+                    curr.last_accessed = time.time()
+                    matched_turns += 1
+                else:
+                    break
 
-        if matched_turns > 0:
-            self.prefix_hits += 1
+            if matched_turns > 0:
+                self.prefix_hits += 1
 
-        return matched_turns, (curr if curr is not self.root else None)
+            return matched_turns, (curr if curr is not self.root else None)
 
     def lookup_conversation(
         self,
@@ -104,52 +116,53 @@ class RadixPrefixTree:
         the requested model/org_id, returns (True, cached_completion, matched_turns, terminal_node).
         Otherwise returns (False, None, matched_turns, longest_matched_node).
         """
-        curr = self.root
-        matched_turns = 0
+        with self._lock:
+            curr = self.root
+            matched_turns = 0
 
-        for turn in messages:
-            turn_hash = self.hash_turn(turn)
-            if turn_hash in curr.children:
-                curr = curr.children[turn_hash]
-                curr.access_count += 1
-                curr.last_accessed = time.time()
-                matched_turns += 1
-            else:
-                break
-
-        if matched_turns > 0:
-            self.prefix_hits += 1
-
-        if matched_turns == len(messages) and curr is not self.root:
-            matched_entry = None
-            if org_id and model:
-                comp_key = f"{org_id}:{model}"
-                if comp_key in curr.completions:
-                    matched_entry = curr.completions[comp_key]
-            if not matched_entry:
-                for k, comp in curr.completions.items():
-                    if org_id and comp.get("org_id") and comp.get("org_id") != org_id:
-                        continue
-                    if model and comp.get("model") and comp.get("model") != model:
-                        continue
-                    matched_entry = comp
+            for turn in messages:
+                turn_hash = self.hash_turn(turn)
+                if turn_hash in curr.children:
+                    curr = curr.children[turn_hash]
+                    curr.access_count += 1
+                    curr.last_accessed = time.time()
+                    matched_turns += 1
+                else:
                     break
-            if not matched_entry and curr.cached_completion:
-                if (not org_id or not curr.org_id or curr.org_id == org_id) and \
-                   (not model or not curr.model or curr.model == model):
-                    matched_entry = {
-                        "completion": curr.cached_completion,
-                        "stream_chunks": curr.stream_chunks,
-                        "tool_calls": curr.tool_calls,
-                        "model": curr.model,
-                        "org_id": curr.org_id,
-                    }
 
-            if matched_entry:
-                self.exact_hits += 1
-                return True, matched_entry.get("completion"), matched_turns, curr
+            if matched_turns > 0:
+                self.prefix_hits += 1
 
-        return False, None, matched_turns, (curr if curr is not self.root else None)
+            if matched_turns == len(messages) and curr is not self.root:
+                matched_entry = None
+                if org_id and model:
+                    comp_key = f"{org_id}:{model}"
+                    if comp_key in curr.completions:
+                        matched_entry = curr.completions[comp_key]
+                if not matched_entry:
+                    for k, comp in curr.completions.items():
+                        if org_id and comp.get("org_id") and comp.get("org_id") != org_id:
+                            continue
+                        if model and comp.get("model") and comp.get("model") != model:
+                            continue
+                        matched_entry = comp
+                        break
+                if not matched_entry and curr.cached_completion:
+                    if (not org_id or not curr.org_id or curr.org_id == org_id) and \
+                       (not model or not curr.model or curr.model == model):
+                        matched_entry = {
+                            "completion": curr.cached_completion,
+                            "stream_chunks": curr.stream_chunks,
+                            "tool_calls": curr.tool_calls,
+                            "model": curr.model,
+                            "org_id": curr.org_id,
+                        }
+
+                if matched_entry:
+                    self.exact_hits += 1
+                    return True, matched_entry.get("completion"), matched_turns, curr
+
+            return False, None, matched_turns, (curr if curr is not self.root else None)
 
     def insert_conversation(
         self,
@@ -164,45 +177,59 @@ class RadixPrefixTree:
         Inserts a full conversation path into the radix tree and stores the terminal completion.
         Supports model, tenant isolation, and stream chunk replay.
         """
-        curr = self.root
-        for i, turn in enumerate(messages):
-            turn_hash = self.hash_turn(turn)
-            if turn_hash not in curr.children:
-                new_node_id = f"node_{self.total_nodes}_{turn_hash[:8]}"
-                new_node = RadixNode(
-                    node_id=new_node_id,
-                    role=turn.get("role", "user"),
-                    content_hash=turn_hash,
-                    turn_index=i
-                )
-                curr.children[turn_hash] = new_node
-                self.total_nodes += 1
-            curr = curr.children[turn_hash]
+        with self._lock:
+            if self.total_nodes >= self.max_nodes:
+                # Evict non-root branches to cap memory
+                self.root.children.clear()
+                self.total_nodes = 1
 
-        comp_key = f"{org_id}:{model}" if (org_id and model) else (org_id or model or "default")
-        curr.completions[comp_key] = {
-            "completion": completion,
-            "stream_chunks": stream_chunks,
-            "tool_calls": tool_calls,
-            "model": model,
-            "org_id": org_id,
-            "created_at": time.time()
-        }
-        curr.cached_completion = completion
-        curr.stream_chunks = stream_chunks
-        curr.model = model
-        curr.org_id = org_id
-        curr.tool_calls = tool_calls
-        curr.access_count += 1
-        curr.last_accessed = time.time()
-        return curr
+            curr = self.root
+            for i, turn in enumerate(messages):
+                turn_hash = self.hash_turn(turn)
+                if turn_hash not in curr.children:
+                    new_node_id = f"node_{self.total_nodes}_{turn_hash[:8]}"
+                    new_node = RadixNode(
+                        node_id=new_node_id,
+                        role=turn.get("role", "user"),
+                        content_hash=turn_hash,
+                        turn_index=i
+                    )
+                    curr.children[turn_hash] = new_node
+                    self.total_nodes += 1
+                curr = curr.children[turn_hash]
+
+            comp_key = f"{org_id}:{model}" if (org_id and model) else (org_id or model or "default")
+            curr.completions[comp_key] = {
+                "completion": completion,
+                "stream_chunks": stream_chunks,
+                "tool_calls": tool_calls,
+                "model": model,
+                "org_id": org_id,
+                "created_at": time.time()
+            }
+            curr.cached_completion = completion
+            curr.stream_chunks = stream_chunks
+            curr.model = model
+            curr.org_id = org_id
+            curr.tool_calls = tool_calls
+            curr.access_count += 1
+            curr.last_accessed = time.time()
+            return curr
 
     def align_ephemeral_cache_blocks(self, messages: List[Dict[str, Any]], block_size_tokens: int = 1024) -> List[Dict[str, Any]]:
         """
         Aligns message turns to downstream provider (Anthropic/OpenAI) 1024-token prompt caching blocks.
         Injects Anthropic cache_control metadata on the last content block of turns that cross the 1024-token boundary.
         Never sets cache_control at the top-level message object (Anthropic schema forbids extra inputs on MessageParam).
+        Enforces Anthropic hard ceiling of at most 4 cache_control breakpoints per request.
         """
+        existing_breakpoints = 0
+        for m in messages:
+            content = m.get("content")
+            if isinstance(content, list):
+                existing_breakpoints += sum(1 for b in content if isinstance(b, dict) and "cache_control" in b)
+
+        breakpoints_used = existing_breakpoints
         cumulative_tokens = 0
         aligned_messages = []
 
@@ -229,7 +256,7 @@ class RadixPrefixTree:
                     for b in turn["content"]
                 )
 
-            if cumulative_tokens >= block_size_tokens and not has_existing_cache_control:
+            if cumulative_tokens >= block_size_tokens and not has_existing_cache_control and breakpoints_used < 4:
                 # Add ephemeral cache breakpoint strictly on the content block per Anthropic specification
                 if isinstance(turn_copy.get("content"), list) and turn_copy["content"]:
                     last_b = dict(turn_copy["content"][-1])
@@ -239,6 +266,7 @@ class RadixPrefixTree:
                     turn_copy["content"] = [
                         {"type": "text", "text": str(content_val), "cache_control": {"type": "ephemeral"}}
                     ]
+                breakpoints_used += 1
                 cumulative_tokens = 0  # reset for next block
 
             aligned_messages.append(turn_copy)

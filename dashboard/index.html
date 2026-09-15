@@ -488,12 +488,20 @@
       .sub-ribbon-val {
         font-size: 8.5px;
       }
+      .btn-label {
+        display: none;
+      }
     }
 
     /* Mobile Blueprint View Switcher Tabs */
     .mobile-tab-nav {
       display: none;
       margin-bottom: 12px;
+    }
+
+    #pane-workspace {
+      display: flex;
+      flex-direction: column;
     }
 
     @media (max-width: 960px) {
@@ -529,10 +537,11 @@
       }
       /* In mobile view, hide inactive panels */
       .blueprint-pane {
-        display: none;
+        display: none !important;
       }
       .blueprint-pane.active-pane {
-        display: block !important;
+        display: flex !important;
+        flex-direction: column !important;
       }
     }
 
@@ -820,7 +829,7 @@
             OmniCache AI Proxy
             <span class="version-badge" id="version-badge">
               <span class="pulse-dot"></span>
-              v3.0.5 ACTIVE
+              v3.0.6 ACTIVE
             </span>
           </div>
         </a>
@@ -1016,7 +1025,7 @@
         <div style="display: flex; flex-direction: column;">
           
           <!-- Interactive Gateway Sandbox Console -->
-          <div id="pane-sandbox" class="blueprint-card blueprint-pane active-pane">
+          <div id="pane-sandbox" class="blueprint-card blueprint-pane">
             <div class="card-header-bar">
               <div class="card-title">
                 <span>[// 01] Gateway Execution Sandbox</span>
@@ -1094,7 +1103,7 @@
           </div>
 
           <!-- Real-Time WebSocket Telemetry Feed -->
-          <div id="pane-stream" class="blueprint-card blueprint-pane active-pane">
+          <div id="pane-stream" class="blueprint-card blueprint-pane">
             <div class="card-header-bar">
               <div class="card-title">
                 <span id="ws-indicator" class="pulse-dot" style="background: var(--volt);"></span>
@@ -1113,7 +1122,7 @@
         </div>
 
         <!-- Right Column: Workspace Git Sync, Virtual Tenant Quotas & Hook Guide -->
-        <div id="pane-workspace" class="blueprint-pane active-pane" style="display: flex; flex-direction: column;">
+        <div id="pane-workspace" class="blueprint-pane">
           
           <!-- Workspace Memory & Sync Policies -->
           <div class="blueprint-card">
@@ -1717,21 +1726,28 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
 
         updateCharts(totalSavedUsd, totalTokensSaved, exact, semantic, toolHits, visionHits, misses);
 
-        const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`, { headers: authHeaders() });
-        const qData = await qRes.json();
-        const qContainer = document.getElementById('quotas-container');
-        if (qContainer && typeof qData === 'object' && !qData.error) {
-          qContainer.innerHTML = '';
-          for (const [k, v] of Object.entries(qData)) {
-            qContainer.innerHTML += `
-              <div class="spec-row">
-                <span class="spec-key">${v.team_name || k}</span>
-                <span class="spec-val" style="color: var(--volt);">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
-              </div>
-            `;
+        try {
+          const qRes = await fetch(`${API_BASE}/v1/enterprise/quotas`, { headers: authHeaders() });
+          if (qRes.ok) {
+            const qData = await qRes.json();
+            const qContainer = document.getElementById('quotas-container');
+            if (qContainer && typeof qData === 'object' && !qData.error) {
+              qContainer.innerHTML = '';
+              for (const [k, v] of Object.entries(qData)) {
+                qContainer.innerHTML += `
+                  <div class="spec-row">
+                    <span class="spec-key">${v.team_name || k}</span>
+                    <span class="spec-val" style="color: var(--volt);">$${(v.current_spend_usd || 0).toFixed(2)} / $${(v.monthly_budget_usd || 0).toFixed(2)} (${v.budget_used_pct || 0}%)</span>
+                  </div>
+                `;
+              }
+            }
           }
-        }
-        await refreshWorkspaceData();
+        } catch (qErr) {}
+
+        try {
+          await refreshWorkspaceData();
+        } catch (wsErr) {}
       } catch (err) {}
     }
 

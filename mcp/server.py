@@ -427,13 +427,16 @@ def log_audit_event(tool_name: str, org_id: str, duration_ms: float, status: str
             pass
 
 
-def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False) -> Dict[str, Any]:
-    """Processes a standard JSON-RPC 2.0 MCP message and returns the response dictionary."""
+def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False) -> Optional[Dict[str, Any]]:
+    """Processes a single JSON-RPC 2.0 MCP request dict. Returns None for notifications."""
+    is_notification = ("id" not in req)
     req_id = req.get("id")
     method = req.get("method")
     params = req.get("params", {})
 
     if method == "initialize":
+        if is_notification:
+            return None
         return {
             "jsonrpc": "2.0",
             "id": req_id,
@@ -445,25 +448,46 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is
                 },
                 "capabilities": {
                     "tools": {"listChanged": False},
-                    "resources": {"listChanged": False}
+                    "resources": {"listChanged": False},
+                    "prompts": {"listChanged": False}
                 }
             }
         }
     elif method in ("notifications/initialized", "initialized"):
-        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+        return None if is_notification else {"jsonrpc": "2.0", "id": req_id, "result": {}}
     elif method == "ping":
-        return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+        return None if is_notification else {"jsonrpc": "2.0", "id": req_id, "result": {}}
     elif method == "tools/list":
+        if is_notification:
+            return None
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "result": {"tools": TOOLS_METADATA}
+        }
+    elif method == "resources/list":
+        if is_notification:
+            return None
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"resources": []}
+        }
+    elif method == "prompts/list":
+        if is_notification:
+            return None
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": {"prompts": []}
         }
     elif method == "tools/call":
         tool_name = params.get("name", "")
         tool_args = params.get("arguments", {})
         target_org = tool_args.get("org_id")
         if target_org and target_org != default_org_id and not is_admin:
+            if is_notification:
+                return None
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -479,6 +503,8 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is
         except Exception as exc:
             dur = round((time.perf_counter() - t0) * 1000, 3)
             log_audit_event(tool_name, org, dur, "error", {"error": str(exc)})
+            if is_notification:
+                return None
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
@@ -490,6 +516,8 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is
         dur = round((time.perf_counter() - t0) * 1000, 3)
         status_str = "error" if "error" in tool_res else "success"
         log_audit_event(tool_name, org, dur, status_str)
+        if is_notification:
+            return None
         if "error" in tool_res:
             return {
                 "jsonrpc": "2.0",
@@ -502,11 +530,46 @@ def process_mcp_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is
             "result": tool_res
         }
     else:
+        if is_notification:
+            return None
         return {
             "jsonrpc": "2.0",
             "id": req_id,
             "error": {"code": -32601, "message": f"Method not found: {method}"}
         }
+
+
+def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: bool = False) -> Optional[Any]:
+    """Processes a standard JSON-RPC 2.0 MCP message (single dict or batch list) and returns response."""
+    if isinstance(req, list):
+        if not req:
+            return {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32600, "message": "Invalid Request: empty batch"}
+            }
+        batch_responses = []
+        for single_req in req:
+            if not isinstance(single_req, dict):
+                batch_responses.append({
+                    "jsonrpc": "2.0",
+                    "id": None,
+                    "error": {"code": -32600, "message": "Invalid Request: expected object"}
+                })
+                continue
+            item_res = _process_single_jsonrpc(single_req, default_org_id=default_org_id, is_admin=is_admin)
+            if item_res is not None:
+                batch_responses.append(item_res)
+        return batch_responses if batch_responses else None
+
+    if not isinstance(req, dict):
+        return {
+            "jsonrpc": "2.0",
+            "id": None,
+            "error": {"code": -32600, "message": "Invalid Request: expected object or array"}
+        }
+
+    return _process_single_jsonrpc(req, default_org_id=default_org_id, is_admin=is_admin)
 
 
 def run_stdio_server():
@@ -538,8 +601,9 @@ def run_stdio_server():
                 "id": req.get("id") if isinstance(req, dict) else None,
                 "error": {"code": -32603, "message": f"Internal error: {str(exc)}"}
             }
-        sys.stdout.write(json.dumps(res) + "\n")
-        sys.stdout.flush()
+        if res is not None:
+            sys.stdout.write(json.dumps(res) + "\n")
+            sys.stdout.flush()
 
 
 if __name__ == "__main__":

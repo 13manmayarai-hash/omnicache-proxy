@@ -92,12 +92,11 @@ def test_dashboards_endpoints(client):
     assert "text/html" in r_dash.headers.get("content-type", "")
     assert "auth-modal" in r_dash.text
 
-    # OmniCache 2 redesign
+    # OmniCache 2 legacy route forwards to unified Blueprint dashboard
     r_dash2 = client.get("/omnicache_2")
     assert r_dash2.status_code == 200
     assert "text/html" in r_dash2.headers.get("content-type", "")
-    assert "OmniCache 2" in r_dash2.text or "OMNICACHE_2" in r_dash2.text
-    assert "topoCanvas" in r_dash2.text
+    assert "OmniCache" in r_dash2.text
     assert "auth-modal" in r_dash2.text
 
 

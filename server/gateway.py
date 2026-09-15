@@ -3213,39 +3213,8 @@ async def handle_landing(request: Request) -> Response:
 
 
 async def handle_omnicache_2(request: Request) -> Response:
-    cors_headers = get_cors_headers(request)
-    accept = request.headers.get("accept", "").lower()
-    key = extract_auth_key(request)
-    allowed = False
-    auth_reason = ""
-    if key:
-        allowed, auth_reason, key_info = quota_manager.check_authorization(key)
-
-    # If auth is required, client requested non-HTML (e.g. JSON API client or curl), and not allowed:
-    if getattr(config, "REQUIRE_AUTH", False) and "text/html" not in accept:
-        if not allowed:
-            return JSONResponse(
-                {"error": {"message": f"Dashboard authentication required: {auth_reason or 'Missing API key in Authorization header, cookie, or query param'}", "type": "authentication_error"}},
-                status_code=401,
-                headers=cors_headers
-            )
-
-    dash2_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "omnicache_2.html")
-    if os.path.exists(dash2_path):
-        with open(dash2_path, "r", encoding="utf-8") as f:
-            html = f.read()
-        response = HTMLResponse(html, headers=cors_headers)
-        if allowed and key and (request.query_params.get("key") or request.query_params.get("api_key")):
-            response.set_cookie(
-                key="omnicache_key",
-                value=key,
-                max_age=86400 * 30,
-                httponly=False,
-                samesite="lax",
-                secure=(request.url.scheme == "https")
-            )
-        return response
-    return HTMLResponse("<h1>OmniCache 2 Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
+    """Seamlessly routes legacy omnicache_2 requests to the unified Blueprint Dashboard."""
+    return await handle_dashboard(request)
 
 
 # =====================================================================

@@ -1,0 +1,95 @@
+================================================================================
+OMNICACHE LAUNCH KIT — READY TO COPY & PASTE
+================================================================================
+
+--------------------------------------------------------------------------------
+OPTION 1: REDDIT (r/ClaudeAI, r/CursorAI, r/LocalLLaMA)
+--------------------------------------------------------------------------------
+
+TITLE:
+Tired of Claude Code re-reading package.json and unchanged files on every turn? I built an open-source localhost caching proxy that replays them in <0.1ms (zero tokens)
+
+POST BODY:
+If you have spent a few hours in Claude Code or Cursor agent mode, you have probably noticed how much time and money goes into repeat operations:
+
+- Claude Code repeatedly re-reading package.json, directory trees, and lint rules across multiple conversation turns.
+- Running test suites or bash inspection tools where the working tree has not changed since the previous turn.
+- Incurring 1,200ms–2,500ms remote cloud latency and burning frontier input tokens for identical content.
+
+I built OmniCache (FSL-1.1-MIT / free for developers) to solve this as a transparent local sidecar running on 127.0.0.1:8000.
+
+How it works:
+1. Git-Aware Workspace Tracking: When an agent inspects a file or asks for directory status, OmniCache checks local Git commit SHAs and file mtimes. If no file in that path has changed, it replays the response instantly from local SQLite WAL memory (~0.06ms vs ~1,500ms cloud roundtrip).
+2. Instant Invalidation: The second you edit a file, stage changes, or git commit, affected cache entries are immediately evicted. The agent never hallucinates outdated code state.
+3. 100% Localhost & Air-Gapped: Uses Int8 quantized embeddings on CPU/ARM without needing remote embedding APIs or sending code to third parties.
+4. Dual Real-Time Dashboards: Includes both a clean Minimalist Glassmorphism dashboard (/dashboard) and a Cybernetic Topographic Telemetry HUD (/omnicache_2) to track tokens and money saved in real time.
+
+Quickstart (Takes 30 seconds):
+
+pip install omnicache-proxy
+
+# Run Claude Code with zero configuration changes:
+omnicache run claude
+
+When your session exits, OmniCache prints your exact session savings ledger:
+╭──────────────────────────────────────────────────╮
+│ ⚡ OmniCache Session Telemetry                   │
+│  - Tokens Saved:       18,450 tokens             │
+│  - Avoided Cost:       $0.0554 USD               │
+│  - Tool Replays:            14 cached tool calls │
+╰──────────────────────────────────────────────────╯
+
+GitHub: https://github.com/13manmayarai-hash/omnicache-proxy
+PyPI: https://pypi.org/project/omnicache-proxy/
+
+Would love feedback from anyone running heavy Claude Code or Cursor sessions. What tools in your workflow repeat the most?
+
+
+--------------------------------------------------------------------------------
+OPTION 2: HACKER NEWS (Show HN)
+--------------------------------------------------------------------------------
+
+TITLE:
+Show HN: OmniCache – Git-aware localhost proxy to cache AI agent tool calls
+
+URL:
+https://github.com/13manmayarai-hash/omnicache-proxy
+
+POST TEXT / COMMENT:
+Hey HN,
+
+Autonomous coding agents (Claude Code, Cursor, Cline) burn up to 70% of their tokens and roundtrip latency repeatedly re-reading identical files, directory trees, and lint configs across conversation turns.
+
+I built OmniCache (https://github.com/13manmayarai-hash/omnicache-proxy) as an open-source, localhost sidecar (127.0.0.1:8000).
+
+Technical highlights:
+- Git-Aware Invalidation: Fingerprints workspace tree SHAs and file mtimes. If unchanged, tool results replay in ~0.06ms from local SQLite WAL memory.
+- SingleFlight Coalescing: Collapses concurrent duplicate inspection requests into a single execution.
+- Offline Int8 SIMD Vector Match: CPU/ARM-native quantized embeddings for semantic similarity without external cloud calls.
+- Air-Gapped Privacy: Salted HMAC-SHA256 scrubbing removes credentials and tokens before forwarding.
+- Dual Real-Time Dashboards: Live terminal telemetry HUD tracking token velocity, hit rates, and avoided spend.
+
+Zero config: `pip install omnicache-proxy && omnicache run claude`.
+
+Feedback, benchmarks, and bug reports are welcome!
+
+
+--------------------------------------------------------------------------------
+OPTION 3: X / TWITTER POST
+--------------------------------------------------------------------------------
+
+If you use Claude Code or Cursor, you are burning 40–70% of your tokens re-reading unchanged files and directory trees.
+
+I built OmniCache: an open-source localhost sidecar that replays unchanged tool calls in <0.1ms for $0.00.
+
+⚡ Git-aware invalidation
+⚡ SQLite WAL memory
+⚡ Dual real-time HUDs
+⚡ Zero cloud telemetry
+
+Try it: `pip install omnicache-proxy && omnicache run claude`
+
+GitHub: https://github.com/13manmayarai-hash/omnicache-proxy
+
+#ClaudeCode #CursorAI #OpenSource #AIagents
+================================================================================

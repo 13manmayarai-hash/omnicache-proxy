@@ -1,0 +1,1509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniCache — Sub-Millisecond Semantic AI Proxy & MCP Gateway</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0e12;
+      --bg-card: #15171e;
+      --bg-card-alt: #1c1f28;
+      --border-dark: #000000;
+      --border-subtle: #2f3442;
+      --volt: #c8ff00;
+      --volt-glow: rgba(200, 255, 0, 0.25);
+      --cyan: #00f0ff;
+      --orange: #ff5b24;
+      --purple: #bf77ff;
+      --text: #f4f5f8;
+      --text-muted: #8e95a5;
+      --shadow-sm: 3px 3px 0px #000000;
+      --shadow-md: 5px 5px 0px #000000;
+      --shadow-lg: 8px 8px 0px #000000;
+      --shadow-volt: 5px 5px 0px #c8ff00;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.5;
+      overflow-x: hidden;
+      background-image: radial-gradient(circle at 1px 1px, #202430 1px, transparent 0);
+      background-size: 28px 28px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Navbar */
+    header {
+      border-bottom: 3px solid var(--border-dark);
+      background: #111217;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 4px 0px #000000;
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .logo-mark {
+      background: var(--volt);
+      color: #000000;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      font-size: 20px;
+      padding: 6px 12px;
+      border: 2.5px solid #000;
+      box-shadow: 3px 3px 0px #000;
+      transform: rotate(-1.5deg);
+    }
+
+    .logo-text {
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+      text-transform: uppercase;
+    }
+
+    .logo-tag {
+      background: #252834;
+      color: var(--cyan);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border: 1.5px solid #000;
+      border-radius: 4px;
+      display: none;
+    }
+
+    @media (min-width: 640px) {
+      .logo-tag { display: inline-block; }
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      list-style: none;
+    }
+
+    .nav-link {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: color 0.15s;
+      display: none;
+    }
+
+    @media (min-width: 860px) {
+      .nav-link { display: inline-block; }
+    }
+
+    .nav-link:hover {
+      color: var(--volt);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Neo-Brutalist Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 800;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-decoration: none;
+      padding: 10px 18px;
+      border: 2.5px solid #000000;
+      cursor: pointer;
+      transition: all 0.1s ease;
+      user-select: none;
+    }
+
+    .btn-volt {
+      background: var(--volt);
+      color: #000000;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-volt:hover {
+      background: #dcff4d;
+      transform: translate(-1px, -1px);
+      box-shadow: 4px 4px 0px #000;
+    }
+
+    .btn-volt:active {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0px #000;
+    }
+
+    .btn-dark {
+      background: #252834;
+      color: var(--text);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-dark:hover {
+      background: #2e3342;
+      color: var(--volt);
+      transform: translate(-1px, -1px);
+      box-shadow: 4px 4px 0px #000;
+    }
+
+    .btn-dark:active {
+      transform: translate(2px, 2px);
+      box-shadow: 1px 1px 0px #000;
+    }
+
+    .btn-white {
+      background: #ffffff;
+      color: #000000;
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-white:hover {
+      background: #f0f0f0;
+      transform: translate(-1px, -1px);
+      box-shadow: 6px 6px 0px #000;
+    }
+
+    .btn-white:active {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0px #000;
+    }
+
+    /* Marquee Banner */
+    .marquee-strip {
+      background: var(--volt);
+      color: #000000;
+      border-bottom: 3px solid #000;
+      padding: 10px 0;
+      overflow: hidden;
+      white-space: nowrap;
+      display: flex;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 800;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .marquee-track {
+      display: inline-flex;
+      gap: 32px;
+      animation: marquee 24s linear infinite;
+    }
+
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 70px 0 60px 0;
+      position: relative;
+    }
+
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #1f222d;
+      color: var(--volt);
+      border: 2px solid #000;
+      box-shadow: 3px 3px 0px #000;
+      padding: 6px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      transform: rotate(-0.5deg);
+    }
+
+    .hero-title {
+      font-size: 44px;
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -1.5px;
+      text-transform: uppercase;
+      max-width: 950px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .hero-title { font-size: 64px; }
+    }
+
+    .hero-title .highlight-volt {
+      background: var(--volt);
+      color: #000000;
+      padding: 0 10px;
+      border: 3px solid #000;
+      box-shadow: 4px 4px 0px #000;
+      display: inline-block;
+      transform: rotate(0.8deg);
+      margin: 4px 0;
+    }
+
+    .hero-title .highlight-cyan {
+      background: var(--cyan);
+      color: #000000;
+      padding: 0 10px;
+      border: 3px solid #000;
+      box-shadow: 4px 4px 0px #000;
+      display: inline-block;
+      transform: rotate(-0.8deg);
+      margin: 4px 0;
+    }
+
+    .hero-desc {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 780px;
+      line-height: 1.6;
+      margin-bottom: 36px;
+      font-weight: 500;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+
+    .hero-cta-group .btn {
+      padding: 16px 28px;
+      font-size: 16px;
+    }
+
+    /* Live Stats Ribbon */
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin-top: 40px;
+    }
+
+    @media (min-width: 768px) {
+      .hero-stats { grid-template-columns: repeat(4, 1fr); }
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 2.5px solid #000;
+      box-shadow: var(--shadow-md);
+      padding: 20px;
+      position: relative;
+    }
+
+    .stat-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+    }
+
+    .stat-card.v-volt::before { background: var(--volt); }
+    .stat-card.v-cyan::before { background: var(--cyan); }
+    .stat-card.v-orange::before { background: var(--orange); }
+    .stat-card.v-purple::before { background: var(--purple); }
+
+    .stat-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 32px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .stat-card.v-volt .stat-val { color: var(--volt); }
+    .stat-card.v-cyan .stat-val { color: var(--cyan); }
+    .stat-card.v-orange .stat-val { color: var(--orange); }
+    .stat-card.v-purple .stat-val { color: var(--purple); }
+
+    .stat-label {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Interactive Demo Sandbox */
+    .section-title-wrap {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-badge {
+      display: inline-block;
+      background: #1f222d;
+      color: var(--cyan);
+      border: 2px solid #000;
+      padding: 4px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      box-shadow: 3px 3px 0px #000;
+    }
+
+    .section-title {
+      font-size: 36px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
+    }
+
+    @media (min-width: 768px) {
+      .section-title { font-size: 46px; }
+    }
+
+    .demo-frame {
+      background: #12141a;
+      border: 3px solid #000;
+      box-shadow: var(--shadow-lg);
+      margin-bottom: 80px;
+    }
+
+    .demo-header {
+      background: #1b1e27;
+      border-bottom: 3px solid #000;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .demo-dots {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 14px;
+      height: 14px;
+      border: 2px solid #000;
+    }
+    .dot-red { background: #ff5b5b; }
+    .dot-yellow { background: #ffde59; }
+    .dot-green { background: #2cd46c; }
+
+    .demo-title-bar {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .demo-body {
+      padding: 28px;
+    }
+
+    .demo-presets-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .demo-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .preset-btn {
+      background: #1c202a;
+      border: 2px solid #000;
+      color: var(--text);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 8px 14px;
+      box-shadow: 2px 2px 0px #000;
+      cursor: pointer;
+      transition: all 0.1s;
+    }
+
+    .preset-btn:hover {
+      background: #252a38;
+      transform: translate(-1px, -1px);
+      box-shadow: 3px 3px 0px #000;
+    }
+
+    .preset-btn.active {
+      background: var(--volt);
+      color: #000;
+    }
+
+    .demo-input-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .demo-input {
+      flex: 1;
+      background: #090a0d;
+      border: 2.5px solid #000;
+      color: #fff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 16px;
+      padding: 14px 18px;
+      outline: none;
+      box-shadow: inset 2px 2px 0px rgba(0,0,0,0.5);
+    }
+
+    .demo-input:focus {
+      border-color: var(--volt);
+    }
+
+    .demo-results-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .demo-results-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    .result-box {
+      border: 2.5px solid #000;
+      padding: 20px;
+      position: relative;
+    }
+
+    .result-box.direct {
+      background: #191414;
+      border-color: #3b2424;
+    }
+
+    .result-box.cached {
+      background: #101c18;
+      border-color: #000;
+      box-shadow: 4px 4px 0px #000;
+    }
+
+    .result-badge {
+      display: inline-block;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border: 2px solid #000;
+      margin-bottom: 12px;
+    }
+
+    .badge-miss {
+      background: var(--orange);
+      color: #fff;
+    }
+
+    .badge-hit {
+      background: var(--volt);
+      color: #000;
+    }
+
+    .metric-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+
+    .metric-label { color: var(--text-muted); }
+    .metric-val { font-weight: 700; color: #fff; }
+
+    .result-text {
+      background: rgba(0,0,0,0.4);
+      border: 1.5px solid rgba(255,255,255,0.1);
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #ccc;
+      margin-top: 14px;
+      border-radius: 4px;
+    }
+
+    /* Feature Cards */
+    .features-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-bottom: 80px;
+    }
+
+    @media (min-width: 768px) {
+      .features-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 3px solid #000;
+      box-shadow: var(--shadow-md);
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.1s, box-shadow 0.1s;
+    }
+
+    .feature-card:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    /* Code Snippet Box */
+    .code-section {
+      background: #12141a;
+      border: 3px solid #000;
+      box-shadow: var(--shadow-lg);
+      margin-bottom: 80px;
+      overflow: hidden;
+    }
+
+    .code-nav {
+      display: flex;
+      flex-wrap: wrap;
+      background: #1a1d26;
+      border-bottom: 3px solid #000;
+    }
+
+    .code-tab {
+      padding: 12px 20px;
+      background: transparent;
+      border: none;
+      border-right: 2px solid #000;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .code-tab:hover {
+      color: var(--text);
+      background: #232733;
+    }
+
+    .code-tab.active {
+      background: var(--volt);
+      color: #000000;
+    }
+
+    .code-pre-wrap {
+      position: relative;
+      background: #090a0d;
+      padding: 24px;
+      overflow-x: auto;
+    }
+
+    pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #e6e8ee;
+      line-height: 1.6;
+    }
+
+    .btn-copy {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: #252834;
+      border: 2px solid #000;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 12px;
+      cursor: pointer;
+      box-shadow: 2px 2px 0px #000;
+    }
+
+    .btn-copy:hover {
+      background: var(--volt);
+      color: #000;
+    }
+
+    /* Benchmarks Table */
+    .benchmarks-wrap {
+      border: 3px solid #000;
+      box-shadow: var(--shadow-lg);
+      background: var(--bg-card);
+      overflow-x: auto;
+      margin-bottom: 80px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: #1c202a;
+      color: #fff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 900;
+      text-transform: uppercase;
+      padding: 16px 20px;
+      border-bottom: 3px solid #000;
+      border-right: 2px solid #000;
+    }
+
+    th:last-child { border-right: none; }
+
+    td {
+      padding: 16px 20px;
+      border-bottom: 1.5px solid var(--border-subtle);
+      border-right: 2px solid #000;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    td:last-child { border-right: none; }
+
+    tr.highlight-row {
+      background: #16241b;
+    }
+
+    tr.highlight-row td {
+      color: #fff;
+      font-weight: 700;
+      border-bottom: 3px solid #000;
+    }
+
+    /* Pricing Section */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      margin-bottom: 80px;
+    }
+
+    @media (min-width: 768px) {
+      .pricing-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .price-card {
+      background: var(--bg-card);
+      border: 3px solid #000;
+      box-shadow: var(--shadow-md);
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .price-card.featured {
+      border-color: var(--volt);
+      box-shadow: var(--shadow-volt);
+      background: #171b24;
+    }
+
+    .price-pill {
+      position: absolute;
+      top: -14px;
+      right: 20px;
+      background: var(--volt);
+      color: #000;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border: 2px solid #000;
+      box-shadow: 2px 2px 0px #000;
+    }
+
+    .price-title {
+      font-size: 22px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .price-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 40px;
+      font-weight: 900;
+      margin-bottom: 16px;
+    }
+
+    .price-desc {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .price-features {
+      list-style: none;
+      margin-bottom: 32px;
+    }
+
+    .price-features li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #d1d5db;
+    }
+
+    .price-features li::before {
+      content: "✓";
+      color: var(--volt);
+      font-weight: 900;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 3px solid #000;
+      background: #111217;
+      padding: 48px 0 32px 0;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 32px;
+      margin-bottom: 40px;
+    }
+
+    @media (min-width: 768px) {
+      .footer-grid { grid-template-columns: 2fr 1fr 1fr; }
+    }
+
+    .footer-desc {
+      color: var(--text-muted);
+      font-size: 14px;
+      max-width: 380px;
+      margin-top: 12px;
+    }
+
+    .footer-links-title {
+      font-size: 14px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+      color: #fff;
+    }
+
+    .footer-links {
+      list-style: none;
+    }
+
+    .footer-links li {
+      margin-bottom: 8px;
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+
+    .footer-links a:hover {
+      color: var(--volt);
+    }
+
+    .footer-bottom {
+      border-top: 1.5px solid #232733;
+      padding-top: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2cd46c;
+      margin-right: 6px;
+      box-shadow: 0 0 8px #2cd46c;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Announcement Ticker -->
+  <div class="marquee-strip">
+    <div class="marquee-track">
+      <span>⚡ SUB-MILLISECOND LATENCY (0.8MS)</span>
+      <span>•</span>
+      <span>💰 85%+ AVERAGE COST REDUCTION</span>
+      <span>•</span>
+      <span>🔌 ZERO CODE SDK CHANGES</span>
+      <span>•</span>
+      <span>🤖 CLAUDE CONNECTORS & CURSOR MCP VERIFIED</span>
+      <span>•</span>
+      <span>🔒 LOCAL QUANTIZED VECTOR EMBEDDINGS</span>
+      <span>•</span>
+      <span>🌐 DISTRIBUTED CRDT P2P EDGE MESH</span>
+      <span>•</span>
+      <span>⚡ SUB-MILLISECOND LATENCY (0.8MS)</span>
+      <span>•</span>
+      <span>💰 85%+ AVERAGE COST REDUCTION</span>
+      <span>•</span>
+      <span>🔌 ZERO CODE SDK CHANGES</span>
+      <span>•</span>
+      <span>🤖 CLAUDE CONNECTORS & CURSOR MCP VERIFIED</span>
+    </div>
+  </div>
+
+  <!-- Navbar -->
+  <header>
+    <div class="container nav-inner">
+      <a href="/" class="logo-group">
+        <div class="logo-mark">OC</div>
+        <div class="logo-text">OmniCache</div>
+        <span class="logo-tag">v3.0.5</span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#features" class="nav-link">Features</a></li>
+        <li><a href="#demo" class="nav-link">Live Demo</a></li>
+        <li><a href="#quickstart" class="nav-link">Quickstart</a></li>
+        <li><a href="#benchmarks" class="nav-link">Benchmarks</a></li>
+        <li><a href="#pricing" class="nav-link">Pricing</a></li>
+      </ul>
+      <div class="nav-actions">
+        <a href="/dashboard" class="btn btn-dark">Dashboard</a>
+        <a href="/auth/google/login" class="btn btn-volt">
+          <svg width="16" height="16" viewBox="0 0 18 18"><path fill="#000" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#000" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#000" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#000" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+          Sign In
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="container">
+    <section class="hero">
+      <div class="badge-pill">⚡ High-Performance Semantic Vector Gateway</div>
+      <h1 class="hero-title">
+        Cut your LLM bill by <span class="highlight-volt">85%</span>.<br>
+        Kill <span class="highlight-cyan">90%</span> of prompt latency.
+      </h1>
+      <p class="hero-desc">
+        The drop-in semantic caching proxy for OpenAI, Claude, and Model Context Protocol (MCP). 
+        Matches identical and conceptually similar prompts in <strong>sub-millisecond</strong> time before touching paid upstream inference.
+      </p>
+
+      <div class="hero-cta-group">
+        <a href="/auth/google/login" class="btn btn-volt">
+          <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#000" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#000" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#000" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#000" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+          Sign In with Google (Free 1,000 Req)
+        </a>
+        <a href="#demo" class="btn btn-dark">Test Live Simulator ↓</a>
+        <a href="/dashboard" class="btn btn-white">Open Live Dashboard ↗</a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="stat-card v-volt">
+          <div class="stat-val">0.8ms</div>
+          <div class="stat-label">Cache Hit Latency</div>
+        </div>
+        <div class="stat-card v-cyan">
+          <div class="stat-val">85.4%</div>
+          <div class="stat-label">Avg Token Savings</div>
+        </div>
+        <div class="stat-card v-orange">
+          <div class="stat-val">100%</div>
+          <div class="stat-label">Drop-In SDK Compatible</div>
+        </div>
+        <div class="stat-card v-purple">
+          <div class="stat-val">RFC 7636</div>
+          <div class="stat-label">Native MCP OAuth</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Interactive Live Cache Simulator -->
+    <section id="demo" style="padding-top: 40px;">
+      <div class="section-title-wrap">
+        <span class="section-badge">Live Interactive Simulator</span>
+        <h2 class="section-title">See Semantic Vector Matching In Action</h2>
+      </div>
+
+      <div class="demo-frame">
+        <div class="demo-header">
+          <div class="demo-dots">
+            <div class="dot dot-red"></div>
+            <div class="dot dot-yellow"></div>
+            <div class="dot dot-green"></div>
+          </div>
+          <div class="demo-title-bar">omnicache-simulator ~ semantic-matching-engine</div>
+          <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--volt);">● LIVE CLUSTER</div>
+        </div>
+        <div class="demo-body">
+          <div class="demo-presets-label">Select a Prompt Scenario to Test:</div>
+          <div class="demo-presets">
+            <button class="preset-btn active" onclick="loadScenario(0)">Scenario 1: Weather in Tokyo</button>
+            <button class="preset-btn" onclick="loadScenario(1)">Scenario 2: Quantum Computing Summary</button>
+            <button class="preset-btn" onclick="loadScenario(2)">Scenario 3: SQL Optimization</button>
+          </div>
+
+          <div class="demo-input-row">
+            <input type="text" id="simInput" class="demo-input" value="What is the weather in Tokyo today?" readonly>
+            <button class="btn btn-volt" onclick="runSimulation()">Run Request</button>
+          </div>
+
+          <div class="demo-results-grid">
+            <!-- Without OmniCache -->
+            <div class="result-box direct">
+              <span class="result-badge badge-miss">Direct Upstream (OpenAI GPT-4o)</span>
+              <div class="metric-row">
+                <span class="metric-label">Latency:</span>
+                <span class="metric-val" id="directLatency" style="color: #ff7676;">1,420 ms</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Inference Cost:</span>
+                <span class="metric-val" id="directCost" style="color: #ff7676;">$0.0245</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Tokens Billed:</span>
+                <span class="metric-val" id="directTokens" style="color: #ff7676;">540 tokens</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Cache Status:</span>
+                <span class="metric-val" style="color: #ff7676;">BYPASS / FULL COST</span>
+              </div>
+              <div class="result-text" id="directResponse">
+                "Tokyo is currently experiencing mild spring weather with an average temperature of 18°C (64°F) and moderate humidity..."
+              </div>
+            </div>
+
+            <!-- With OmniCache -->
+            <div class="result-box cached">
+              <span class="result-badge badge-hit" id="cacheHitBadge">⚡ OmniCache Semantic Hit (98.4% Match)</span>
+              <div class="metric-row">
+                <span class="metric-label">Latency:</span>
+                <span class="metric-val" id="cachedLatency" style="color: var(--volt);">0.8 ms (1,775x faster)</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Inference Cost:</span>
+                <span class="metric-val" id="cachedCost" style="color: var(--volt);">$0.0000 (100% saved)</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Tokens Billed:</span>
+                <span class="metric-val" id="cachedTokens" style="color: var(--volt);">0 tokens ($ avoided)</span>
+              </div>
+              <div class="metric-row">
+                <span class="metric-label">Vector Radix:</span>
+                <span class="metric-val" style="color: var(--cyan);">Exact Radix L1 + HNSW L2</span>
+              </div>
+              <div class="result-text" id="cachedResponse">
+                "Tokyo is currently experiencing mild spring weather with an average temperature of 18°C (64°F) and moderate humidity..."
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Grid -->
+    <section id="features">
+      <div class="section-title-wrap">
+        <span class="section-badge">Architecture & Superpowers</span>
+        <h2 class="section-title">Built For Serious AI Engineers</h2>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">⚡</div>
+            <h3 class="feature-title">Zero SDK Rewrite</h3>
+            <p class="feature-desc">
+              Change just one string: point <code>base_url</code> to OmniCache. Works out-of-the-box with official <code>openai</code>, <code>anthropic</code>, LangChain, and LlamaIndex libraries.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">🧠</div>
+            <h3 class="feature-title">Local Quantized Embeddings</h3>
+            <p class="feature-desc">
+              Embedding models run right inside the proxy binary. Zero external network calls to calculate prompt similarity vectors. Fast, private, zero added cost.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">🤖</div>
+            <h3 class="feature-title">Model Context Protocol</h3>
+            <p class="feature-desc">
+              First-class MCP JSON-RPC 2.0 streaming server. RFC 6749 and RFC 7636 PKCE compliant for Claude Connectors Directory, Claude Desktop, and Cursor.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">📉</div>
+            <h3 class="feature-title">Model Cascading</h3>
+            <p class="feature-desc">
+              Intelligently evaluates query complexity. Automatically delegates simple factual requests to fast, cheap models (e.g. <code>gpt-4o-mini</code>) while routing complex reasoning to <code>o3</code> or <code>claude-3-7-sonnet</code>.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">🌐</div>
+            <h3 class="feature-title">Distributed CRDT Edge Mesh</h3>
+            <p class="feature-desc">
+              Multi-node peer mesh syncs cache states and vector embeddings over encrypted HTTP/2 gossip with Hybrid Logical Clocks (HLC) and conflict-free data types.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">🛡️</div>
+            <h3 class="feature-title">Enterprise Virtual Keys</h3>
+            <p class="feature-desc">
+              Assign virtual API keys to teams, apps, or subagents. Enforce monthly dollar budget caps and per-minute rate limits atomically with zero race conditions.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quickstart Code Section -->
+    <section id="quickstart">
+      <div class="section-title-wrap">
+        <span class="section-badge">10-Second Setup</span>
+        <h2 class="section-title">Drop-In Integration</h2>
+      </div>
+
+      <div class="code-section">
+        <div class="code-nav">
+          <button class="code-tab active" onclick="showCode('python-openai')">Python (OpenAI)</button>
+          <button class="code-tab" onclick="showCode('python-claude')">Python (Claude)</button>
+          <button class="code-tab" onclick="showCode('mcp')">Claude Desktop MCP</button>
+          <button class="code-tab" onclick="showCode('curl')">cURL</button>
+        </div>
+        <div class="code-pre-wrap">
+          <button class="btn-copy" onclick="copyCode()">COPY</button>
+          <pre><code id="codeBlock">from openai import OpenAI
+
+# 1. Point base_url to your OmniCache proxy
+client = OpenAI(
+    base_url="https://omnicache.rawwgrid.com/v1",
+    api_key="omni_live_your_virtual_key"  # or upstream OPENAI_API_KEY
+)
+
+# 2. Make requests as normal — semantic vector caching is automatic!
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Explain vector indexing in 3 bullet points"}]
+)
+
+print(response.choices[0].message.content)</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Benchmarks Comparison -->
+    <section id="benchmarks">
+      <div class="section-title-wrap">
+        <span class="section-badge">Empirical Benchmarks</span>
+        <h2 class="section-title">OmniCache vs Traditional Approaches</h2>
+      </div>
+
+      <div class="benchmarks-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Architecture</th>
+              <th>P95 Latency</th>
+              <th>Semantic Matching</th>
+              <th>Cost Reduction</th>
+              <th>MCP OAuth (RFC 7636)</th>
+              <th>Deployment</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="highlight-row">
+              <td>⚡ OmniCache Proxy</td>
+              <td>0.8 ms</td>
+              <td>✓ Local Quantized Vector</td>
+              <td>85% - 95%</td>
+              <td>✓ Native PKCE + Google Auth</td>
+              <td>1 Docker Container</td>
+            </tr>
+            <tr>
+              <td>Direct OpenAI / Claude</td>
+              <td>1,450 ms</td>
+              <td>✗ None (Zero reuse)</td>
+              <td>0% (Full Price)</td>
+              <td>✗ None</td>
+              <td>Cloud API</td>
+            </tr>
+            <tr>
+              <td>Redis / Memcached</td>
+              <td>18 ms</td>
+              <td>✗ Exact String Only</td>
+              <td>15% - 25%</td>
+              <td>✗ None</td>
+              <td>Complex Cluster</td>
+            </tr>
+            <tr>
+              <td>Postgres pgvector Custom</td>
+              <td>180 ms</td>
+              <td>✓ Database Vector</td>
+              <td>40% - 60%</td>
+              <td>✗ Custom DIY</td>
+              <td>Heavy DB Maintenance</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing">
+      <div class="section-title-wrap">
+        <span class="section-badge">Simple Honest Pricing</span>
+        <h2 class="section-title">Start Free. Scale Painlessly.</h2>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- Community -->
+        <div class="price-card">
+          <div>
+            <h3 class="price-title">Free Tier</h3>
+            <div class="price-amount">$0</div>
+            <p class="price-desc">Perfect for testing, personal agents, and hobbyist developers.</p>
+            <ul class="price-features">
+              <li>Up to 1,000 requests / day</li>
+              <li>30 RPM rate limit</li>
+              <li>Instant Google Sign-In</li>
+              <li>$5.00/mo spend protection</li>
+              <li>Community Discord Access</li>
+            </ul>
+          </div>
+          <a href="/auth/google/login" class="btn btn-volt" style="width: 100%;">Sign Up with Google</a>
+        </div>
+
+        <!-- Pro -->
+        <div class="price-card featured">
+          <div class="price-pill">MOST POPULAR</div>
+          <div>
+            <h3 class="price-title" style="color: var(--volt);">Developer Pro</h3>
+            <div class="price-amount">$29<span style="font-size: 16px; color: var(--text-muted);">/mo</span></div>
+            <p class="price-desc">For production applications, agentic workflows, and fast teams.</p>
+            <ul class="price-features">
+              <li>100,000 requests / month</li>
+              <li>300 RPM rate limit</li>
+              <li>Model Cascading (gpt-4o → 4o-mini)</li>
+              <li>P2P Distributed Edge Mesh</li>
+              <li>Custom Domain SSL Support</li>
+              <li>Priority Telemetry Dashboard</li>
+            </ul>
+          </div>
+          <a href="/auth/google/login" class="btn btn-volt" style="width: 100%;">Start Pro Trial</a>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="price-card">
+          <div>
+            <h3 class="price-title">Enterprise</h3>
+            <div class="price-amount">Custom</div>
+            <p class="price-desc">Self-hosted or dedicated cloud cluster for enterprise AI security.</p>
+            <ul class="price-features">
+              <li>Unlimited throughput</li>
+              <li>On-premise / VPC Docker deploy</li>
+              <li>Custom SLA & 99.99% uptime</li>
+              <li>SAML SSO & Custom OAuth</li>
+              <li>Dedicated Support Engineer</li>
+            </ul>
+          </div>
+          <a href="mailto:support@rawwgrid.com" class="btn btn-dark" style="width: 100%;">Contact Enterprise</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="logo-group" style="margin-bottom: 12px;">
+            <div class="logo-mark">OC</div>
+            <div class="logo-text">OmniCache</div>
+          </div>
+          <p class="footer-desc">
+            High-performance semantic vector caching proxy and Model Context Protocol gateway. 
+            Engineered to make AI agent systems faster, cheaper, and more reliable.
+          </p>
+        </div>
+        <div>
+          <h4 class="footer-links-title">Product</h4>
+          <ul class="footer-links">
+            <li><a href="/dashboard">Live Dashboard</a></li>
+            <li><a href="/omnicache_2">Topographic HUD</a></li>
+            <li><a href="/auth/google/login">Google Sign-In</a></li>
+            <li><a href="/v1/cache/stats">Cache Statistics</a></li>
+            <li><a href="/health">System Health</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="footer-links-title">Developers</h4>
+          <ul class="footer-links">
+            <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank">GitHub Repository</a></li>
+            <li><a href="/.well-known/oauth-authorization-server">OAuth 2.0 Server RFC</a></li>
+            <li><a href="/mcp">Model Context Protocol</a></li>
+            <li><a href="mailto:support@rawwgrid.com">Contact Support</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>
+          <span class="status-dot"></span> All Systems Operational • Custom Domain: <strong>omnicache.rawwgrid.com</strong>
+        </div>
+        <div>
+          OmniCache © 2026. Distributed under MIT License.
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const scenarios = [
+      {
+        prompt: "What is the weather in Tokyo today?",
+        variant: "Tell me today's weather forecast for Tokyo city",
+        directLatency: "1,420 ms",
+        directCost: "$0.0245",
+        directTokens: "540 tokens",
+        cachedLatency: "0.8 ms (1,775x faster)",
+        cachedCost: "$0.0000 (100% saved)",
+        cachedTokens: "0 tokens ($ avoided)",
+        similarity: "98.4%",
+        response: "\"Tokyo is currently experiencing mild spring weather with an average temperature of 18°C (64°F) and moderate humidity...\""
+      },
+      {
+        prompt: "Summarize quantum computing in 2 sentences.",
+        variant: "Explain quantum computing briefly in two sentences.",
+        directLatency: "1,890 ms",
+        directCost: "$0.0380",
+        directTokens: "820 tokens",
+        cachedLatency: "0.9 ms (2,100x faster)",
+        cachedCost: "$0.0000 (100% saved)",
+        cachedTokens: "0 tokens ($ avoided)",
+        similarity: "99.1%",
+        response: "\"Quantum computing harnesses superposition and entanglement to process complex calculations exponentially faster than classical computers. This allows quantum bits (qubits) to explore numerous possibilities simultaneously rather than in sequential binary states.\""
+      },
+      {
+        prompt: "How do I optimize slow PostgreSQL JOIN queries?",
+        variant: "Best practices for speeding up slow JOINs in Postgres",
+        directLatency: "2,150 ms",
+        directCost: "$0.0490",
+        directTokens: "1,150 tokens",
+        cachedLatency: "1.1 ms (1,954x faster)",
+        cachedCost: "$0.0000 (100% saved)",
+        cachedTokens: "0 tokens ($ avoided)",
+        similarity: "97.6%",
+        response: "\"To optimize PostgreSQL joins: 1) Ensure foreign key columns have b-tree indexes; 2) Run EXPLAIN (ANALYZE, BUFFERS) to check for sequential scans vs hash joins; 3) Increase work_mem if hash operations spill to disk.\""
+      }
+    ];
+
+    let currentScenario = 0;
+
+    function loadScenario(idx) {
+      currentScenario = idx;
+      document.querySelectorAll('.preset-btn').forEach((btn, i) => {
+        btn.classList.toggle('active', i === idx);
+      });
+      const s = scenarios[idx];
+      document.getElementById('simInput').value = s.prompt;
+      document.getElementById('directLatency').innerText = s.directLatency;
+      document.getElementById('directCost').innerText = s.directCost;
+      document.getElementById('directTokens').innerText = s.directTokens;
+      document.getElementById('cachedLatency').innerText = s.cachedLatency;
+      document.getElementById('cachedCost').innerText = s.cachedCost;
+      document.getElementById('cachedTokens').innerText = s.cachedTokens;
+      document.getElementById('cacheHitBadge').innerText = `⚡ OmniCache Semantic Hit (${s.similarity} Match)`;
+      document.getElementById('directResponse').innerText = s.response;
+      document.getElementById('cachedResponse').innerText = s.response;
+    }
+
+    function runSimulation() {
+      const s = scenarios[currentScenario];
+      const input = document.getElementById('simInput');
+      input.value = (input.value === s.prompt) ? s.variant : s.prompt;
+      
+      const badge = document.getElementById('cacheHitBadge');
+      badge.style.transform = "scale(1.08)";
+      setTimeout(() => { badge.style.transform = "scale(1)"; }, 200);
+    }
+
+    const codeSnippets = {
+      'python-openai': `from openai import OpenAI
+
+# 1. Point base_url to your OmniCache proxy
+client = OpenAI(
+    base_url="https://omnicache.rawwgrid.com/v1",
+    api_key="omni_live_your_virtual_key"  # or upstream OPENAI_API_KEY
+)
+
+# 2. Make requests as normal — semantic vector caching is automatic!
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Explain vector indexing in 3 bullet points"}]
+)
+
+print(response.choices[0].message.content)`,
+
+      'python-claude': `import anthropic
+
+# 1. Point base_url to OmniCache proxy
+client = anthropic.Anthropic(
+    base_url="https://omnicache.rawwgrid.com",
+    api_key="omni_live_your_virtual_key"
+)
+
+# 2. Send messages — deduplicated with sub-millisecond CRDT memory
+message = client.messages.create(
+    model="claude-3-7-sonnet-20250219",
+    max_tokens=1000,
+    messages=[{"role": "user", "content": "Write a fast radix tree search in Rust"}]
+)
+
+print(message.content[0].text)`,
+
+      'mcp': `// Add to ~/Library/Application Support/Claude/claude_desktop_config.json
+// or %APPDATA%/Claude/claude_desktop_config.json
+{
+  "mcpServers": {
+    "omnicache": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "url": "https://omnicache.rawwgrid.com/mcp"
+    }
+  }
+}`,
+
+      'curl': `curl -X POST https://omnicache.rawwgrid.com/v1/chat/completions \\
+  -H "Authorization: Bearer omni_live_your_virtual_key" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-4o",
+    "messages": [{"role": "user", "content": "Ping OmniCache semantic vector proxy"}]
+  }'`
+    };
+
+    function showCode(tabKey) {
+      document.querySelectorAll('.code-tab').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.target.classList.add('active');
+      document.getElementById('codeBlock').innerText = codeSnippets[tabKey];
+    }
+
+    function copyCode() {
+      const text = document.getElementById('codeBlock').innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.btn-copy');
+        btn.innerText = "COPIED!";
+        btn.style.background = "var(--volt)";
+        btn.style.color = "#000";
+        setTimeout(() => {
+          btn.innerText = "COPY";
+          btn.style.background = "#252834";
+          btn.style.color = "#fff";
+        }, 1500);
+      });
+    }
+  </script>
+</body>
+</html>

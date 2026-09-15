@@ -3130,8 +3130,13 @@ async def handle_root(request: Request) -> Response:
         return Response(headers=cors_headers)
 
     accept = request.headers.get("accept", "").lower()
-    # If accessed via web browser requesting HTML, serve dashboard directly
+    # If accessed via web browser requesting HTML, serve high-converting Neo-Brutalist landing page
     if "text/html" in accept:
+        landing_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "landing.html")
+        if os.path.exists(landing_path):
+            with open(landing_path, "r", encoding="utf-8") as f:
+                html = f.read()
+            return HTMLResponse(html, headers=cors_headers)
         dashboard_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
         if os.path.exists(dashboard_path):
             return await handle_dashboard(request)
@@ -3192,6 +3197,19 @@ async def handle_dashboard(request: Request) -> Response:
             )
         return response
     return HTMLResponse("<h1>OmniCache Dashboard Not Found</h1>", status_code=404, headers=cors_headers)
+
+
+async def handle_landing(request: Request) -> Response:
+    """Serves the Dark Neo-Brutalist SaaS Landing Page."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    landing_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "landing.html")
+    if os.path.exists(landing_path):
+        with open(landing_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        return HTMLResponse(html, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
 async def handle_omnicache_2(request: Request) -> Response:
@@ -4334,6 +4352,7 @@ routes = [
     Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/signup", handle_signup, methods=["POST", "OPTIONS"]),
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
+    Route("/landing", handle_landing, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
     Route("/omnicache_2", handle_omnicache_2, methods=["GET"]),
     Route("/omnicache-2", handle_omnicache_2, methods=["GET"]),

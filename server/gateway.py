@@ -20,6 +20,10 @@ import hmac
 import re
 import threading
 import html
+import sqlite3
+import logging
+
+logger = logging.getLogger("omnicache.gateway")
 from urllib.parse import parse_qs, urlencode, quote_plus, urlparse
 from typing import Dict, Any, Optional, Tuple, List, Set
 from starlette.applications import Starlette
@@ -193,14 +197,25 @@ def is_allowed_redirect_uri(uri: str) -> bool:
         origin = f"{parsed.scheme}://{parsed.netloc}"
         if origin in ALLOWED_REDIRECT_ORIGINS:
             return True
+        configured_origins = getattr(config, "ALLOWED_REDIRECT_ORIGINS", []) or getattr(config, "CORS_ALLOWED_ORIGINS", [])
+        if origin in configured_origins:
+            return True
         if hostname in ("localhost", "127.0.0.1", "example.com") or hostname.endswith(".example.com"):
             return True
         if hostname == "rawwgrid.com" or hostname.endswith(".rawwgrid.com"):
             return True
-        if hostname == "onrender.com" or hostname.endswith(".onrender.com"):
-            return True
         if hostname == "claude.ai" or hostname.endswith(".claude.ai"):
             return True
+
+        # Restrict Render deployment strictly to our own deployed instance, never arbitrary *.onrender.com
+        render_host = (
+            os.getenv("RENDER_EXTERNAL_HOSTNAME", "")
+            or urlparse(os.getenv("RENDER_EXTERNAL_URL", "")).hostname
+            or ""
+        ).strip().lower()
+        if render_host and hostname == render_host:
+            return True
+
         return False
     except Exception:
         return False
@@ -217,13 +232,18 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
     elif origin:
         parsed = urlparse(origin)
         hostname = (parsed.hostname or "").lower()
+        render_host = (
+            os.getenv("RENDER_EXTERNAL_HOSTNAME", "")
+            or urlparse(os.getenv("RENDER_EXTERNAL_URL", "")).hostname
+            or ""
+        ).strip().lower()
+
         if (
             origin in allowed_origins
             or "*" in allowed_origins
             or hostname == "rawwgrid.com"
             or hostname.endswith(".rawwgrid.com")
-            or hostname == "onrender.com"
-            or hostname.endswith(".onrender.com")
+            or (render_host and hostname == render_host)
             or hostname in ("localhost", "127.0.0.1")
         ):
             allow_origin = origin
@@ -265,10 +285,12 @@ def extract_auth_key(request: Request) -> str:
     if cookie_key:
         return cookie_key
 
-    # Check query params (?key=... or ?api_key=...)
-    query_key = request.query_params.get("api_key", "").strip() or request.query_params.get("key", "").strip()
-    if query_key:
-        return query_key
+    # Check query params (?key=... or ?api_key=...) strictly on whitelisted paths where custom headers cannot be set (e.g. browser dashboard bootstrap, WebSocket handshakes, OAuth authorization)
+    path = getattr(getattr(request, "url", None), "path", "")
+    if path in ("/dashboard", "/dashboard/", "/ws", "/oauth/authorize") or path.startswith("/ws/"):
+        query_key = request.query_params.get("api_key", "").strip() or request.query_params.get("key", "").strip()
+        if query_key:
+            return query_key
 
     # Fallback to default key if REQUIRE_AUTH is False
     if not getattr(config, "REQUIRE_AUTH", False):
@@ -3241,7 +3263,7 @@ async def handle_dashboard(request: Request) -> Response:
                 key="omnicache_key",
                 value=key,
                 max_age=86400 * 30,
-                httponly=False,
+                httponly=True,
                 samesite="lax",
                 secure=is_https
             )
@@ -3272,6 +3294,96 @@ MCP_ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 OAUTH_CODES: Dict[str, Dict[str, Any]] = {}
 OAUTH_TOKENS: Dict[str, Dict[str, Any]] = {}
 GOOGLE_OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
+
+CONSUMED_OAUTH_STATES: Dict[str, float] = {}
+_CONSUMED_OAUTH_LOCK = threading.Lock()
+_CONSUMED_OAUTH_DB_PATH = os.path.expanduser("~/.omnicache/oauth_consumed.db")
+
+
+def _init_consumed_oauth_db() -> None:
+    try:
+        os.makedirs(os.path.dirname(_CONSUMED_OAUTH_DB_PATH), exist_ok=True)
+        with _CONSUMED_OAUTH_LOCK:
+            with sqlite3.connect(_CONSUMED_OAUTH_DB_PATH) as conn:
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS consumed_oauth_states (token_id TEXT PRIMARY KEY, expires_at REAL)"
+                )
+                conn.commit()
+    except Exception as exc:
+        logger.debug(f"[OAuth State] DB init notice: {exc}")
+
+
+_init_consumed_oauth_db()
+
+
+def _is_oauth_token_consumed(token_id: str) -> bool:
+    now = time.time()
+    # 1. In-memory check
+    if token_id in CONSUMED_OAUTH_STATES:
+        if CONSUMED_OAUTH_STATES[token_id] > now:
+            return True
+        else:
+            CONSUMED_OAUTH_STATES.pop(token_id, None)
+
+    # 2. SQLite check (for multi-worker / container restart single-use enforcement)
+    try:
+        if os.path.exists(_CONSUMED_OAUTH_DB_PATH):
+            with _CONSUMED_OAUTH_LOCK:
+                with sqlite3.connect(_CONSUMED_OAUTH_DB_PATH, timeout=2.0) as conn:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT expires_at FROM consumed_oauth_states WHERE token_id = ?",
+                        (token_id,)
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        expires_at = row[0]
+                        if expires_at > now:
+                            CONSUMED_OAUTH_STATES[token_id] = expires_at
+                            return True
+                        else:
+                            cur.execute("DELETE FROM consumed_oauth_states WHERE token_id = ?", (token_id,))
+                            conn.commit()
+    except Exception as exc:
+        logger.debug(f"[OAuth State] DB check notice: {exc}")
+    return False
+
+
+def _mark_oauth_token_consumed(token_id: str, expires_at: float) -> None:
+    now = time.time()
+    CONSUMED_OAUTH_STATES[token_id] = expires_at
+
+    # Periodic in-memory prune
+    if len(CONSUMED_OAUTH_STATES) > 500:
+        expired = [k for k, exp in CONSUMED_OAUTH_STATES.items() if exp <= now]
+        for k in expired:
+            CONSUMED_OAUTH_STATES.pop(k, None)
+
+    # SQLite persist
+    try:
+        with _CONSUMED_OAUTH_LOCK:
+            with sqlite3.connect(_CONSUMED_OAUTH_DB_PATH, timeout=2.0) as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO consumed_oauth_states (token_id, expires_at) VALUES (?, ?)",
+                    (token_id, expires_at)
+                )
+                conn.execute("DELETE FROM consumed_oauth_states WHERE expires_at <= ?", (now,))
+                conn.commit()
+    except Exception as exc:
+        logger.debug(f"[OAuth State] DB mark notice: {exc}")
+
+
+def reset_consumed_oauth_states() -> None:
+    """Testing helper to reset consumed OAuth state tokens."""
+    CONSUMED_OAUTH_STATES.clear()
+    try:
+        if os.path.exists(_CONSUMED_OAUTH_DB_PATH):
+            with _CONSUMED_OAUTH_LOCK:
+                with sqlite3.connect(_CONSUMED_OAUTH_DB_PATH, timeout=2.0) as conn:
+                    conn.execute("DELETE FROM consumed_oauth_states")
+                    conn.commit()
+    except Exception:
+        pass
 
 
 def cleanup_google_oauth_states() -> None:
@@ -3311,19 +3423,30 @@ def generate_google_oauth_state(client_info: Dict[str, Any]) -> str:
 def verify_google_oauth_state(state_token: str) -> Optional[Dict[str, Any]]:
     """
     Verifies the HMAC signature and timestamp of an OAuth state token.
+    Enforces strict single-use replay protection across all paths (in-memory, multi-worker,
+    and post-restart cryptographic verification).
     Returns decoded client parameters if valid and unexpired, None otherwise.
-    First checks in-memory state; if missing (e.g. across container restart),
-    cryptographically validates the HMAC signature so login flows never break.
     """
     if not state_token:
         return None
+
+    # Derive hash for constant-length tracking
+    token_id = hashlib.sha256(state_token.encode("utf-8")).hexdigest()
+    if _is_oauth_token_consumed(token_id):
+        logger.warning("[OAuth State] Replay attack prevented: state token was already consumed.")
+        return None
+
+    now = time.time()
+    data: Optional[Dict[str, Any]] = None
+
     # 1. Fast path: check in-memory dictionary
     if state_token in GOOGLE_OAUTH_STATES:
         state_data = GOOGLE_OAUTH_STATES.pop(state_token)
-        if time.time() <= state_data.get("expires_at", 0):
-            return state_data
-    # 2. Cryptographic signature verification (survives restarts and redeployments)
-    if "." in state_token:
+        if now <= state_data.get("expires_at", 0):
+            data = state_data
+
+    # 2. Cryptographic signature verification (survives restarts and multi-worker deployments)
+    if not data and "." in state_token:
         try:
             parts = state_token.split(".", 1)
             payload_b64, provided_sig = parts[0], parts[1]
@@ -3331,12 +3454,27 @@ def verify_google_oauth_state(state_token: str) -> Optional[Dict[str, Any]]:
             expected_sig = hmac.new(signing_key, payload_b64.encode("ascii"), hashlib.sha256).hexdigest()
             if hmac.compare_digest(provided_sig, expected_sig):
                 padded = payload_b64 + "=" * (-len(payload_b64) % 4)
-                data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
-                if time.time() <= data.get("expires_at", 0):
-                    return data
+                decoded_data = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
+                if now <= decoded_data.get("expires_at", 0):
+                    data = decoded_data
         except Exception as exc:
             logger.warning(f"[OAuth State] Signature verification failed: {exc}")
-    return None
+
+    if not data:
+        return None
+
+    # Enforce single-use on nonce as well
+    nonce = data.get("nonce", "")
+    if nonce:
+        nonce_id = f"nonce:{nonce}"
+        if _is_oauth_token_consumed(nonce_id):
+            logger.warning("[OAuth State] Replay attack prevented: nonce was already consumed.")
+            return None
+        _mark_oauth_token_consumed(nonce_id, data.get("expires_at", now + 900))
+
+    # Mark token as consumed immediately upon successful verification
+    _mark_oauth_token_consumed(token_id, data.get("expires_at", now + 900))
+    return data
 
 
 def get_effective_google_redirect_uri(request: Request) -> str:

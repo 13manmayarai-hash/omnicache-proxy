@@ -19,7 +19,8 @@ from server.gateway import (
     OAUTH_CODES,
     FREE_TIER_MONTHLY_BUDGET_USD,
     FREE_TIER_RATE_LIMIT_RPM,
-    FREE_TIER_ROLE
+    FREE_TIER_ROLE,
+    reset_consumed_oauth_states
 )
 from server.quotas import quota_manager
 from persistence.snapshot_store import snapshot_store
@@ -29,12 +30,14 @@ from persistence.snapshot_store import snapshot_store
 def clean_state():
     GOOGLE_OAUTH_STATES.clear()
     OAUTH_CODES.clear()
+    reset_consumed_oauth_states()
     conn = snapshot_store._get_connection()
     with conn:
         conn.execute("DELETE FROM signups")
     yield
     GOOGLE_OAUTH_STATES.clear()
     OAUTH_CODES.clear()
+    reset_consumed_oauth_states()
     conn = snapshot_store._get_connection()
     with conn:
         conn.execute("DELETE FROM signups")

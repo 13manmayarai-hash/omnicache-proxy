@@ -121,7 +121,7 @@ def test_readyz_and_purge_security():
     assert r_inval_get.status_code == 405
 
 
-def test_oauth_and_cors_security_tightening():
+def test_oauth_and_cors_security_tightening(monkeypatch):
     """Verify redirect_uri validation and CORS hostname matching."""
     # Open redirect attempt
     assert not is_allowed_redirect_uri("https://evil-attacker.com/oauth/callback")
@@ -131,7 +131,16 @@ def test_oauth_and_cors_security_tightening():
     assert is_allowed_redirect_uri("http://localhost:8000/callback")
     assert is_allowed_redirect_uri("/dashboard")
 
-    # CORS origin check: rogue subdomain/suffix match
+    # Shared .onrender.com multi-tenant domain must NOT be trusted generically
+    assert not is_allowed_redirect_uri("https://attacker.onrender.com/oauth/callback")
+    assert not is_allowed_redirect_uri("https://random-tenant.onrender.com/cb")
+
+    # Deployed instance specific hostname IS allowed when configured
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "my-omnicache-app.onrender.com")
+    assert is_allowed_redirect_uri("https://my-omnicache-app.onrender.com/oauth/callback")
+    assert not is_allowed_redirect_uri("https://attacker.onrender.com/oauth/callback")
+
+    # CORS origin check: rogue subdomain/suffix match and arbitrary onrender.com
     from starlette.datastructures import Headers
     class MockRequest:
         def __init__(self, origin):
@@ -141,5 +150,76 @@ def test_oauth_and_cors_security_tightening():
     # Should NOT reflect attackerrawwgrid.com as allowed
     assert cors_bad["Access-Control-Allow-Origin"] != "https://attackerrawwgrid.com"
 
+    cors_bad_render = get_cors_headers(MockRequest("https://attacker.onrender.com"))
+    assert cors_bad_render["Access-Control-Allow-Origin"] != "https://attacker.onrender.com"
+
     cors_good = get_cors_headers(MockRequest("https://omnicache.rawwgrid.com"))
     assert cors_good["Access-Control-Allow-Origin"] == "https://omnicache.rawwgrid.com"
+
+    cors_good_render = get_cors_headers(MockRequest("https://my-omnicache-app.onrender.com"))
+    assert cors_good_render["Access-Control-Allow-Origin"] == "https://my-omnicache-app.onrender.com"
+
+
+def test_dashboard_cookie_httponly_and_query_param_isolation(monkeypatch):
+    """Verify that dashboard auth cookie has HttpOnly=True and query params are not accepted on /v1/*."""
+    from core.config import config
+    from server.gateway import app, extract_auth_key
+    from starlette.testclient import TestClient
+
+    client = TestClient(app)
+    monkeypatch.setattr(config, "REQUIRE_AUTH", True)
+    monkeypatch.setattr(config, "ADMIN_API_KEY", "adm-secret-key-12345")
+
+    # 1. Visiting /dashboard?key=... sets HttpOnly cookie
+    resp = client.get("/dashboard?key=adm-secret-key-12345", headers={"accept": "text/html"})
+    assert resp.status_code == 200
+    set_cookie_header = resp.headers.get("set-cookie", "")
+    assert "omnicache_key=" in set_cookie_header
+    assert "httponly" in set_cookie_header.lower()
+
+    # 2. Passing ?key= or ?api_key= on REST endpoints like /v1/cache/stats must be REJECTED
+    client.cookies.clear()
+    r_bad_query = client.get("/v1/cache/stats?key=adm-secret-key-12345")
+    assert r_bad_query.status_code == 401
+
+    r_bad_query_api = client.get("/v1/cache/stats?api_key=adm-secret-key-12345")
+    assert r_bad_query_api.status_code == 401
+
+    # 3. Supplying header or cookie works
+    r_good_header = client.get("/v1/cache/stats", headers={"Authorization": "Bearer adm-secret-key-12345"})
+    assert r_good_header.status_code == 200
+
+    r_good_cookie = client.get("/v1/cache/stats", cookies={"omnicache_key": "adm-secret-key-12345"})
+    assert r_good_cookie.status_code == 200
+
+
+def test_google_oauth_state_token_replay_prevention():
+    """Verify that an OAuth state token and its nonce cannot be replayed even across restarts."""
+    from server.gateway import generate_google_oauth_state, verify_google_oauth_state, GOOGLE_OAUTH_STATES, reset_consumed_oauth_states
+
+    reset_consumed_oauth_states()
+    GOOGLE_OAUTH_STATES.clear()
+
+    # 1. Normal state token verification
+    token = generate_google_oauth_state({"client_id": "test-client", "redirect_uri": "https://claude.ai/cb"})
+    data1 = verify_google_oauth_state(token)
+    assert data1 is not None
+    assert data1["client_id"] == "test-client"
+
+    # 2. Replay attempt immediately fails
+    data2 = verify_google_oauth_state(token)
+    assert data2 is None
+
+    # 3. Cryptographic fallback path (e.g. simulated server restart)
+    token_restart = generate_google_oauth_state({"client_id": "test-restart", "redirect_uri": "https://claude.ai/cb"})
+    # Wipe in-memory dict to force cryptographic path
+    GOOGLE_OAUTH_STATES.clear()
+
+    data3 = verify_google_oauth_state(token_restart)
+    assert data3 is not None
+    assert data3["client_id"] == "test-restart"
+
+    # Replay of cryptographic path must also fail
+    data4 = verify_google_oauth_state(token_restart)
+    assert data4 is None
+

@@ -4,6 +4,7 @@ Supports durable SQLite persistence and distributed Redis backends with atomic L
 check-and-reserve spend protection against TOCTOU races, and strict sliding-window rate limits.
 """
 
+import os
 import time
 import hmac
 import json
@@ -497,6 +498,33 @@ class VirtualKeyManager:
         admin_key = getattr(config, "ADMIN_API_KEY", "").strip()
         if admin_key:
             self.storage.register_key(admin_key, team_name="System Administrator", org_id="admin", role="admin", monthly_budget_usd=1000000.0, rate_limit_rpm=10000)
+
+        # Pre-seeded primary workspace key (persists across ephemeral container restarts)
+        primary_key = "omni_live_d2815177d5cb4647944f90a0d077bd1c"
+        if not self.storage.get_key(primary_key):
+            self.storage.register_key(
+                primary_key,
+                team_name="Man Maya Rai Workspace",
+                org_id="org_16f96ace83c2",
+                role="tenant",
+                monthly_budget_usd=100.0,
+                rate_limit_rpm=120
+            )
+
+        # Pre-seeded keys via environment variable (comma-separated)
+        extra_keys = getattr(config, "PRESEEDED_API_KEYS", "") or os.getenv("OMNICACHE_PRESEEDED_KEYS", "")
+        if extra_keys:
+            for item in extra_keys.split(","):
+                item = item.strip()
+                if item and not self.storage.get_key(item):
+                    self.storage.register_key(
+                        item,
+                        team_name="Preseeded Workspace",
+                        org_id="org_preseeded",
+                        role="tenant",
+                        monthly_budget_usd=100.0,
+                        rate_limit_rpm=120
+                    )
 
     def register_key(
         self,

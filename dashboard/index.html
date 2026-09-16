@@ -1153,8 +1153,8 @@
         <!-- Community Free -->
         <div class="tier-card" id="tier-card-free" onclick="selectTier('free')">
           <div style="font-size: 11px; font-weight: 800; text-transform: uppercase;">Community</div>
-          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">$5 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
-          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">30 RPM</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">₹0 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo ($0)</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">60 RPM • $15 Quota</div>
           <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
             <li>✓ L1/L2 Vector Cache</li>
             <li>✓ SQLite WAL Storage</li>
@@ -1165,8 +1165,8 @@
         <!-- Developer Pro -->
         <div class="tier-card" id="tier-card-pro" onclick="selectTier('pro')">
           <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--cyan);">Dev Pro</div>
-          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">$100 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
-          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">120 RPM (₹8,499)</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">₹499 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo (~$6)</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">120 RPM • $100 Quota</div>
           <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
             <li>✓ Sub-ms ANN Search</li>
             <li>✓ Tool Streaming Replay</li>
@@ -1178,8 +1178,8 @@
         <div class="tier-card selected" id="tier-card-scale" onclick="selectTier('scale')">
           <span class="tier-badge-recommended">POPULAR</span>
           <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--volt);">Team Scale</div>
-          <div style="font-size: 16px; font-weight: 900; color: var(--volt); margin: 4px 0;">$500 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
-          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">300 RPM (₹41,999)</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--volt); margin: 4px 0;">₹1,999 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo (~$24)</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">300 RPM • $500 Quota</div>
           <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
             <li>✓ CRDT P2P Mesh Sync</li>
             <li>✓ Multi-Agent Swarm Bus</li>
@@ -1191,8 +1191,8 @@
         <!-- Enterprise Dedicated -->
         <div class="tier-card" id="tier-card-enterprise" onclick="selectTier('enterprise')">
           <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--purple);">Enterprise</div>
-          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">$2,000 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
-          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">1,000+ RPM</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">₹5,999 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo (~$70)</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">1,000+ RPM • $2,000 Quota</div>
           <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
             <li>✓ Dedicated Redis Mesh</li>
             <li>✓ Custom PII Redaction</li>
@@ -1221,7 +1221,7 @@
       <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
         <button onclick="closeUpgradeModal()" class="btn-brutal" style="font-size: 10px;">Cancel</button>
         <button id="btn-execute-upgrade" onclick="executeTierUpgrade()" class="btn-brutal btn-volt" style="font-size: 11px; font-weight: 800; padding: 8px 16px;">
-          Upgrade to Team Scale ($500/mo) →
+          Upgrade to Team Scale (₹1,999/mo) →
         </button>
       </div>
     </div>
@@ -1863,10 +1863,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       const btn = document.getElementById('btn-execute-upgrade');
       if (btn) {
         const labels = {
-          'free': 'Downgrade to Community ($5/mo)',
-          'pro': 'Activate Dev Pro ($100/mo) →',
-          'scale': 'Upgrade to Team Scale ($500/mo) →',
-          'enterprise': 'Upgrade to Enterprise ($2,000/mo) →'
+          'free': 'Downgrade to Community (₹0/mo)',
+          'pro': 'Activate Dev Pro (₹499/mo) →',
+          'scale': 'Upgrade to Team Scale (₹1,999/mo) →',
+          'enterprise': 'Upgrade to Enterprise (₹5,999/mo) →'
         };
         btn.textContent = labels[tierName] || `Activate ${tierName.toUpperCase()}`;
       }

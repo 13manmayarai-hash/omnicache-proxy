@@ -65,13 +65,13 @@ end
 """
 
 
-# Tier Specifications for Self-Service Upgrades & Razorpay Billing
+# Tier Specifications for Self-Service Upgrades & Razorpay Billing (Option 1 Developer Friendly)
 TIER_SPECS: Dict[str, Dict[str, Any]] = {
     "free": {
         "tier_name": "free",
         "label": "Community Free",
-        "monthly_budget_usd": 5.0,
-        "rate_limit_rpm": 30,
+        "monthly_budget_usd": 15.0,
+        "rate_limit_rpm": 60,
         "price_usd": 0.0,
         "price_inr_paise": 0,
         "price_inr_formatted": "₹0 / mo",
@@ -83,9 +83,9 @@ TIER_SPECS: Dict[str, Dict[str, Any]] = {
         "label": "Developer Pro",
         "monthly_budget_usd": 100.0,
         "rate_limit_rpm": 120,
-        "price_usd": 100.0,
-        "price_inr_paise": 849900,
-        "price_inr_formatted": "₹8,499 / mo",
+        "price_usd": 6.0,
+        "price_inr_paise": 49900,
+        "price_inr_formatted": "₹499 / mo",
         "role": "tenant",
         "features": ["Sub-millisecond ANN", "Streaming Tool Replay", "Multi-Agent Swarm Bus", "Claude Desktop MCP"]
     },
@@ -94,9 +94,9 @@ TIER_SPECS: Dict[str, Dict[str, Any]] = {
         "label": "Team Scale",
         "monthly_budget_usd": 500.0,
         "rate_limit_rpm": 300,
-        "price_usd": 500.0,
-        "price_inr_paise": 4199900,
-        "price_inr_formatted": "₹41,999 / mo",
+        "price_usd": 24.0,
+        "price_inr_paise": 199900,
+        "price_inr_formatted": "₹1,999 / mo",
         "role": "tenant",
         "features": ["CRDT P2P Mesh Sync", "Telephony Audio Adapter", "CSV Telemetry Exports", "Zero-Token Replay"]
     },
@@ -105,9 +105,9 @@ TIER_SPECS: Dict[str, Dict[str, Any]] = {
         "label": "Enterprise Dedicated",
         "monthly_budget_usd": 2000.0,
         "rate_limit_rpm": 1000,
-        "price_usd": 2000.0,
-        "price_inr_paise": 16999900,
-        "price_inr_formatted": "₹1,69,999 / mo",
+        "price_usd": 70.0,
+        "price_inr_paise": 599900,
+        "price_inr_formatted": "₹5,999 / mo",
         "role": "admin",
         "features": ["Dedicated Redis Mesh", "Custom PII Redaction", "Unlimited Swarm Nodes", "99.99% SLA"]
     }

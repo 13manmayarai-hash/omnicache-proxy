@@ -226,3 +226,143 @@ Maximize cache hits before running any agent turn:
    ```bash
    omnicache harness
    ```
+
+---
+
+## 7. Model Context Protocol (MCP) Connector Reference
+
+OmniCache features a complete, production-grade **Model Context Protocol (MCP)** server compliant with the 2024-11-05 specification. It exposes 8 high-performance tools to AI coding agents, IDEs, and LLMs for semantic retrieval, zero-token replays, vector search, and cost analytics.
+
+### Transports Supported
+
+| Transport | Endpoint / Command | Best For |
+|---|---|---|
+| **Remote Streamable HTTP / SSE** | `https://omnicache.rawwgrid.com/mcp` (or `http://localhost:8000/mcp`) | Cloud deployments, Claude Desktop, Cursor remote, multi-agent swarms |
+| **Local Stdio Subprocess** | `python -m mcp.server` or `omnicache mcp` | Local IDEs, offline CLI runners, isolated sandboxes |
+
+---
+
+### Client Configurations
+
+#### 1. Claude Desktop (`claude_desktop_config.json`)
+
+**Remote Cloud SSE Transport (Recommended):**
+*macOS:* `~/Library/Application Support/Claude/claude_desktop_config.json`  
+*Windows:* `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "omnicache": {
+      "url": "https://omnicache.rawwgrid.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_OMNICACHE_KEY",
+        "MCP-Protocol-Version": "2024-11-05"
+      }
+    }
+  }
+}
+```
+
+**Local Subprocess Stdio Transport:**
+```json
+{
+  "mcpServers": {
+    "omnicache": {
+      "command": "python",
+      "args": ["-m", "mcp.server"],
+      "env": {
+        "OMNICACHE_PORT": "8000",
+        "OMNICACHE_ORG_ID": "default"
+      }
+    }
+  }
+}
+```
+
+---
+
+#### 2. Cursor IDE (`.cursor/mcp.json`)
+
+Create `.cursor/mcp.json` in your repository root or configure in Cursor Settings > Features > MCP:
+
+**Remote Cloud Connection:**
+```json
+{
+  "mcpServers": {
+    "omnicache": {
+      "url": "https://omnicache.rawwgrid.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_OMNICACHE_KEY"
+      }
+    }
+  }
+}
+```
+
+**Local Subprocess Connection:**
+```json
+{
+  "mcpServers": {
+    "omnicache": {
+      "command": "omnicache",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+---
+
+#### 3. Claude Code CLI (`~/.claude.json`)
+
+Add to `~/.claude.json`:
+```json
+{
+  "mcpServers": {
+    "omnicache": {
+      "command": "omnicache",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+---
+
+### Available MCP Tools Catalog
+
+| Tool Name | Type | Description |
+|---|---|---|
+| `omnicache_query` | Read-only | Semantic cache lookup. Compares incoming prompt embedding against cached knowledge. Returns instant cached answer if similarity exceeds threshold (>0.88), saving 100% tokens. |
+| `omnicache_store` | Write | Explicitly saves an answer, code snippet, or explanation into vector memory with optional domain tags (`docs`, `sql`, `refactor`). |
+| `omnicache_search` | Read-only | Performs sub-millisecond semantic similarity search across all cached entries, returning top matching concepts and snippets. |
+| `omnicache_replay_tool` | Read-only | Replays deterministic tool outputs (e.g. `read_file`, `git_status`, `grep`) validated against workspace fingerprint and git tree state. |
+| `omnicache_record_tool` | Write | Caches execution outputs of expensive or deterministic tools to enable instant subsequent replays. Automatically sanitizes PII. |
+| `omnicache_invalidate` | Destructive | Purges cached entries matching a specific tag or clears an entire organization's cache. Requires `mcp:write` or `mcp:admin` scope. |
+| `omnicache_stats` | Read-only | Reports live telemetry: total requests, exact & semantic hit counts, hit rate percentage, and total dollars saved. |
+| `omnicache_health` | Read-only | Diagnostic health probe checking SQLite WAL persistence, L1/L2 vector index counts, tool cache size, and server version. |
+
+---
+
+### Direct JSON-RPC 2.0 API Example
+
+To call OmniCache MCP programmatically over curl or HTTP:
+
+```bash
+# Query cached answer
+curl -X POST "https://omnicache.rawwgrid.com/mcp" \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/call",
+    "params": {
+      "name": "omnicache_query",
+      "arguments": {
+        "prompt": "How do I setup a connection pool in SQLAlchemy?"
+      }
+    }
+  }'
+```

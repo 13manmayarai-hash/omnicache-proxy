@@ -3293,6 +3293,7 @@ async def handle_landing(request: Request) -> Response:
 MCP_ACTIVE_SESSIONS: Dict[str, Dict[str, Any]] = {}
 OAUTH_CODES: Dict[str, Dict[str, Any]] = {}
 OAUTH_TOKENS: Dict[str, Dict[str, Any]] = {}
+OAUTH_CLIENTS: Dict[str, Dict[str, Any]] = {}
 GOOGLE_OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
 
 CONSUMED_OAUTH_STATES: Dict[str, float] = {}
@@ -3543,6 +3544,83 @@ async def handle_oauth_protected_resource(request: Request) -> Response:
         "bearer_methods_supported": ["header"]
     }
     return JSONResponse(metadata, headers=cors_headers)
+
+
+async def handle_oauth_register(request: Request) -> Response:
+    """
+    OAuth 2.0 Dynamic Client Registration (RFC 7591) & Client Configuration (RFC 7592).
+    Allows MCP clients (such as Claude Desktop and Claude Connectors) to dynamically
+    register and receive an OAuth client_id for seamless connection.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    if request.method == "GET":
+        client_id = request.path_params.get("client_id") or request.query_params.get("client_id")
+        if client_id and client_id in OAUTH_CLIENTS:
+            client_data = dict(OAUTH_CLIENTS[client_id])
+            client_data.pop("client_secret", None)
+            return JSONResponse(client_data, headers=cors_headers)
+        return JSONResponse({"status": "ready", "registration_endpoint": "/oauth/register"}, headers=cors_headers)
+
+    # Parse POST Registration Request body
+    params: Dict[str, Any] = {}
+    content_type = request.headers.get("content-type", "").lower()
+    if "application/json" in content_type:
+        try:
+            params = await request.json()
+        except Exception:
+            params = {}
+    elif "application/x-www-form-urlencoded" in content_type:
+        try:
+            raw = await request.body()
+            params = {k: v[0] for k, v in parse_qs(raw.decode("utf-8", errors="replace")).items()}
+        except Exception:
+            params = {}
+    if not params:
+        params = dict(request.query_params)
+
+    client_name = str(params.get("client_name") or "Claude Connectors").strip()
+    raw_redirect_uris = params.get("redirect_uris", [])
+    if isinstance(raw_redirect_uris, str):
+        redirect_uris = [u.strip() for u in raw_redirect_uris.split(",") if u.strip()]
+    elif isinstance(raw_redirect_uris, list):
+        redirect_uris = [str(u).strip() for u in raw_redirect_uris if str(u).strip()]
+    else:
+        redirect_uris = []
+
+    # Validate redirect URIs
+    for uri in redirect_uris:
+        if not is_allowed_redirect_uri(uri):
+            return JSONResponse({
+                "error": "invalid_redirect_uri",
+                "error_description": f"The redirect_uri '{uri}' is not allowed or untrusted."
+            }, status_code=400, headers=cors_headers)
+
+    client_id = f"omni_client_{uuid.uuid4().hex[:16]}"
+    client_secret = f"omni_sec_{uuid.uuid4().hex}"
+    grant_types = params.get("grant_types") or ["authorization_code", "refresh_token"]
+    response_types = params.get("response_types") or ["code"]
+    scope = params.get("scope") or "mcp:read mcp:write"
+    token_auth_method = params.get("token_endpoint_auth_method") or "none"
+
+    client_info = {
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "client_id_issued_at": int(time.time()),
+        "client_secret_expires_at": 0,
+        "client_name": client_name,
+        "redirect_uris": redirect_uris,
+        "grant_types": grant_types,
+        "response_types": response_types,
+        "token_endpoint_auth_method": token_auth_method,
+        "scope": scope
+    }
+
+    OAUTH_CLIENTS[client_id] = client_info
+
+    return JSONResponse(client_info, status_code=201, headers=cors_headers)
 
 
 async def handle_oauth_authorize(request: Request) -> Response:
@@ -3890,13 +3968,17 @@ async def handle_oauth_token(request: Request) -> Response:
                 "error_description": "Client authentication failed. A valid client_secret is required for client_credentials grant."
             }, status_code=401, headers=auth_headers)
 
-        # Validate client_secret against quota_manager or admin key
+        # Validate client_secret against quota_manager, registered clients, or admin key
         is_valid_client = False
         target_org = f"org_{client_id}" if client_id else "oauth_tenant"
         target_team = f"OAuth Client ({client_id})" if client_id else "OAuth Client"
 
-        key_info = quota_manager.storage.get_key(client_secret)
-        if key_info and key_info.get("active", True):
+        client_reg = OAUTH_CLIENTS.get(client_id)
+        if client_reg and client_secret and client_reg.get("client_secret") and hmac.compare_digest(client_secret, client_reg.get("client_secret", "")):
+            is_valid_client = True
+            target_team = client_reg.get("client_name", target_team)
+        elif quota_manager.storage.get_key(client_secret) and quota_manager.storage.get_key(client_secret).get("active", True):
+            key_info = quota_manager.storage.get_key(client_secret)
             is_valid_client = True
             target_org = key_info.get("org_id", target_org)
             target_team = key_info.get("team_name", target_team)
@@ -4485,6 +4567,8 @@ routes = [
     Route("/v1/workspace/sync/redis", handle_workspace_sync_redis, methods=["GET", "POST", "OPTIONS"]),
     Route("/.well-known/oauth-authorization-server", handle_oauth_metadata, methods=["GET", "OPTIONS"]),
     Route("/.well-known/oauth-protected-resource", handle_oauth_protected_resource, methods=["GET", "OPTIONS"]),
+    Route("/oauth/register", handle_oauth_register, methods=["GET", "POST", "OPTIONS"]),
+    Route("/oauth/register/{client_id:path}", handle_oauth_register, methods=["GET", "OPTIONS"]),
     Route("/oauth/authorize", handle_oauth_authorize, methods=["GET", "POST", "OPTIONS"]),
     Route("/oauth/token", handle_oauth_token, methods=["POST", "OPTIONS"]),
     Route("/auth/google/login", handle_google_login, methods=["GET", "OPTIONS"]),

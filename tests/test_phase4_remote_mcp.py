@@ -227,6 +227,48 @@ class TestPhase4RemoteMCP(unittest.TestCase):
         self.assertIn("resource", res_meta)
         self.assertIn("authorization_servers", res_meta)
 
+    def test_07b_oauth_dynamic_client_registration(self):
+        """Verify RFC 7591 Dynamic Client Registration endpoint used by Claude Connectors."""
+        # 1. Valid registration request from Claude Connectors
+        reg_payload = {
+            "client_name": "Claude Desktop / Connectors",
+            "redirect_uris": ["https://claude.ai/api/oauth/callback"],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "scope": "mcp:read mcp:write",
+            "token_endpoint_auth_method": "none"
+        }
+        resp_reg = self.client.post("/oauth/register", json=reg_payload)
+        self.assertEqual(resp_reg.status_code, 201)
+        reg_data = resp_reg.json()
+        self.assertIn("client_id", reg_data)
+        self.assertTrue(reg_data["client_id"].startswith("omni_client_"))
+        self.assertEqual(reg_data["client_name"], "Claude Desktop / Connectors")
+        self.assertEqual(reg_data["redirect_uris"], ["https://claude.ai/api/oauth/callback"])
+        client_id = reg_data["client_id"]
+
+        # 2. Query registered client configuration (RFC 7592)
+        resp_query = self.client.get(f"/oauth/register/{client_id}")
+        self.assertEqual(resp_query.status_code, 200)
+        self.assertEqual(resp_query.json()["client_id"], client_id)
+
+        # 3. Untrusted redirect_uri is rejected
+        bad_reg = {
+            "client_name": "Evil Client",
+            "redirect_uris": ["https://attacker-site.com/steal"]
+        }
+        resp_bad = self.client.post("/oauth/register", json=bad_reg)
+        self.assertEqual(resp_bad.status_code, 400)
+        self.assertEqual(resp_bad.json()["error"], "invalid_redirect_uri")
+
+        # 4. Use dynamically registered client_id in OAuth authorization
+        resp_auth = self.client.get(
+            f"/oauth/authorize?client_id={client_id}&response_type=code&redirect_uri=https://claude.ai/api/oauth/callback",
+            follow_redirects=False
+        )
+        self.assertEqual(resp_auth.status_code, 302)
+        self.assertIn("https://claude.ai/api/oauth/callback?code=", resp_auth.headers["location"])
+
     def test_08_oauth2_flow_and_token_call(self):
         """Verify complete OAuth 2.0 authorize -> token -> MCP execution cycle."""
         # 1. Authorize endpoint

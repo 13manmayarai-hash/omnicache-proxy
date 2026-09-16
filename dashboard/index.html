@@ -754,7 +754,10 @@
       justify-content: center;
       align-items: center;
       z-index: 9999;
-      padding: 16px;
+      padding: 36px 16px 24px 16px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      box-sizing: border-box;
     }
 
     .modal-brutal {
@@ -763,11 +766,10 @@
       box-shadow: 8px 8px 0px #000000;
       max-width: 460px;
       width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
       box-sizing: border-box;
-      padding: 20px;
+      padding: 24px 20px 20px 20px;
       position: relative;
+      margin: auto;
     }
 
     .modal-brutal::before {
@@ -782,6 +784,18 @@
       font-weight: 800;
       padding: 2px 6px;
       border: 1.5px solid #000000;
+      z-index: 2;
+    }
+
+    @media (max-width: 640px) {
+      .modal-overlay {
+        padding: 38px 12px 24px 12px;
+        align-items: flex-start;
+      }
+      .modal-brutal {
+        padding: 22px 14px 16px 14px;
+        margin: 16px auto;
+      }
     }
 
     /* Toast Notifications */
@@ -1251,6 +1265,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
   <script>
     const API_BASE = (window.location.protocol === 'file:' || !window.location.host) ? 'http://localhost:8000' : '';
     let currentMode = 'claude';
+    let authModalDismissed = false;
+    try {
+      authModalDismissed = sessionStorage.getItem('omnicache_auth_dismissed') === '1';
+    } catch (e) {}
 
     function showToast(msg, duration = 2400) {
       const t = document.getElementById('toast-msg');
@@ -1323,6 +1341,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
     }
 
     function openAuthModal() {
+      authModalDismissed = false;
+      try {
+        sessionStorage.removeItem('omnicache_auth_dismissed');
+      } catch (e) {}
       const modal = document.getElementById('auth-modal');
       const input = document.getElementById('auth-modal-input');
       const errElem = document.getElementById('auth-modal-error');
@@ -1340,13 +1362,18 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       }
     }
 
-    function showAuthModal(errMsg = '') {
+    function showAuthModal(errMsg = '', force = false) {
+      if (authModalDismissed && !force) return;
       openAuthModal();
       const errElem = document.getElementById('auth-modal-error');
       if (errElem && errMsg) errElem.textContent = errMsg;
     }
 
     function closeAuthModal() {
+      authModalDismissed = true;
+      try {
+        sessionStorage.setItem('omnicache_auth_dismissed', '1');
+      } catch (e) {}
       const modal = document.getElementById('auth-modal');
       if (modal) modal.style.display = 'none';
     }
@@ -1381,12 +1408,17 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           headers: { 'Authorization': `Bearer ${key}` }
         });
         if (res.ok) {
+          authModalDismissed = false;
+          try {
+            sessionStorage.removeItem('omnicache_auth_dismissed');
+          } catch (e) {}
           localStorage.setItem('omnicache_key', key);
           document.cookie = `omnicache_key=${encodeURIComponent(key)}; path=/; max-age=2592000; SameSite=Lax`;
           const playKey = document.getElementById('playground-api-key');
           if (playKey) playKey.value = key;
           updateAuthBadge();
-          closeAuthModal();
+          const modal = document.getElementById('auth-modal');
+          if (modal) modal.style.display = 'none';
           showToast('Gateway Authenticated Successfully');
           await refreshData();
         } else {
@@ -1481,7 +1513,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         });
 
         if (res.status === 401) {
-          showAuthModal('Authentication required: Enter your OmniCache API Key or Admin Key to use the playground.');
+          showAuthModal('Authentication required: Enter your OmniCache API Key or Admin Key to use the playground.', true);
           return;
         }
 
@@ -1501,7 +1533,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
             userExplanation = '⚠️ Authentication required: Enter your OmniCache API Key or Admin Key to use the execution sandbox.';
             badge.className = 'chip-badge chip-orange';
             badge.textContent = errorTitle;
-            showAuthModal(userExplanation);
+            showAuthModal(userExplanation, true);
           } else if (res.status === 429) {
             errorTitle = 'QUOTA DEPLETED';
             const reason = data.error?.message || 'Monthly budget cap or rate limit exceeded.';
@@ -1773,7 +1805,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       try {
         const res = await fetch(`${API_BASE}/v1/cache/stats`, { headers: authHeaders() });
         if (res.status === 401) {
-          showAuthModal('Authentication required: Please enter your OmniCache API Key or Admin Key.');
+          updateAuthBadge();
+          if (!authModalDismissed) {
+            showAuthModal('Authentication required: Please enter your OmniCache API Key or Admin Key.');
+          }
           return;
         }
         const data = await res.json();
@@ -1882,7 +1917,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
         } else {
           if (res.status === 401) {
             showToast('⚠️ Authentication required: Please configure your API key.');
-            showAuthModal('Authentication required to pre-warm workspace.');
+            showAuthModal('Authentication required to pre-warm workspace.', true);
           } else if (res.status === 429) {
             const reason = data.error?.message || 'Monthly budget cap exceeded.';
             showToast(`⚠️ Quota Depleted: ${reason}`);

@@ -41,6 +41,7 @@ class SnapshotStore:
         self._write_queue: "queue.Queue[Optional[Dict[str, Any]]]" = queue.Queue(maxsize=50000)
         self._running = False
         self._worker_thread: Optional[threading.Thread] = None
+        self._batches_count = 0
 
         if self._enable_write_behind:
             self._start_worker()
@@ -277,6 +278,13 @@ class SnapshotStore:
                         conn.execute("DELETE FROM cache_records WHERE org_id = ?", (org_id,))
                     else:
                         conn.execute("DELETE FROM cache_records")
+
+            self._batches_count += 1
+            if self._batches_count % 25 == 0:
+                try:
+                    conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
+                except Exception as cp_err:
+                    logger.debug(f"[SnapshotStore] Periodic WAL checkpoint: {cp_err}")
 
         except Exception as e:
             logger.warning(f"[SnapshotStore] Batch execution error: {e}")
@@ -557,6 +565,16 @@ class SnapshotStore:
     # Lifecycle & Cleanup
     # =========================================================================
 
+    def checkpoint(self, mode: str = "PASSIVE") -> bool:
+        """Executes PRAGMA wal_checkpoint to checkpoint WAL pages to database file."""
+        conn = self._get_connection()
+        try:
+            conn.execute(f"PRAGMA wal_checkpoint({mode});")
+            return True
+        except Exception as exc:
+            logger.warning(f"[SnapshotStore] WAL checkpoint failed: {exc}")
+            return False
+
     def flush(self, timeout: float = 1.0):
         """Blocks until the write-behind queue has fully drained and committed to SQLite."""
         if not self._enable_write_behind or not self._running:
@@ -565,9 +583,14 @@ class SnapshotStore:
         while not self._write_queue.empty() and time.time() < end_time:
             time.sleep(0.01)
         time.sleep(0.02)
+        try:
+            conn = self._get_connection()
+            conn.execute("PRAGMA wal_checkpoint(PASSIVE);")
+        except Exception:
+            pass
 
     def close(self):
-        """Flushes queue, shuts down worker, and closes thread-local SQLite connection."""
+        """Flushes queue, checkpoints WAL, shuts down worker, and closes thread-local SQLite connection."""
         if self._running:
             self._running = False
             if self._worker_thread and self._worker_thread.is_alive():
@@ -576,6 +599,7 @@ class SnapshotStore:
 
         if hasattr(self._local, "conn") and self._local.conn is not None:
             try:
+                self._local.conn.execute("PRAGMA wal_checkpoint(TRUNCATE);")
                 self._local.conn.close()
             except Exception:
                 pass

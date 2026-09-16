@@ -1069,6 +1069,8 @@ async def handle_chat_completions(request: Request) -> Response:
     async def stream_and_record():
         recorded_chunks = []
         full_content_parts = []
+        tool_calls_dict = {}
+        finish_reason = None
         buffer = ""
         stream_cleanly_completed = False
         try:
@@ -1090,6 +1092,25 @@ async def handle_chat_completions(request: Request) -> Response:
                                 delta = choices[0].get("delta", {})
                                 if "content" in delta and delta["content"]:
                                     full_content_parts.append(delta["content"])
+                                if "tool_calls" in delta and delta["tool_calls"]:
+                                    for tc in delta["tool_calls"]:
+                                        tc_idx = tc.get("index", 0)
+                                        if tc_idx not in tool_calls_dict:
+                                            tool_calls_dict[tc_idx] = {
+                                                "id": tc.get("id", ""),
+                                                "type": tc.get("type", "function"),
+                                                "name": tc.get("function", {}).get("name", "") if tc.get("function") else "",
+                                                "arguments": ""
+                                            }
+                                        else:
+                                            if tc.get("id"):
+                                                tool_calls_dict[tc_idx]["id"] = tc.get("id")
+                                            if tc.get("function") and tc["function"].get("name"):
+                                                tool_calls_dict[tc_idx]["name"] = tc["function"]["name"]
+                                        if tc.get("function") and tc["function"].get("arguments"):
+                                            tool_calls_dict[tc_idx]["arguments"] += tc["function"]["arguments"]
+                                if choices[0].get("finish_reason"):
+                                    finish_reason = choices[0]["finish_reason"]
                         elif raw_line == "data: [DONE]":
                             stream_cleanly_completed = True
                 except Exception:
@@ -1102,8 +1123,30 @@ async def handle_chat_completions(request: Request) -> Response:
             await upstream_resp.aclose()
             # ONLY cache if stream cleanly finished without abort/error
             if recorded_chunks and stream_cleanly_completed:
+                built_tool_calls = []
+                if tool_calls_dict:
+                    for idx in sorted(tool_calls_dict.keys()):
+                        tc_data = tool_calls_dict[idx]
+                        built_tool_calls.append({
+                            "id": tc_data["id"] or f"call_{int(time.time()*1000)}_{idx}",
+                            "type": tc_data["type"] or "function",
+                            "function": {
+                                "name": tc_data["name"],
+                                "arguments": tc_data["arguments"]
+                            }
+                        })
+
+                msg_obj = {"role": "assistant"}
+                if full_content_parts:
+                    msg_obj["content"] = "".join(full_content_parts)
+                else:
+                    msg_obj["content"] = None
+
+                if built_tool_calls:
+                    msg_obj["tool_calls"] = built_tool_calls
+
+                c_tok = len("".join(full_content_parts).split()) + (len(str(built_tool_calls).split()) if built_tool_calls else 0)
                 p_tok = len(str(payload.get("messages", "")).split())
-                c_tok = len("".join(full_content_parts).split())
                 tokens_used = p_tok + c_tok
                 METRICS_LEDGER["total_tokens_used"] += tokens_used
                 METRICS_LEDGER["estimated_tokens_used"] += tokens_used
@@ -1117,7 +1160,10 @@ async def handle_chat_completions(request: Request) -> Response:
                     "id": f"chatcmpl-{int(time.time()*1000)}",
                     "object": "chat.completion",
                     "model": routed_model,
-                    "choices": [{"message": {"role": "assistant", "content": "".join(full_content_parts)}}],
+                    "choices": [{
+                        "message": msg_obj,
+                        "finish_reason": finish_reason or ("tool_calls" if built_tool_calls else "stop")
+                    }],
                     "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": tokens_used}
                 }
                 saved_entry = cache_instance.store(
@@ -1503,7 +1549,30 @@ async def handle_anthropic_messages(request: Request) -> Response:
     # 2. Anthropic Cache HIT
     if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC", "HIT_RADIX_TREE"):
         latency_ms = (time.perf_counter() - start_time) * 1000
-        content = entry.response_payload.get("choices", [{}])[0].get("message", {}).get("content", "")
+        cached_payload = entry.response_payload or {}
+        if "content" in cached_payload and isinstance(cached_payload["content"], list):
+            content_blocks = cached_payload["content"]
+            stop_reason = cached_payload.get("stop_reason", "end_turn")
+        else:
+            first_choice = cached_payload.get("choices", [{}])[0] if cached_payload.get("choices") else {}
+            msg = first_choice.get("message", {})
+            text_val = msg.get("content", "") or ""
+            content_blocks = [{"type": "text", "text": text_val}] if text_val else []
+            for tc in msg.get("tool_calls", []):
+                fn = tc.get("function", {})
+                args_str = fn.get("arguments", "{}")
+                try:
+                    args_obj = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception:
+                    args_obj = {}
+                content_blocks.append({
+                    "type": "tool_use",
+                    "id": tc.get("id", f"toolu_cached_{int(time.time()*1000)}"),
+                    "name": fn.get("name", "tool"),
+                    "input": args_obj
+                })
+            stop_reason = "tool_use" if msg.get("tool_calls") else first_choice.get("finish_reason", "end_turn")
+
         usage = entry.response_payload.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", entry.prompt_tokens or 35)
         completion_tokens = usage.get("completion_tokens", entry.completion_tokens or 65)
@@ -1554,39 +1623,33 @@ async def handle_anthropic_messages(request: Request) -> Response:
             **cors_headers
         }
 
+        anthropic_response = {
+            "id": f"msg_cached_{int(time.time()*1000)}",
+            "type": "message",
+            "role": "assistant",
+            "model": entry.model or requested_model,
+            "content": content_blocks,
+            "stop_reason": stop_reason or "end_turn",
+            "usage": {"input_tokens": prompt_tokens, "output_tokens": completion_tokens}
+        }
+        rehydrated = privacy_shield.rehydrate_response(anthropic_response, pii_token_map)
+
         if is_stream:
-            async def stream_cached_anthropic():
-                msg_id = f"msg_cached_{int(time.time()*1000)}"
-                yield f"event: message_start\ndata: {json.dumps({'type': 'message_start', 'message': {'id': msg_id, 'type': 'message', 'role': 'assistant', 'model': entry.model, 'content': [], 'stop_reason': None, 'usage': {'input_tokens': prompt_tokens, 'output_tokens': 1}}})}\n\n"
-                yield f"event: content_block_start\ndata: {json.dumps({'type': 'content_block_start', 'index': 0, 'content_block': {'type': 'text', 'text': ''}})}\n\n"
-                
-                words = content.split(" ")
-                for i, word in enumerate(words):
-                    chunk_text = word + (" " if i < len(words) - 1 else "")
-                    yield f"event: content_block_delta\ndata: {json.dumps({'type': 'content_block_delta', 'index': 0, 'delta': {'type': 'text_delta', 'text': chunk_text}})}\n\n"
-                    await asyncio.sleep(0.008)
-
-                yield f"event: content_block_stop\ndata: {json.dumps({'type': 'content_block_stop', 'index': 0})}\n\n"
-                yield f"event: message_delta\ndata: {json.dumps({'type': 'message_delta', 'delta': {'stop_reason': 'end_turn', 'stop_sequence': None}, 'usage': {'output_tokens': completion_tokens}})}\n\n"
-                yield f"event: message_stop\ndata: {json.dumps({'type': 'message_stop'})}\n\n"
-
-            return StreamingResponse(stream_cached_anthropic(), media_type="text/event-stream", headers={
-                **resp_headers,
-                "Cache-Control": "no-cache, no-transform",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
-            })
+            return StreamingResponse(
+                StreamReplayer.replay_cached_anthropic_stream(
+                    rehydrated,
+                    stream_chunks=entry.stream_chunks,
+                    tokens_per_sec=config.STREAM_REPLAY_TOKENS_PER_SEC
+                ),
+                media_type="text/event-stream",
+                headers={
+                    **resp_headers,
+                    "Cache-Control": "no-cache, no-transform",
+                    "Connection": "keep-alive",
+                    "X-Accel-Buffering": "no"
+                }
+            )
         else:
-            anthropic_response = {
-                "id": f"msg_cached_{int(time.time()*1000)}",
-                "type": "message",
-                "role": "assistant",
-                "model": entry.model,
-                "content": [{"type": "text", "text": content}],
-                "stop_reason": "end_turn",
-                "usage": {"input_tokens": prompt_tokens, "output_tokens": completion_tokens}
-            }
-            rehydrated = privacy_shield.rehydrate_response(anthropic_response, pii_token_map)
             return JSONResponse(rehydrated, headers=resp_headers)
 
     # 3. Anthropic Cache MISS -> Evaluate Model Cascade & Forward Upstream
@@ -1625,6 +1688,9 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
         async def stream_and_record_anthropic():
             full_text_accum = []
+            content_blocks = {}
+            stop_reason = "end_turn"
+            raw_stream_chunks = []
             buffer = ""
             stream_cleanly_completed = False
             try:
@@ -1642,13 +1708,44 @@ async def handle_anthropic_messages(request: Request) -> Response:
                                 data_str = line[6:].strip()
                                 if data_str and data_str != "[DONE]":
                                     data_obj = json.loads(data_str)
+                                    raw_stream_chunks.append(data_obj)
                                     msg_type = data_obj.get("type")
-                                    if msg_type == "content_block_delta":
+                                    if msg_type == "content_block_start":
+                                        cb_idx = data_obj.get("index", 0)
+                                        cb = data_obj.get("content_block", {})
+                                        cb_type = cb.get("type", "text")
+                                        if cb_type == "tool_use":
+                                            content_blocks[cb_idx] = {
+                                                "type": "tool_use",
+                                                "id": cb.get("id", ""),
+                                                "name": cb.get("name", ""),
+                                                "partial_json": ""
+                                            }
+                                        else:
+                                            content_blocks[cb_idx] = {
+                                                "type": "text",
+                                                "text": cb.get("text", "")
+                                            }
+                                    elif msg_type == "content_block_delta":
+                                        cb_idx = data_obj.get("index", 0)
                                         delta = data_obj.get("delta", {})
-                                        if delta.get("type") == "text_delta":
+                                        d_type = delta.get("type")
+                                        if d_type == "text_delta":
                                             delta_text = delta.get("text", "")
                                             if delta_text:
                                                 full_text_accum.append(delta_text)
+                                                if cb_idx not in content_blocks:
+                                                    content_blocks[cb_idx] = {"type": "text", "text": ""}
+                                                content_blocks[cb_idx]["text"] += delta_text
+                                        elif d_type == "input_json_delta":
+                                            partial_json = delta.get("partial_json", "")
+                                            if cb_idx not in content_blocks:
+                                                content_blocks[cb_idx] = {"type": "tool_use", "id": "", "name": "", "partial_json": ""}
+                                            content_blocks[cb_idx]["partial_json"] += partial_json
+                                    elif msg_type == "message_delta":
+                                        delta = data_obj.get("delta", {})
+                                        if delta.get("stop_reason"):
+                                            stop_reason = delta.get("stop_reason")
                                     elif msg_type == "message_stop":
                                         stream_cleanly_completed = True
                     except Exception:
@@ -1660,10 +1757,43 @@ async def handle_anthropic_messages(request: Request) -> Response:
             finally:
                 await stream_resp.aclose()
                 # ONLY cache if stream cleanly finished without abort/error to prevent serving truncated replies
-                if full_text_accum and stream_cleanly_completed:
+                has_content = bool(full_text_accum or content_blocks)
+                if has_content and stream_cleanly_completed:
                     full_text = "".join(full_text_accum)
+                    final_blocks = []
+                    tool_calls = []
+                    for b_idx in sorted(content_blocks.keys()):
+                        b = content_blocks[b_idx]
+                        if b.get("type") == "text":
+                            final_blocks.append({"type": "text", "text": b.get("text", "")})
+                        elif b.get("type") == "tool_use":
+                            raw_args = b.get("partial_json", "")
+                            try:
+                                parsed_args = json.loads(raw_args) if raw_args else {}
+                            except Exception:
+                                parsed_args = {}
+                            tool_id = b.get("id") or f"toolu_{int(time.time()*1000)}_{b_idx}"
+                            tool_name = b.get("name", "tool")
+                            final_blocks.append({
+                                "type": "tool_use",
+                                "id": tool_id,
+                                "name": tool_name,
+                                "input": parsed_args
+                            })
+                            tool_calls.append({
+                                "id": tool_id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": raw_args or "{}"
+                                }
+                            })
+
+                    if not final_blocks and full_text:
+                        final_blocks.append({"type": "text", "text": full_text})
+
                     p_tok = len(str(messages).split())
-                    c_tok = len(full_text.split())
+                    c_tok = len(full_text.split()) + (len(str(final_blocks).split()) if tool_calls else 0)
                     tokens_used = p_tok + c_tok
                     METRICS_LEDGER["total_tokens_used"] += tokens_used
                     METRICS_LEDGER["estimated_tokens_used"] += tokens_used
@@ -1673,22 +1803,29 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     if key_id:
                         quota_manager.record_spend(key_id, spend_usd)
                     
+                    msg_obj = {"role": "assistant", "content": full_text}
+                    if tool_calls:
+                        msg_obj["tool_calls"] = tool_calls
+
                     cacheable_res_payload = {
                         "id": f"msg_{int(time.time()*1000)}",
                         "object": "chat.completion",
-                        "choices": [{"message": {"role": "assistant", "content": full_text}}],
+                        "choices": [{"message": msg_obj, "finish_reason": "tool_calls" if tool_calls else stop_reason}],
+                        "content": final_blocks,
+                        "stop_reason": stop_reason,
                         "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": p_tok + c_tok}
                     }
                     saved_entry = cache_instance.store(
                         payload=normalized_payload,
                         response_payload=cacheable_res_payload,
                         org_id=org_id,
+                        stream_chunks=raw_stream_chunks,
                         is_exact_tokens=False,
                         prompt_tokens=p_tok,
                         completion_tokens=c_tok
                     )
                     asyncio.create_task(snapshot_store.persist_entry_async(saved_entry))
-                    radix_tree.insert_conversation(messages, cacheable_res_payload, model=requested_model, org_id=org_id)
+                    radix_tree.insert_conversation(messages, cacheable_res_payload, model=requested_model, org_id=org_id, stream_chunks=raw_stream_chunks)
                     if extracted_audio:
                         for aud_h, p_txt, _ in extracted_audio:
                             audio_cache.store_audio(aud_h, p_txt, cacheable_res_payload)
@@ -1701,7 +1838,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
                             result_payload=cacheable_res_payload,
                             tokens_saved=tokens_used
                         )
-                elif full_text_accum and not stream_cleanly_completed:
+                elif has_content and not stream_cleanly_completed:
                     print(f"[OmniCache {time.strftime('%H:%M:%S')}] ⚠️ Stream aborted ({len(full_text_accum)} chunks received) - discarding partial response from cache.", flush=True)
 
         latency_ms = (time.perf_counter() - start_time) * 1000
@@ -1798,11 +1935,32 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
             content_blocks = anthropic_res.get("content", [])
             full_content = "\n".join([b.get("text", "") for b in content_blocks if isinstance(b, dict) and b.get("type") == "text"])
+            tool_calls = []
+            for b in content_blocks:
+                if isinstance(b, dict) and b.get("type") == "tool_use":
+                    tool_calls.append({
+                        "id": b.get("id", f"toolu_{int(time.time()*1000)}"),
+                        "type": "function",
+                        "function": {
+                            "name": b.get("name", "tool"),
+                            "arguments": json.dumps(b.get("input", {}))
+                        }
+                    })
 
+            msg_obj = {"role": "assistant", "content": full_content}
+            if tool_calls:
+                msg_obj["tool_calls"] = tool_calls
+
+            stop_reason = anthropic_res.get("stop_reason", "end_turn")
             cacheable_res_payload = {
                 "id": anthropic_res.get("id", f"msg_{int(time.time()*1000)}"),
                 "object": "chat.completion",
-                "choices": [{"message": {"role": "assistant", "content": full_content}}],
+                "choices": [{
+                    "message": msg_obj,
+                    "finish_reason": "tool_calls" if tool_calls else stop_reason
+                }],
+                "content": content_blocks,
+                "stop_reason": stop_reason,
                 "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": tokens_used}
             }
             saved_entry = cache_instance.store(
@@ -4457,6 +4615,13 @@ async def handle_mcp(request: Request) -> Response:
     res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin, token_scope=token_scope)
     if res is None:
         return Response(status_code=204, headers=base_headers)
+
+    # HIGH-06: Push POST response into active SSE session queue for long-lived listeners
+    if session_id in MCP_ACTIVE_SESSIONS:
+        try:
+            MCP_ACTIVE_SESSIONS[session_id]["queue"].put_nowait(res)
+        except Exception as q_err:
+            logger.debug(f"[MCP] Could not enqueue response for session {session_id}: {q_err}")
 
     # If the client requested SSE response stream on POST, stream it
     if "text/event-stream" in accept_header:

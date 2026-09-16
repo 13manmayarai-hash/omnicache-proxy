@@ -228,14 +228,27 @@ class AutoEmbedder(BaseEmbedder):
 
 
 # Backward-compatible class adapter for fuzzy near-duplicate matching
-class FastSemanticEmbedder:
+class _FastSemanticEmbedderMeta(type):
+    @property
+    def DIMENSIONS(cls) -> int:
+        return cls._instance.dimensions
+
+
+class FastSemanticEmbedder(metaclass=_FastSemanticEmbedderMeta):
     """
     Fast Lexical & Near-Duplicate Fuzzy Embedder (aliased as FastSemanticEmbedder for API compatibility).
     Uses high-speed subword n-gram hashing and canonical synonym canonicalization for local
     near-duplicate prompt matching without deep learning dependencies.
     """
     _instance = AutoEmbedder()
-    DIMENSIONS = 512
+
+    @classmethod
+    def get_dimensions(cls) -> int:
+        return cls._instance.dimensions
+
+    @property
+    def dimensions(self) -> int:
+        return self._instance.dimensions
 
     @classmethod
     def embed(cls, text: str) -> List[float]:

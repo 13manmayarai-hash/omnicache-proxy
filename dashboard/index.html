@@ -820,6 +820,134 @@
       from { transform: translateY(10px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
+    /* Claude-Style Left Flyout Side Menu Drawer */
+    #side-menu-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(4, 6, 10, 0.78);
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
+      z-index: 2500;
+      display: none;
+      opacity: 0;
+      transition: opacity 0.22s ease;
+    }
+
+    #side-menu-backdrop.open {
+      display: block;
+      opacity: 1;
+    }
+
+    #side-menu-drawer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 380px;
+      max-width: 88vw;
+      height: 100vh;
+      background: #0c0f17;
+      border-right: 2.5px solid #000000;
+      box-shadow: 8px 0 0 #000000;
+      z-index: 2501;
+      transform: translateX(-100%);
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    #side-menu-drawer.open {
+      transform: translateX(0);
+    }
+
+    .side-menu-header {
+      padding: 14px 16px;
+      background: #111520;
+      border-bottom: 2px solid #000000;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .side-menu-section {
+      padding: 14px 16px;
+      border-bottom: 1.5px solid rgba(0, 240, 255, 0.12);
+    }
+
+    .side-menu-section-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--cyan);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .side-menu-card {
+      background: #131722;
+      border: 1.5px solid #000000;
+      box-shadow: var(--shadow-sm);
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+
+    /* Upgrade Modal & Tier Cards */
+    .tier-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+      margin-bottom: 16px;
+    }
+
+    .tier-card {
+      background: #131722;
+      border: 2px solid #000000;
+      box-shadow: var(--shadow-sm);
+      padding: 14px 12px;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tier-card:hover {
+      transform: translate(-1px, -1px);
+      box-shadow: var(--shadow-md);
+      border-color: var(--cyan);
+    }
+
+    .tier-card.selected {
+      border-color: var(--volt);
+      box-shadow: 4px 4px 0px var(--volt);
+      background: #171d2b;
+    }
+
+    .tier-badge-recommended {
+      position: absolute;
+      top: -8px;
+      right: 10px;
+      background: var(--volt);
+      color: #000000;
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border: 1px solid #000000;
+      text-transform: uppercase;
+    }
   </style>
 </head>
 <body>
@@ -836,10 +964,278 @@
     </div>
   </div>
 
+  <!-- =========================================================================
+       CLAUDE-STYLE LEFT FLYOUT SIDE MENU DRAWER
+       ========================================================================= -->
+  <div id="side-menu-backdrop" onclick="closeSideMenu()"></div>
+
+  <aside id="side-menu-drawer" aria-label="Side Control Center">
+    <div class="side-menu-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="logo-mark" style="font-size: 13px; padding: 2px 6px;">⚡ OC</div>
+        <div>
+          <div id="menu-workspace-name" style="font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--text-main); line-height: 1.2;">Workspace</div>
+          <div style="font-family: var(--font-mono); font-size: 9px; color: var(--cyan);" id="menu-workspace-org">org_default</div>
+        </div>
+      </div>
+      <button onclick="closeSideMenu()" class="btn-brutal" style="padding: 4px 8px; font-size: 10px;" title="Close Menu (Esc)">✕ ESC</button>
+    </div>
+
+    <!-- Section 1: User & Key Identity -->
+    <div class="side-menu-section">
+      <div class="side-menu-section-title">
+        <span>👤 User & API Keyring</span>
+        <span id="menu-tier-badge" class="version-badge" style="margin-left: auto; font-size: 9px; padding: 1px 5px;">PRO TIER</span>
+      </div>
+      <div class="side-menu-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span style="font-size: 10px; font-family: var(--font-mono); color: var(--text-muted);">ACTIVE KEY</span>
+          <span id="menu-role-tag" style="font-size: 9px; font-family: var(--font-mono); color: var(--volt); font-weight: 700;">TENANT</span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <input type="text" id="menu-masked-key" readonly value="omni_live_..." class="input-brutal" style="flex: 1; font-size: 10px; padding: 4px 8px; background: #080a0f;" />
+          <button onclick="copyActiveKey()" class="btn-brutal" style="padding: 4px 8px; font-size: 9px;" title="Copy Key">COPY</button>
+          <button onclick="openAuthModal(); closeSideMenu();" class="btn-brutal btn-volt" style="padding: 4px 8px; font-size: 9px;" title="Switch Key">KEYRING</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Quota Spend & Upgrade Provision -->
+    <div class="side-menu-section">
+      <div class="side-menu-section-title">
+        <span>⚡ Monthly Quota & Spend</span>
+        <span id="menu-rpm-badge" style="margin-left: auto; font-size: 9px; font-family: var(--font-mono); color: var(--text-dim);">120 RPM</span>
+      </div>
+      <div class="side-menu-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span id="menu-spend-readout" style="font-size: 11px; font-family: var(--font-mono); font-weight: 800; color: var(--text-main);">$0.00 / $100.00 USD</span>
+          <span id="menu-spend-pct" style="font-size: 10px; font-family: var(--font-mono); font-weight: 700; color: var(--volt);">0.0%</span>
+        </div>
+        <div style="width: 100%; height: 7px; background: #06080d; border: 1px solid #000; overflow: hidden; margin-bottom: 8px;">
+          <div id="menu-quota-bar" style="height: 100%; width: 0%; background: var(--volt); transition: width 0.3s ease, background-color 0.3s ease;"></div>
+        </div>
+        <div id="menu-exhaustion-notice" style="display: none; font-size: 9.5px; font-family: var(--font-mono); color: var(--orange); margin-bottom: 6px; font-weight: 700;">
+          ⚠️ 80%+ Quota consumed. Consider upgrading.
+        </div>
+        <button onclick="openUpgradeModal()" class="btn-brutal btn-volt" style="width: 100%; justify-content: center; font-size: 10px; padding: 7px; font-weight: 800;" title="Upgrade Tier or Top-up Limits">
+          ↑ UPGRADE PLAN & BOOST LIMITS
+        </button>
+      </div>
+    </div>
+
+    <!-- Section 3: Environment & Gateway Settings -->
+    <div class="side-menu-section">
+      <div class="side-menu-section-title">
+        <span>⚙ Environment Settings</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div>
+          <label style="font-size: 9.5px; font-family: var(--font-mono); color: var(--text-muted); display: block; margin-bottom: 3px;">GATEWAY TARGET</label>
+          <select id="setting-gateway-base" onchange="updateGatewaySetting(this.value)" class="input-brutal" style="width: 100%; font-size: 10.5px; padding: 5px;">
+            <option value="">Live Production (omnicache.rawwgrid.com)</option>
+            <option value="http://localhost:8000">Local Daemon (http://localhost:8000)</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 9.5px; font-family: var(--font-mono); color: var(--text-muted); display: block; margin-bottom: 3px;">DEFAULT MODEL TARGET</label>
+          <select id="setting-default-model" onchange="updateModelSetting(this.value)" class="input-brutal" style="width: 100%; font-size: 10.5px; padding: 5px;">
+            <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Recommended)</option>
+            <option value="gpt-4o">GPT-4o (OpenAI)</option>
+            <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fast & Economy)</option>
+            <option value="ollama/llama3">Local Ollama (Llama 3)</option>
+          </select>
+        </div>
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+            <label style="font-size: 9.5px; font-family: var(--font-mono); color: var(--text-muted);">SEMANTIC SENSITIVITY (θ)</label>
+            <span id="setting-sim-val" style="font-size: 9.5px; font-family: var(--font-mono); color: var(--cyan); font-weight: 700;">0.85</span>
+          </div>
+          <input type="range" id="setting-sim-slider" min="0.70" max="0.98" step="0.01" value="0.85" oninput="updateSimSlider(this.value)" style="width: 100%; accent-color: var(--cyan); cursor: pointer;" />
+        </div>
+        <div>
+          <label style="font-size: 9.5px; font-family: var(--font-mono); color: var(--text-muted); display: block; margin-bottom: 3px;">CACHE OPERATING POLICY</label>
+          <select id="setting-cache-mode" onchange="updateCacheModeSetting(this.value)" class="input-brutal" style="width: 100%; font-size: 10.5px; padding: 5px;">
+            <option value="rw">Read & Write (Standard Caching)</option>
+            <option value="ro">Read Only (Serve Hits, Skip Writes)</option>
+            <option value="bypass">Bypass Cache (Pass to Upstream)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 4: 1-Click Developer Connectors -->
+    <div class="side-menu-section">
+      <div class="side-menu-section-title">
+        <span>🔌 Developer Connectors</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <button onclick="copyClaudeCodeSnippet()" class="btn-brutal" style="justify-content: space-between; font-size: 10px; padding: 6px 10px;">
+          <span>Claude Code (Terminal Export)</span>
+          <span style="color: var(--cyan); font-weight: 800;">COPY</span>
+        </button>
+        <button onclick="copyClaudeDesktopMcp()" class="btn-brutal" style="justify-content: space-between; font-size: 10px; padding: 6px 10px;">
+          <span>Claude Desktop (MCP Config)</span>
+          <span style="color: var(--cyan); font-weight: 800;">COPY</span>
+        </button>
+        <button onclick="copyCursorSnippet()" class="btn-brutal" style="justify-content: space-between; font-size: 10px; padding: 6px 10px;">
+          <span>Cursor / OpenAI SDK Snippet</span>
+          <span style="color: var(--cyan); font-weight: 800;">COPY</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Section 5: System Telemetry & Engine Diagnostics -->
+    <div class="side-menu-section">
+      <div class="side-menu-section-title">
+        <span>🛡 System Diagnostics</span>
+      </div>
+      <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted); display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; justify-content: space-between;">
+          <span>Storage Engine:</span>
+          <span style="color: var(--text-main); font-weight: 700;">SQLite WAL Mode</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>Vector Embedder:</span>
+          <span style="color: var(--volt); font-weight: 700;">256-dim Int8 AVX2</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>PII Redaction:</span>
+          <span style="color: var(--cyan); font-weight: 700;">HMAC-SHA256 Active</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span>CRDT Mesh:</span>
+          <span style="color: var(--text-main);" id="menu-mesh-status">P2P Ready</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 6: Danger Zone & Footer -->
+    <div class="side-menu-section" style="border-bottom: none; margin-top: auto;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <button onclick="purgeCacheNow(); closeSideMenu();" class="btn-brutal btn-danger" style="justify-content: center; font-size: 10px; padding: 6px;">
+          🗑️ Purge Workspace Cache
+        </button>
+        <button onclick="clearAuthKey(); closeSideMenu();" class="btn-brutal" style="justify-content: center; font-size: 10px; padding: 6px; color: var(--orange);">
+          🚪 Sign Out & Clear Key
+        </button>
+      </div>
+      <div style="text-align: center; margin-top: 12px; font-family: var(--font-mono); font-size: 9px; color: var(--text-dim);">
+        OmniCache AI Proxy v3.1.0 • Blueprint
+      </div>
+    </div>
+  </aside>
+
+  <!-- =========================================================================
+       TIER UPGRADE & RAZORPAY BILLING MODAL (OPTION C HYBRID)
+       ========================================================================= -->
+  <div id="upgrade-modal" class="modal-overlay" onclick="if(event.target===this) closeUpgradeModal();">
+    <div class="modal-brutal" style="max-width: 680px; width: 94%;">
+      <div class="modal-header-row">
+        <div>
+          <div style="font-size: 14px; font-weight: 900; text-transform: uppercase;">// SUBSCRIPTION.UPGRADE.ENGINE</div>
+          <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 2px;">
+            Select a plan to boost your monthly spend budget, rate limits, and multi-agent capacity.
+          </div>
+        </div>
+        <button onclick="closeUpgradeModal()" class="btn-brutal" style="padding: 2px 7px; font-size: 10px;">✕</button>
+      </div>
+
+      <!-- Current Usage Strip -->
+      <div class="side-menu-card" style="margin-top: 12px; background: #0a0d14;">
+        <div style="display: flex; justify-content: space-between; align-items: center; font-family: var(--font-mono); font-size: 10px;">
+          <span>Current Active Tier: <strong id="upgrade-modal-current-tier" style="color: var(--volt);">PRO ($100/mo)</strong></span>
+          <span>Monthly Spend: <strong id="upgrade-modal-current-spend" style="color: var(--text-main);">$0.00</strong></span>
+        </div>
+      </div>
+
+      <!-- Tier Selection Cards -->
+      <div class="tier-cards-grid">
+        <!-- Community Free -->
+        <div class="tier-card" id="tier-card-free" onclick="selectTier('free')">
+          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase;">Community</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">$5 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">30 RPM</div>
+          <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
+            <li>✓ L1/L2 Vector Cache</li>
+            <li>✓ SQLite WAL Storage</li>
+            <li>✓ Local MCP Stdio</li>
+          </ul>
+        </div>
+
+        <!-- Developer Pro -->
+        <div class="tier-card" id="tier-card-pro" onclick="selectTier('pro')">
+          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--cyan);">Dev Pro</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">$100 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">120 RPM (₹8,499)</div>
+          <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
+            <li>✓ Sub-ms ANN Search</li>
+            <li>✓ Tool Streaming Replay</li>
+            <li>✓ Claude Desktop MCP</li>
+          </ul>
+        </div>
+
+        <!-- Team Scale (Recommended) -->
+        <div class="tier-card selected" id="tier-card-scale" onclick="selectTier('scale')">
+          <span class="tier-badge-recommended">POPULAR</span>
+          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--volt);">Team Scale</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--volt); margin: 4px 0;">$500 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">300 RPM (₹41,999)</div>
+          <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
+            <li>✓ CRDT P2P Mesh Sync</li>
+            <li>✓ Multi-Agent Swarm Bus</li>
+            <li>✓ Telephony Audio Adapter</li>
+            <li>✓ CSV Telemetry Export</li>
+          </ul>
+        </div>
+
+        <!-- Enterprise Dedicated -->
+        <div class="tier-card" id="tier-card-enterprise" onclick="selectTier('enterprise')">
+          <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--purple);">Enterprise</div>
+          <div style="font-size: 16px; font-weight: 900; color: var(--text-main); margin: 4px 0;">$2,000 <span style="font-size: 10px; color: var(--text-muted); font-weight: 500;">/ mo</span></div>
+          <div style="font-family: var(--font-mono); font-size: 9.5px; color: var(--cyan); margin-bottom: 6px;">1,000+ RPM</div>
+          <ul style="font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); list-style: none; padding: 0; line-height: 1.5;">
+            <li>✓ Dedicated Redis Mesh</li>
+            <li>✓ Custom PII Redaction</li>
+            <li>✓ 99.99% Availability SLA</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Payment Method Selection (Option C: Razorpay + Sandbox Hybrid) -->
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); display: block; margin-bottom: 6px;">CHOOSE PAYMENT / ACTIVATION METHOD</label>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <label class="btn-brutal" style="flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 10px; padding: 8px;">
+            <input type="radio" name="payment-mode" value="razorpay" checked id="pay-mode-razorpay" style="accent-color: var(--volt);" />
+            <span>💳 Razorpay (UPI / Card / NetBanking)</span>
+          </label>
+          <label class="btn-brutal" style="flex: 1; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 10px; padding: 8px;">
+            <input type="radio" name="payment-mode" value="sandbox" id="pay-mode-sandbox" style="accent-color: var(--volt);" />
+            <span>⚡ Instant 1-Click Upgrade (Sandbox/Eval)</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="upgrade-modal-error" style="min-height: 1.2rem; font-size: 10.5px; color: var(--orange); font-family: var(--font-mono); font-weight: 700; margin-bottom: 8px;"></div>
+
+      <div style="display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+        <button onclick="closeUpgradeModal()" class="btn-brutal" style="font-size: 10px;">Cancel</button>
+        <button id="btn-execute-upgrade" onclick="executeTierUpgrade()" class="btn-brutal btn-volt" style="font-size: 11px; font-weight: 800; padding: 8px 16px;">
+          Upgrade to Team Scale ($500/mo) →
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Header Navigation -->
   <header>
     <div class="container nav-inner">
-      <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button id="btn-side-menu-toggle" onclick="toggleSideMenu()" class="btn-brutal btn-volt" style="padding: 5px 9px; font-size: 11px;" title="Open Side Control Center (User Details, Settings & Upgrades)">
+          <span style="font-weight: 900; line-height: 1;">☰</span>
+          <span class="btn-label" style="font-size: 10px; margin-left: 2px;">MENU</span>
+        </button>
+
         <a href="/" class="logo-group" title="OmniCache AI Proxy">
           <div class="logo-mark">⚡ OC</div>
           <div class="logo-text">
@@ -1327,6 +1723,378 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       }
     }
 
+    // =========================================================================
+    // Claude-Style Side Menu Drawer Controller
+    // =========================================================================
+    let sideMenuOpen = false;
+
+    function openSideMenu() {
+      sideMenuOpen = true;
+      const drawer = document.getElementById('side-menu-drawer');
+      const backdrop = document.getElementById('side-menu-backdrop');
+      if (drawer) drawer.classList.add('open');
+      if (backdrop) backdrop.classList.add('open');
+      fetchWorkspaceTierInfo();
+    }
+
+    function closeSideMenu() {
+      sideMenuOpen = false;
+      const drawer = document.getElementById('side-menu-drawer');
+      const backdrop = document.getElementById('side-menu-backdrop');
+      if (drawer) drawer.classList.remove('open');
+      if (backdrop) backdrop.classList.remove('open');
+    }
+
+    function toggleSideMenu() {
+      if (sideMenuOpen) closeSideMenu();
+      else openSideMenu();
+    }
+
+    // ESC key closes side menu and upgrade modal
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (sideMenuOpen) closeSideMenu();
+        closeUpgradeModal();
+      }
+    });
+
+    let currentWorkspaceTier = 'pro';
+    let currentSpendUSD = 0.0;
+    let currentBudgetUSD = 100.0;
+    let currentRazorpayKey = '';
+
+    async function fetchWorkspaceTierInfo() {
+      const key = getAuthKey();
+      if (!key) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/workspace/tier`, {
+          headers: authHeaders()
+        });
+        if (res.ok) {
+          const data = await res.json();
+          currentWorkspaceTier = data.tier || 'pro';
+          currentSpendUSD = data.current_spend_usd || 0.0;
+          currentBudgetUSD = data.monthly_budget_usd || 100.0;
+          currentRazorpayKey = data.razorpay_key_id || '';
+
+          const nameEl = document.getElementById('menu-workspace-name');
+          if (nameEl) nameEl.textContent = data.team_name || 'Workspace';
+          const orgEl = document.getElementById('menu-workspace-org');
+          if (orgEl) orgEl.textContent = data.org_id || 'org_default';
+          const tierBadge = document.getElementById('menu-tier-badge');
+          if (tierBadge) tierBadge.textContent = `${(data.tier || 'pro').toUpperCase()} TIER`;
+          const roleTag = document.getElementById('menu-role-tag');
+          if (roleTag) roleTag.textContent = (data.role || 'tenant').toUpperCase();
+          const maskedKeyEl = document.getElementById('menu-masked-key');
+          if (maskedKeyEl) {
+            maskedKeyEl.value = key.length > 14 ? `${key.slice(0, 8)}...${key.slice(-4)}` : key;
+          }
+          const rpmBadge = document.getElementById('menu-rpm-badge');
+          if (rpmBadge) rpmBadge.textContent = `${data.rate_limit_rpm || 120} RPM`;
+
+          const spendReadout = document.getElementById('menu-spend-readout');
+          if (spendReadout) {
+            spendReadout.textContent = `$${currentSpendUSD.toFixed(2)} / $${currentBudgetUSD.toFixed(2)} USD`;
+          }
+          const spendPctEl = document.getElementById('menu-spend-pct');
+          const pct = data.spend_percentage || 0.0;
+          if (spendPctEl) spendPctEl.textContent = `${pct.toFixed(1)}%`;
+
+          const quotaBar = document.getElementById('menu-quota-bar');
+          if (quotaBar) {
+            quotaBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+            if (pct >= 100) {
+              quotaBar.style.background = 'var(--orange)';
+            } else if (pct >= 80) {
+              quotaBar.style.background = '#ffd000';
+            } else {
+              quotaBar.style.background = 'var(--volt)';
+            }
+          }
+
+          const exNotice = document.getElementById('menu-exhaustion-notice');
+          if (exNotice) {
+            if (pct >= 100) {
+              exNotice.textContent = '🚫 100% Quota Exhausted. Requests throttled.';
+              exNotice.style.display = 'block';
+            } else if (pct >= 80) {
+              exNotice.textContent = `⚠️ ${pct.toFixed(0)}% Quota consumed. Consider upgrading.`;
+              exNotice.style.display = 'block';
+            } else {
+              exNotice.style.display = 'none';
+            }
+          }
+
+          const curTierEl = document.getElementById('upgrade-modal-current-tier');
+          if (curTierEl) curTierEl.textContent = `${(data.tier || 'pro').toUpperCase()} ($${currentBudgetUSD.toFixed(0)}/mo)`;
+          const curSpendEl = document.getElementById('upgrade-modal-current-spend');
+          if (curSpendEl) curSpendEl.textContent = `$${currentSpendUSD.toFixed(2)} (${pct.toFixed(1)}%)`;
+        }
+      } catch (err) {
+        console.warn('Failed to load workspace tier status:', err);
+      }
+    }
+
+    // =========================================================================
+    // Upgrade Modal & Razorpay Hybrid Billing Controller
+    // =========================================================================
+    let selectedTierName = 'scale';
+
+    function openUpgradeModal() {
+      const modal = document.getElementById('upgrade-modal');
+      if (modal) modal.style.display = 'flex';
+      const errEl = document.getElementById('upgrade-modal-error');
+      if (errEl) errEl.textContent = '';
+      selectTier('scale');
+      fetchWorkspaceTierInfo();
+    }
+
+    function closeUpgradeModal() {
+      const modal = document.getElementById('upgrade-modal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function selectTier(tierName) {
+      selectedTierName = tierName;
+      document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+      const card = document.getElementById(`tier-card-${tierName}`);
+      if (card) card.classList.add('selected');
+
+      const btn = document.getElementById('btn-execute-upgrade');
+      if (btn) {
+        const labels = {
+          'free': 'Downgrade to Community ($5/mo)',
+          'pro': 'Activate Dev Pro ($100/mo) →',
+          'scale': 'Upgrade to Team Scale ($500/mo) →',
+          'enterprise': 'Upgrade to Enterprise ($2,000/mo) →'
+        };
+        btn.textContent = labels[tierName] || `Activate ${tierName.toUpperCase()}`;
+      }
+    }
+
+    function loadRazorpayScript() {
+      return new Promise((resolve) => {
+        if (window.Razorpay) return resolve(true);
+        const script = document.createElement('script');
+        script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+      });
+    }
+
+    async function executeTierUpgrade() {
+      const key = getAuthKey();
+      const errEl = document.getElementById('upgrade-modal-error');
+      const btn = document.getElementById('btn-execute-upgrade');
+      if (errEl) errEl.textContent = '';
+
+      if (!key) {
+        if (errEl) errEl.textContent = 'Please configure your API key before upgrading.';
+        return;
+      }
+
+      const isRazorpay = document.getElementById('pay-mode-razorpay')?.checked;
+      const method = isRazorpay ? 'razorpay' : 'sandbox';
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Processing Upgrade...';
+      }
+
+      try {
+        if (method === 'sandbox') {
+          const res = await fetch(`${API_BASE}/v1/workspace/upgrade`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              requested_tier: selectedTierName,
+              payment_method: 'sandbox'
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            showToast(`🎉 Upgraded to ${selectedTierName.toUpperCase()}! Limits boosted.`);
+            closeUpgradeModal();
+            await fetchWorkspaceTierInfo();
+            await refreshData();
+          } else {
+            if (errEl) errEl.textContent = `⚠️ Upgrade failed: ${data.error?.message || 'Server error'}`;
+          }
+        } else {
+          const loaded = await loadRazorpayScript();
+          if (!loaded) {
+            if (errEl) errEl.textContent = '⚠️ Could not load Razorpay SDK. Check network or switch to Sandbox mode.';
+            if (btn) {
+              btn.disabled = false;
+              selectTier(selectedTierName);
+            }
+            return;
+          }
+
+          const orderRes = await fetch(`${API_BASE}/v1/billing/razorpay/create-order`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ tier: selectedTierName })
+          });
+          const orderData = await orderRes.json();
+          if (!orderRes.ok || !orderData.order_id) {
+            if (errEl) errEl.textContent = `⚠️ Failed to create Razorpay order: ${orderData.error?.message || 'API error'}`;
+            if (btn) {
+              btn.disabled = false;
+              selectTier(selectedTierName);
+            }
+            return;
+          }
+
+          const options = {
+            key: orderData.key_id,
+            amount: orderData.amount,
+            currency: orderData.currency || 'INR',
+            name: 'OmniCache AI Proxy',
+            description: `Upgrade to ${selectedTierName.toUpperCase()} Subscription Tier`,
+            order_id: orderData.order_id,
+            theme: { color: '#c8ff00' },
+            handler: async function (response) {
+              try {
+                const verifyRes = await fetch(`${API_BASE}/v1/billing/razorpay/verify-payment`, {
+                  method: 'POST',
+                  headers: authHeaders({ 'Content-Type': 'application/json' }),
+                  body: JSON.stringify({
+                    requested_tier: selectedTierName,
+                    payment_method: 'razorpay',
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature
+                  })
+                });
+                const verifyData = await verifyRes.json();
+                if (verifyRes.ok) {
+                  showToast(`🎉 Payment verified! Upgraded to ${selectedTierName.toUpperCase()}.`);
+                  closeUpgradeModal();
+                  await fetchWorkspaceTierInfo();
+                  await refreshData();
+                } else {
+                  if (errEl) errEl.textContent = `⚠️ Verification failed: ${verifyData.error?.message || 'Invalid signature'}`;
+                }
+              } catch (e) {
+                if (errEl) errEl.textContent = `⚠️ Verification network error: ${e.message}`;
+              }
+            },
+            modal: {
+              ondismiss: function() {
+                if (btn) {
+                  btn.disabled = false;
+                  selectTier(selectedTierName);
+                }
+              }
+            }
+          };
+
+          const rzp = new window.Razorpay(options);
+          rzp.on('payment.failed', function (resp) {
+            if (errEl) errEl.textContent = `⚠️ Payment failed: ${resp.error?.description || 'Declined'}`;
+            if (btn) {
+              btn.disabled = false;
+              selectTier(selectedTierName);
+            }
+          });
+          rzp.open();
+        }
+      } catch (err) {
+        if (errEl) errEl.textContent = `⚠️ Network error: ${err.message}`;
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          selectTier(selectedTierName);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 1-Click Developer Connectors & Settings Handlers
+    // =========================================================================
+    function copyActiveKey() {
+      const key = getAuthKey();
+      if (!key) {
+        showToast('No active API key set');
+        return;
+      }
+      navigator.clipboard.writeText(key).then(() => {
+        showToast('API Key Copied to Clipboard');
+      }).catch(() => {
+        prompt('Copy API Key:', key);
+      });
+    }
+
+    function copyClaudeCodeSnippet() {
+      const key = getAuthKey() || 'omni_live_your_key';
+      const target = (document.getElementById('setting-gateway-base')?.value) || 'https://omnicache.rawwgrid.com';
+      const snippet = `export ANTHROPIC_BASE_URL="${target}"\nexport ANTHROPIC_API_KEY="${key}"`;
+      navigator.clipboard.writeText(snippet).then(() => {
+        showToast('Claude Code Snippet Copied');
+      }).catch(() => {
+        prompt('Copy Terminal Config:', snippet);
+      });
+    }
+
+    function copyClaudeDesktopMcp() {
+      const key = getAuthKey() || 'omni_live_your_key';
+      const snippet = JSON.stringify({
+        "mcpServers": {
+          "omnicache": {
+            "command": "omnicache",
+            "args": ["mcp"],
+            "env": {
+              "OMNICACHE_API_KEY": key
+            }
+          }
+        }
+      }, null, 2);
+      navigator.clipboard.writeText(snippet).then(() => {
+        showToast('Claude Desktop Config Copied');
+      }).catch(() => {
+        prompt('Copy MCP JSON:', snippet);
+      });
+    }
+
+    function copyCursorSnippet() {
+      const key = getAuthKey() || 'omni_live_your_key';
+      const target = (document.getElementById('setting-gateway-base')?.value) || 'https://omnicache.rawwgrid.com';
+      const snippet = `from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${target}/v1",\n    api_key="${key}"\n)`;
+      navigator.clipboard.writeText(snippet).then(() => {
+        showToast('Cursor / Python Snippet Copied');
+      }).catch(() => {
+        prompt('Copy Python Snippet:', snippet);
+      });
+    }
+
+    function updateSimSlider(val) {
+      const lbl = document.getElementById('setting-sim-val');
+      if (lbl) {
+        const num = parseFloat(val);
+        let tag = num >= 0.90 ? '(Strict)' : (num <= 0.78 ? '(Broad)' : '(Balanced)');
+        lbl.textContent = `${num.toFixed(2)} ${tag}`;
+      }
+      localStorage.setItem('omnicache_sim_threshold', val);
+      showToast(`Similarity Threshold set to ${val}`);
+    }
+
+    function updateGatewaySetting(val) {
+      localStorage.setItem('omnicache_gateway_base', val);
+      showToast(val ? `Switched Gateway to ${val}` : 'Switched to Production Cloud');
+    }
+
+    function updateModelSetting(val) {
+      localStorage.setItem('omnicache_default_model', val);
+      showToast(`Default Model set to ${val}`);
+    }
+
+    function updateCacheModeSetting(val) {
+      localStorage.setItem('omnicache_cache_mode', val);
+      showToast(`Cache policy set to ${val.toUpperCase()}`);
+    }
+
     function toggleAuthKeyVisibility() {
       const input = document.getElementById('auth-modal-input');
       const btn = document.getElementById('auth-toggle-vis-btn');
@@ -1537,9 +2305,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           } else if (res.status === 429) {
             errorTitle = 'QUOTA DEPLETED';
             const reason = data.error?.message || 'Monthly budget cap or rate limit exceeded.';
-            userExplanation = `⚠️ Workspace Quota Depleted: ${reason}\n\nTo increase spend limits or upgrade tier, check the Workspace Quotas section or contact your workspace administrator.`;
+            userExplanation = `⚠️ Workspace Quota Depleted: ${reason}\n\nTo increase spend limits or upgrade tier, click 'UPGRADE PLAN' or open the Side Menu.`;
             badge.className = 'chip-badge chip-danger';
             badge.textContent = errorTitle;
+            setTimeout(() => openUpgradeModal(), 500);
           } else {
             errorTitle = `HTTP ${res.status}`;
             const detail = data.error?.message || data.error || 'The model proxy request could not be completed.';
@@ -1812,6 +2581,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           return;
         }
         const data = await res.json();
+        fetchWorkspaceTierInfo();
 
         const sys = data.system_info || {};
         if (sys.version) {
@@ -2099,6 +2869,31 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       }
       updateAuthBadge();
 
+      // Restore saved side menu settings
+      try {
+        const savedGw = localStorage.getItem('omnicache_gateway_base');
+        const gwEl = document.getElementById('setting-gateway-base');
+        if (gwEl && savedGw !== null) gwEl.value = savedGw;
+
+        const savedModel = localStorage.getItem('omnicache_default_model');
+        const modelEl = document.getElementById('setting-default-model');
+        if (modelEl && savedModel) modelEl.value = savedModel;
+
+        const savedSim = localStorage.getItem('omnicache_sim_threshold');
+        if (savedSim) {
+          const simSlider = document.getElementById('setting-sim-slider');
+          if (simSlider) {
+            simSlider.value = savedSim;
+            updateSimSlider(savedSim);
+          }
+        }
+
+        const savedMode = localStorage.getItem('omnicache_cache_mode');
+        const modeEl = document.getElementById('setting-cache-mode');
+        if (modeEl && savedMode) modeEl.value = savedMode;
+      } catch (e) {}
+
+      fetchWorkspaceTierInfo();
       initCharts();
       refreshData();
       initWebSocket();

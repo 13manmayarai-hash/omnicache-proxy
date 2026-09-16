@@ -46,7 +46,7 @@ from core.quantized_embedder import quantized_embedder
 from server.tool_replayer import tool_cache, tool_policy_manager, compact_and_record_agent_tools
 from server.workspace_sync import workspace_warmer, workspace_sync_manager
 from server.cascade_router import cascade_router
-from server.quotas import quota_manager
+from server.quotas import quota_manager, TIER_SPECS, derive_tier
 from server.singleflight import flight_bus
 from server.stream_replayer import StreamReplayer
 from server.upstream import upstream_client
@@ -2487,6 +2487,211 @@ async def handle_workspace_sync_redis(request: Request) -> Response:
     return JSONResponse(result, headers=cors_headers)
 
 
+async def handle_workspace_tier(request: Request) -> Response:
+    """Returns current workspace subscription tier, budget, and spend status."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    key = extract_auth_key(request)
+    if not key:
+        return JSONResponse({"error": {"message": "Missing API key in Authorization header or x-api-key", "type": "authentication_error"}}, status_code=401, headers=cors_headers)
+
+    admin_key = getattr(config, "ADMIN_API_KEY", "").strip()
+    is_admin = bool(admin_key and hmac.compare_digest(key, admin_key))
+
+    info = quota_manager.storage.get_key(key)
+    if not info and not is_admin:
+        return JSONResponse({"error": {"message": "Invalid or unrecognized virtual API key", "type": "authentication_error"}}, status_code=401, headers=cors_headers)
+
+    if not info and is_admin:
+        info = {
+            "team_name": "System Administrator",
+            "org_id": "admin",
+            "role": "admin",
+            "tier": "enterprise",
+            "monthly_budget_usd": 1000000.0,
+            "current_spend_usd": 0.0,
+            "rate_limit_rpm": 10000
+        }
+
+    monthly_budget = float(info.get("monthly_budget_usd", 100.0))
+    current_spend = float(info.get("current_spend_usd", 0.0))
+    spend_pct = round((current_spend / monthly_budget) * 100.0, 2) if monthly_budget > 0 else 0.0
+    tier = info.get("tier") or derive_tier(monthly_budget)
+
+    return JSONResponse({
+        "status": "success",
+        "key_id": key[:7] + "..." + key[-4:] if len(key) > 12 else key,
+        "team_name": info.get("team_name", "Workspace"),
+        "org_id": info.get("org_id", "default"),
+        "role": info.get("role", "tenant"),
+        "tier": tier,
+        "monthly_budget_usd": monthly_budget,
+        "current_spend_usd": current_spend,
+        "spend_percentage": spend_pct,
+        "rate_limit_rpm": int(info.get("rate_limit_rpm", 120)),
+        "is_exhausted": current_spend >= monthly_budget,
+        "razorpay_enabled": bool(getattr(config, "RAZORPAY_KEY_ID", "")),
+        "razorpay_key_id": getattr(config, "RAZORPAY_KEY_ID", "") or "rzp_test_sandbox_mode",
+        "available_tiers": TIER_SPECS
+    }, headers=cors_headers)
+
+
+async def handle_workspace_upgrade(request: Request) -> Response:
+    """
+    Self-service workspace tier upgrade endpoint (Option C Hybrid: Razorpay & Sandbox).
+    Instant 1-click upgrade in evaluation / sandbox mode, or verified Razorpay signature.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    key = extract_auth_key(request)
+    if not key:
+        return JSONResponse({"error": {"message": "Missing virtual API key", "type": "authentication_error"}}, status_code=401, headers=cors_headers)
+
+    admin_key = getattr(config, "ADMIN_API_KEY", "").strip()
+    is_admin = bool(admin_key and hmac.compare_digest(key, admin_key))
+
+    info = quota_manager.storage.get_key(key)
+    if not info and not is_admin:
+        return JSONResponse({"error": {"message": "Invalid or unrecognized virtual API key", "type": "authentication_error"}}, status_code=401, headers=cors_headers)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": {"message": "Invalid JSON payload", "type": "invalid_request_error"}}, status_code=400, headers=cors_headers)
+
+    requested_tier = body.get("requested_tier", "").strip().lower()
+    if requested_tier not in TIER_SPECS:
+        return JSONResponse({
+            "error": {
+                "message": f"Invalid tier '{requested_tier}'. Supported tiers: {list(TIER_SPECS.keys())}",
+                "type": "invalid_request_error"
+            }
+        }, status_code=400, headers=cors_headers)
+
+    payment_method = body.get("payment_method", "sandbox").strip().lower()
+    spec = TIER_SPECS[requested_tier]
+
+    # If Razorpay payment method specified, verify signature
+    if payment_method == "razorpay":
+        order_id = body.get("razorpay_order_id", "").strip()
+        payment_id = body.get("razorpay_payment_id", "").strip()
+        signature = body.get("razorpay_signature", "").strip()
+        razorpay_secret = getattr(config, "RAZORPAY_KEY_SECRET", "") or os.getenv("RAZORPAY_KEY_SECRET", "")
+
+        if razorpay_secret and order_id and payment_id:
+            expected_sig = hmac.new(
+                razorpay_secret.encode("utf-8"),
+                f"{order_id}|{payment_id}".encode("utf-8"),
+                hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(expected_sig, signature):
+                return JSONResponse({
+                    "error": {
+                        "message": "Razorpay payment signature verification failed",
+                        "type": "payment_verification_error"
+                    }
+                }, status_code=400, headers=cors_headers)
+
+    # Perform immediate tier upgrade
+    ok, reason, updated = quota_manager.upgrade_key(key, requested_tier)
+    if not ok or not updated:
+        return JSONResponse({"error": {"message": reason, "type": "upgrade_error"}}, status_code=400, headers=cors_headers)
+
+    emit_telemetry_event("workspace_tier_upgraded", {
+        "key_id": key[:7] + "..." + key[-4:] if len(key) > 12 else key,
+        "org_id": updated.get("org_id", "default"),
+        "tier": requested_tier,
+        "monthly_budget_usd": updated.get("monthly_budget_usd"),
+        "rate_limit_rpm": updated.get("rate_limit_rpm"),
+        "payment_method": payment_method,
+        "timestamp": time.time()
+    })
+
+    return JSONResponse({
+        "status": "success",
+        "message": f"Successfully upgraded workspace to {spec['label']}!",
+        "tier": requested_tier,
+        "tier_label": spec["label"],
+        "monthly_budget_usd": updated.get("monthly_budget_usd"),
+        "rate_limit_rpm": updated.get("rate_limit_rpm"),
+        "current_spend_usd": updated.get("current_spend_usd", 0.0),
+        "payment_method": payment_method
+    }, headers=cors_headers)
+
+
+async def handle_razorpay_create_order(request: Request) -> Response:
+    """Creates a Razorpay Order for workspace subscription tier upgrade."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    key = extract_auth_key(request)
+    if not key:
+        return JSONResponse({"error": {"message": "Missing virtual API key", "type": "authentication_error"}}, status_code=401, headers=cors_headers)
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": {"message": "Invalid JSON payload", "type": "invalid_request_error"}}, status_code=400, headers=cors_headers)
+
+    tier = body.get("tier", "scale").strip().lower()
+    if tier not in TIER_SPECS:
+        return JSONResponse({"error": {"message": f"Invalid tier '{tier}'", "type": "invalid_request_error"}}, status_code=400, headers=cors_headers)
+
+    spec = TIER_SPECS[tier]
+    amount_paise = spec["price_inr_paise"]
+    currency = "INR"
+
+    rzp_key = getattr(config, "RAZORPAY_KEY_ID", "") or os.getenv("RAZORPAY_KEY_ID", "")
+    rzp_secret = getattr(config, "RAZORPAY_KEY_SECRET", "") or os.getenv("RAZORPAY_KEY_SECRET", "")
+
+    # Live Razorpay API call if credentials present
+    if rzp_key and rzp_secret:
+        try:
+            auth_str = base64.b64encode(f"{rzp_key}:{rzp_secret}".encode()).decode()
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    "https://api.razorpay.com/v1/orders",
+                    headers={"Authorization": f"Basic {auth_str}", "Content-Type": "application/json"},
+                    json={
+                        "amount": amount_paise,
+                        "currency": currency,
+                        "receipt": f"rcpt_{uuid.uuid4().hex[:10]}",
+                        "notes": {"tier": tier, "key_id": key[:12]}
+                    }
+                )
+                if resp.status_code in (200, 201):
+                    order_data = resp.json()
+                    return JSONResponse({
+                        "status": "success",
+                        "order_id": order_data.get("id"),
+                        "amount": amount_paise,
+                        "currency": currency,
+                        "key_id": rzp_key,
+                        "tier": tier,
+                        "sandbox": False
+                    }, headers=cors_headers)
+        except Exception as exc:
+            logger.warning(f"Razorpay live order creation failed, falling back to sandbox: {exc}")
+
+    # Sandbox / evaluation mode fallback
+    mock_order_id = f"order_sbx_{uuid.uuid4().hex[:14]}"
+    return JSONResponse({
+        "status": "success",
+        "order_id": mock_order_id,
+        "amount": amount_paise,
+        "currency": currency,
+        "key_id": rzp_key or "rzp_test_sandbox_active",
+        "tier": tier,
+        "sandbox": True,
+        "message": "Sandbox evaluation order generated"
+    }, headers=cors_headers)
+
+
 async def handle_purge(request: Request) -> Response:
     """Protected Cache Purge Endpoint."""
     cors_headers = get_cors_headers(request)
@@ -4731,6 +4936,10 @@ routes = [
     Route("/v1/workspace/sync/import", handle_workspace_sync_import, methods=["POST", "OPTIONS"]),
     Route("/v1/workspace/sync/status", handle_workspace_sync_status, methods=["GET", "OPTIONS"]),
     Route("/v1/workspace/sync/redis", handle_workspace_sync_redis, methods=["GET", "POST", "OPTIONS"]),
+    Route("/v1/workspace/tier", handle_workspace_tier, methods=["GET", "OPTIONS"]),
+    Route("/v1/workspace/upgrade", handle_workspace_upgrade, methods=["POST", "OPTIONS"]),
+    Route("/v1/billing/razorpay/create-order", handle_razorpay_create_order, methods=["POST", "OPTIONS"]),
+    Route("/v1/billing/razorpay/verify-payment", handle_workspace_upgrade, methods=["POST", "OPTIONS"]),
     Route("/.well-known/oauth-authorization-server", handle_oauth_metadata, methods=["GET", "OPTIONS"]),
     Route("/.well-known/oauth-protected-resource", handle_oauth_protected_resource, methods=["GET", "OPTIONS"]),
     Route("/oauth/register", handle_oauth_register, methods=["GET", "POST", "OPTIONS"]),

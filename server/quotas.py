@@ -65,6 +65,66 @@ end
 """
 
 
+# Tier Specifications for Self-Service Upgrades & Razorpay Billing
+TIER_SPECS: Dict[str, Dict[str, Any]] = {
+    "free": {
+        "tier_name": "free",
+        "label": "Community Free",
+        "monthly_budget_usd": 5.0,
+        "rate_limit_rpm": 30,
+        "price_usd": 0.0,
+        "price_inr_paise": 0,
+        "price_inr_formatted": "₹0 / mo",
+        "role": "tenant",
+        "features": ["L1 Exact Cache", "L2 Semantic Cache", "Local SQLite WAL", "MCP Stdio Transport"]
+    },
+    "pro": {
+        "tier_name": "pro",
+        "label": "Developer Pro",
+        "monthly_budget_usd": 100.0,
+        "rate_limit_rpm": 120,
+        "price_usd": 100.0,
+        "price_inr_paise": 849900,
+        "price_inr_formatted": "₹8,499 / mo",
+        "role": "tenant",
+        "features": ["Sub-millisecond ANN", "Streaming Tool Replay", "Multi-Agent Swarm Bus", "Claude Desktop MCP"]
+    },
+    "scale": {
+        "tier_name": "scale",
+        "label": "Team Scale",
+        "monthly_budget_usd": 500.0,
+        "rate_limit_rpm": 300,
+        "price_usd": 500.0,
+        "price_inr_paise": 4199900,
+        "price_inr_formatted": "₹41,999 / mo",
+        "role": "tenant",
+        "features": ["CRDT P2P Mesh Sync", "Telephony Audio Adapter", "CSV Telemetry Exports", "Zero-Token Replay"]
+    },
+    "enterprise": {
+        "tier_name": "enterprise",
+        "label": "Enterprise Dedicated",
+        "monthly_budget_usd": 2000.0,
+        "rate_limit_rpm": 1000,
+        "price_usd": 2000.0,
+        "price_inr_paise": 16999900,
+        "price_inr_formatted": "₹1,69,999 / mo",
+        "role": "admin",
+        "features": ["Dedicated Redis Mesh", "Custom PII Redaction", "Unlimited Swarm Nodes", "99.99% SLA"]
+    }
+}
+
+
+def derive_tier(budget: float) -> str:
+    """Infers tier name from monthly budget cap."""
+    if budget >= 2000.0:
+        return "enterprise"
+    if budget >= 500.0:
+        return "scale"
+    if budget >= 100.0:
+        return "pro"
+    return "free"
+
+
 class BaseQuotaStorage(ABC):
     @abstractmethod
     def register_key(
@@ -74,12 +134,23 @@ class BaseQuotaStorage(ABC):
         org_id: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         rate_limit_rpm: int = 120,
-        role: str = "tenant"
+        role: str = "tenant",
+        tier: Optional[str] = None
     ) -> Dict[str, Any]:
         pass
 
     @abstractmethod
     def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def upgrade_key(
+        self,
+        key_id: str,
+        tier: str,
+        monthly_budget_usd: float,
+        rate_limit_rpm: int
+    ) -> Optional[Dict[str, Any]]:
         pass
 
     @abstractmethod
@@ -121,13 +192,16 @@ class InMemoryQuotaStorage(BaseQuotaStorage):
         org_id: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         rate_limit_rpm: int = 120,
-        role: str = "tenant"
+        role: str = "tenant",
+        tier: Optional[str] = None
     ) -> Dict[str, Any]:
         with self._lock:
+            resolved_tier = tier or derive_tier(monthly_budget_usd)
             self._keys[key_id] = {
                 "team_name": team_name,
                 "org_id": org_id or team_name,
                 "role": role,
+                "tier": resolved_tier,
                 "monthly_budget_usd": monthly_budget_usd,
                 "current_spend_usd": 0.0,
                 "rate_limit_rpm": rate_limit_rpm,
@@ -139,7 +213,28 @@ class InMemoryQuotaStorage(BaseQuotaStorage):
     def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             val = self._keys.get(key_id)
-            return dict(val) if val else None
+            if not val:
+                return None
+            res = dict(val)
+            if "tier" not in res:
+                res["tier"] = derive_tier(float(res.get("monthly_budget_usd", 100.0)))
+            return res
+
+    def upgrade_key(
+        self,
+        key_id: str,
+        tier: str,
+        monthly_budget_usd: float,
+        rate_limit_rpm: int
+    ) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            info = self._keys.get(key_id)
+            if not info:
+                return None
+            info["tier"] = tier
+            info["monthly_budget_usd"] = float(monthly_budget_usd)
+            info["rate_limit_rpm"] = int(rate_limit_rpm)
+            return dict(info)
 
     def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
         with self._lock:
@@ -213,16 +308,19 @@ class SQLiteQuotaStorage(BaseQuotaStorage):
         org_id: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         rate_limit_rpm: int = 120,
-        role: str = "tenant"
+        role: str = "tenant",
+        tier: Optional[str] = None
     ) -> Dict[str, Any]:
         with self._lock:
             now = time.time()
             current_spend = 0.0
+            resolved_tier = tier or derive_tier(monthly_budget_usd)
             
             info = {
                 "team_name": team_name,
                 "org_id": org_id or team_name,
                 "role": role,
+                "tier": resolved_tier,
                 "monthly_budget_usd": monthly_budget_usd,
                 "current_spend_usd": current_spend,
                 "rate_limit_rpm": rate_limit_rpm,
@@ -246,7 +344,42 @@ class SQLiteQuotaStorage(BaseQuotaStorage):
     def get_key(self, key_id: str) -> Optional[Dict[str, Any]]:
         with self._lock:
             val = self._keys.get(key_id)
-            return dict(val) if val else None
+            if not val:
+                return None
+            res = dict(val)
+            if "tier" not in res:
+                res["tier"] = derive_tier(float(res.get("monthly_budget_usd", 100.0)))
+            return res
+
+    def upgrade_key(
+        self,
+        key_id: str,
+        tier: str,
+        monthly_budget_usd: float,
+        rate_limit_rpm: int
+    ) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            info = self._keys.get(key_id)
+            if not info:
+                self._load_from_db()
+                info = self._keys.get(key_id)
+                if not info:
+                    return None
+            info["tier"] = tier
+            info["monthly_budget_usd"] = float(monthly_budget_usd)
+            info["rate_limit_rpm"] = int(rate_limit_rpm)
+            self.store.save_virtual_key(
+                key_id=key_id,
+                team_name=info.get("team_name", "Team"),
+                org_id=info.get("org_id", "default"),
+                role=info.get("role", "tenant"),
+                monthly_budget_usd=float(monthly_budget_usd),
+                rate_limit_rpm=int(rate_limit_rpm),
+                created_at=info.get("created_at", time.time()),
+                current_spend_usd=info.get("current_spend_usd", 0.0),
+                synchronous=True
+            )
+            return dict(info)
 
     def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
         with self._lock:
@@ -330,12 +463,15 @@ class RedisQuotaStorage(BaseQuotaStorage):
         org_id: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         rate_limit_rpm: int = 120,
-        role: str = "tenant"
+        role: str = "tenant",
+        tier: Optional[str] = None
     ) -> Dict[str, Any]:
+        resolved_tier = tier or derive_tier(monthly_budget_usd)
         info = {
             "team_name": team_name,
             "org_id": org_id or team_name,
             "role": role,
+            "tier": resolved_tier,
             "monthly_budget_usd": monthly_budget_usd,
             "rate_limit_rpm": rate_limit_rpm,
             "created_at": time.time()
@@ -357,11 +493,13 @@ class RedisQuotaStorage(BaseQuotaStorage):
             if not raw:
                 return None
             spend = self.get_spend(key_id)
+            budget = float(raw.get("monthly_budget_usd", 100.0))
             return {
                 "team_name": raw.get("team_name", "Team"),
                 "org_id": raw.get("org_id", "default"),
                 "role": raw.get("role", "tenant"),
-                "monthly_budget_usd": float(raw.get("monthly_budget_usd", 100.0)),
+                "tier": raw.get("tier", derive_tier(budget)),
+                "monthly_budget_usd": budget,
                 "current_spend_usd": spend,
                 "rate_limit_rpm": int(raw.get("rate_limit_rpm", 120)),
                 "request_timestamps": [],
@@ -369,6 +507,25 @@ class RedisQuotaStorage(BaseQuotaStorage):
             }
         except Exception as exc:
             logger.warning("Redis get_key failed: %s", exc)
+            return None
+
+    def upgrade_key(
+        self,
+        key_id: str,
+        tier: str,
+        monthly_budget_usd: float,
+        rate_limit_rpm: int
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            meta_k = self._meta_key(key_id)
+            pipe = self.client.pipeline()
+            pipe.hset(meta_k, "tier", tier)
+            pipe.hset(meta_k, "monthly_budget_usd", str(monthly_budget_usd))
+            pipe.hset(meta_k, "rate_limit_rpm", str(rate_limit_rpm))
+            pipe.execute()
+            return self.get_key(key_id)
+        except Exception as exc:
+            logger.warning("Redis upgrade_key failed: %s", exc)
             return None
 
     def check_and_record_rate_limit(self, key_id: str, limit_rpm: int) -> Tuple[bool, int]:
@@ -533,7 +690,8 @@ class VirtualKeyManager:
         org_id: Optional[str] = None,
         monthly_budget_usd: float = 100.0,
         rate_limit_rpm: int = 120,
-        role: str = "tenant"
+        role: str = "tenant",
+        tier: Optional[str] = None
     ) -> Dict[str, Any]:
         """Registers a new virtual key with explicit budget, rate limits, and tenant org_id."""
         return self.storage.register_key(
@@ -542,8 +700,35 @@ class VirtualKeyManager:
             org_id=org_id,
             monthly_budget_usd=monthly_budget_usd,
             rate_limit_rpm=rate_limit_rpm,
-            role=role
+            role=role,
+            tier=tier
         )
+
+    def upgrade_key(
+        self,
+        key_id: str,
+        tier_name: str,
+        custom_budget: Optional[float] = None,
+        custom_rpm: Optional[int] = None
+    ) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
+        """Upgrades an active key to a target subscription tier with higher budget and rate limit."""
+        tier_lower = tier_name.lower().strip()
+        spec = TIER_SPECS.get(tier_lower)
+        if not spec and custom_budget is None:
+            return False, f"Unknown tier '{tier_name}'. Available tiers: {list(TIER_SPECS.keys())}", None
+
+        budget = custom_budget if custom_budget is not None else spec["monthly_budget_usd"]
+        rpm = custom_rpm if custom_rpm is not None else spec["rate_limit_rpm"]
+
+        updated = self.storage.upgrade_key(
+            key_id=key_id,
+            tier=tier_lower,
+            monthly_budget_usd=budget,
+            rate_limit_rpm=rpm
+        )
+        if not updated:
+            return False, f"Virtual key '{key_id}' not found", None
+        return True, "upgraded", updated
 
     def check_authorization(self, key_id: str, reserve_amount_usd: float = 0.0) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
         """

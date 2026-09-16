@@ -4645,7 +4645,7 @@ async def handle_ws_http(request: Request) -> Response:
     return JSONResponse({
         "status": "ok",
         "service": "OmniCache AI Proxy",
-        "version": getattr(config, "VERSION", "3.0.5"),
+        "version": getattr(config, "VERSION", "3.1.0"),
         "websocket": "/ws",
         "message": "WebSocket gateway operational. Connect with ws:// or wss://"
     }, headers=cors_headers)
@@ -4659,7 +4659,7 @@ async def handle_ws(websocket: WebSocket):
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
-            "version": getattr(config, "VERSION", "3.0.5"),
+            "version": getattr(config, "VERSION", "3.1.0"),
             "status": "connected",
             "recent_events": list(RECENT_WS_EVENTS)
         })

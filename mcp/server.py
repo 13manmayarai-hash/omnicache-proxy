@@ -444,7 +444,7 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {
                     "name": "omnicache-mcp",
-                    "version": getattr(config, "VERSION", "3.0.6")
+                    "version": getattr(config, "VERSION", "3.1.0")
                 },
                 "instructions": (
                     "OmniCache is an enterprise AI semantic caching proxy, vector memory engine, and "

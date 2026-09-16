@@ -444,8 +444,25 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
                 "protocolVersion": "2024-11-05",
                 "serverInfo": {
                     "name": "omnicache-mcp",
-                    "version": getattr(config, "VERSION", "3.0.5")
+                    "version": getattr(config, "VERSION", "3.0.6")
                 },
+                "instructions": (
+                    "OmniCache is an enterprise AI semantic caching proxy, vector memory engine, and "
+                    "deterministic tool replay platform.\n\n"
+                    "Core capabilities and tools:\n"
+                    "1. omnicache_query: Check semantic cache for a prompt before generating responses (<1ms latency, 100% token savings).\n"
+                    "2. omnicache_store: Save high-value solutions, code snippets, and explanations into vector memory for future instant recall.\n"
+                    "3. omnicache_search: Perform sub-millisecond semantic similarity search across cached knowledge.\n"
+                    "4. omnicache_replay_tool: Retrieve cached deterministic tool outputs (read_file, git_status, grep, etc.).\n"
+                    "5. omnicache_record_tool: Record tool outputs for subsequent replays with automatic PII scrubbing.\n"
+                    "6. omnicache_invalidate: Invalidate cache entries by domain tag or tenant.\n"
+                    "7. omnicache_stats: Retrieve real-time telemetry (hit rates, tokens saved, dollars saved).\n"
+                    "8. omnicache_health: Verify SQLite persistence and L1/L2 vector index readiness.\n\n"
+                    "Usage guidelines:\n"
+                    "- When the user asks a coding or conceptual question, call omnicache_query first to see if a verified answer is cached.\n"
+                    "- When you generate a high-quality answer, solution, or configuration, offer or use omnicache_store to remember it.\n"
+                    "- Use omnicache_stats when the user asks about system performance, savings, or cache efficiency."
+                ),
                 "capabilities": {
                     "tools": {"listChanged": False},
                     "resources": {"listChanged": False},

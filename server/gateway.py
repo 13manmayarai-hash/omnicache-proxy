@@ -4417,6 +4417,7 @@ async def handle_mcp(request: Request) -> Response:
         # Standard discovery JSON response for REST / health probes
         return JSONResponse({
             "service": "omnicache-mcp",
+            "description": "Enterprise AI semantic caching proxy, vector memory engine, and deterministic tool replay platform.",
             "protocol": "jsonrpc-2.0",
             "mcp_version": proto_version,
             "transport": "streamable-http",

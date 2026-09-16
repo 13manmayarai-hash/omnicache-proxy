@@ -578,6 +578,57 @@ class TestPhase4RemoteMCP(unittest.TestCase):
         self.assertEqual(resp_b_check.status_code, 200)
         self.assertIn("TENANT_B_CONFIDENTIAL", resp_b_check.json()["result"]["content"][0]["text"])
 
+    def test_15_mcp_batch_requests_and_scope(self):
+        """Verify standard JSON-RPC 2.0 batch requests and per-item scope enforcement on /mcp."""
+        # 1. Valid batch with ping and tools/list
+        batch_req = [
+            {"jsonrpc": "2.0", "id": "b-ping", "method": "ping"},
+            {"jsonrpc": "2.0", "id": "b-list", "method": "tools/list"}
+        ]
+        resp_batch = self.client.post("/mcp", json=batch_req, headers={"x-api-key": "mcp_tenant_key"})
+        self.assertEqual(resp_batch.status_code, 200)
+        data = resp_batch.json()
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 2)
+        self.assertEqual(data[0]["id"], "b-ping")
+        self.assertEqual(data[0]["result"], {})
+        self.assertEqual(data[1]["id"], "b-list")
+        self.assertIn("tools", data[1]["result"])
+
+        # 2. Empty batch returns standard error
+        resp_empty = self.client.post("/mcp", json=[], headers={"x-api-key": "mcp_tenant_key"})
+        self.assertEqual(resp_empty.status_code, 200)
+        self.assertEqual(resp_empty.json()["error"]["code"], -32600)
+
+        # 3. Batch with read-only OAuth token: query succeeds, store is forbidden
+        resp_auth = self.client.get("/oauth/authorize?client_id=batch-ro&response_type=code&scope=mcp:read")
+        code = resp_auth.json().get("code")
+        resp_tok = self.client.post("/oauth/token", json={"grant_type": "authorization_code", "code": code, "client_id": "batch-ro"})
+        ro_token = resp_tok.json().get("access_token")
+
+        mixed_batch = [
+            {
+                "jsonrpc": "2.0",
+                "id": "b-ro-query",
+                "method": "tools/call",
+                "params": {"name": "omnicache_query", "arguments": {"prompt": "test batch"}}
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": "b-ro-store",
+                "method": "tools/call",
+                "params": {"name": "omnicache_store", "arguments": {"prompt": "test batch", "answer": "ans"}}
+            }
+        ]
+        resp_mixed = self.client.post("/mcp", json=mixed_batch, headers={"Authorization": f"Bearer {ro_token}"})
+        self.assertEqual(resp_mixed.status_code, 200)
+        mixed_res = resp_mixed.json()
+        self.assertEqual(len(mixed_res), 2)
+        self.assertNotIn("error", mixed_res[0])
+        self.assertIn("error", mixed_res[1])
+        self.assertEqual(mixed_res[1]["error"]["code"], -32600)
+        self.assertIn("Forbidden", mixed_res[1]["error"]["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

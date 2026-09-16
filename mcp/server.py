@@ -427,7 +427,7 @@ def log_audit_event(tool_name: str, org_id: str, duration_ms: float, status: str
             pass
 
 
-def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False) -> Optional[Dict[str, Any]]:
+def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False, token_scope: str = "mcp:admin") -> Optional[Dict[str, Any]]:
     """Processes a single JSON-RPC 2.0 MCP request dict. Returns None for notifications."""
     is_notification = ("id" not in req)
     req_id = req.get("id")
@@ -484,6 +484,31 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
     elif method == "tools/call":
         tool_name = params.get("name", "")
         tool_args = params.get("arguments", {})
+        clean_name = tool_name[len("omnicache_"):] if tool_name.startswith("omnicache_") else tool_name
+
+        if clean_name == "invalidate" and ("mcp:admin" not in token_scope and "mcp:write" not in token_scope):
+            if is_notification:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32600,
+                    "message": f"Forbidden: Token scope '{token_scope}' does not permit destructive tool '{tool_name}'. Required scope: 'mcp:write' or 'mcp:admin'."
+                }
+            }
+        if clean_name in ("store", "record_tool") and ("mcp:write" not in token_scope and "mcp:admin" not in token_scope):
+            if is_notification:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {
+                    "code": -32600,
+                    "message": f"Forbidden: Token scope '{token_scope}' does not permit write tool '{tool_name}'. Required scope: 'mcp:write' or 'mcp:admin'."
+                }
+            }
+
         target_org = tool_args.get("org_id")
         if target_org and target_org != default_org_id and not is_admin:
             if is_notification:
@@ -539,7 +564,7 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
         }
 
 
-def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: bool = False) -> Optional[Any]:
+def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: bool = False, token_scope: str = "mcp:admin") -> Optional[Any]:
     """Processes a standard JSON-RPC 2.0 MCP message (single dict or batch list) and returns response."""
     if isinstance(req, list):
         if not req:
@@ -557,7 +582,7 @@ def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: boo
                     "error": {"code": -32600, "message": "Invalid Request: expected object"}
                 })
                 continue
-            item_res = _process_single_jsonrpc(single_req, default_org_id=default_org_id, is_admin=is_admin)
+            item_res = _process_single_jsonrpc(single_req, default_org_id=default_org_id, is_admin=is_admin, token_scope=token_scope)
             if item_res is not None:
                 batch_responses.append(item_res)
         return batch_responses if batch_responses else None
@@ -569,7 +594,7 @@ def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: boo
             "error": {"code": -32600, "message": "Invalid Request: expected object or array"}
         }
 
-    return _process_single_jsonrpc(req, default_org_id=default_org_id, is_admin=is_admin)
+    return _process_single_jsonrpc(req, default_org_id=default_org_id, is_admin=is_admin, token_scope=token_scope)
 
 
 def run_stdio_server():

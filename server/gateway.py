@@ -4363,33 +4363,6 @@ async def handle_mcp(request: Request) -> Response:
     oauth_info = OAUTH_TOKENS.get(auth_key)
     token_scope = oauth_info.get("scope", "mcp:admin") if oauth_info else "mcp:admin"
 
-    method = req_body.get("method")
-    if method == "tools/call":
-        tool_params = req_body.get("params", {})
-        tool_name = tool_params.get("name", "")
-        clean_name = tool_name[len("omnicache_"):] if tool_name.startswith("omnicache_") else tool_name
-
-        if clean_name == "invalidate":
-            if "mcp:admin" not in token_scope and "mcp:write" not in token_scope:
-                return JSONResponse({
-                    "jsonrpc": "2.0",
-                    "id": req_body.get("id"),
-                    "error": {
-                        "code": -32600,
-                        "message": f"Forbidden: Token scope '{token_scope}' does not permit destructive tool '{tool_name}'. Required scope: 'mcp:write' or 'mcp:admin'."
-                    }
-                }, headers=base_headers)
-        elif clean_name in ("store", "record_tool"):
-            if "mcp:write" not in token_scope and "mcp:admin" not in token_scope:
-                return JSONResponse({
-                    "jsonrpc": "2.0",
-                    "id": req_body.get("id"),
-                    "error": {
-                        "code": -32600,
-                        "message": f"Forbidden: Token scope '{token_scope}' does not permit write tool '{tool_name}'. Required scope: 'mcp:write' or 'mcp:admin'."
-                    }
-                }, headers=base_headers)
-
     is_admin = False
     if key_info:
         is_admin = (key_info.get("role") == "admin")
@@ -4398,7 +4371,7 @@ async def handle_mcp(request: Request) -> Response:
     elif not getattr(config, "REQUIRE_AUTH", False) and not getattr(config, "ADMIN_API_KEY", "").strip():
         is_admin = True
 
-    res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin)
+    res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin, token_scope=token_scope)
     if res is None:
         return Response(status_code=204, headers=base_headers)
 

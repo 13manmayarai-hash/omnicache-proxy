@@ -3653,11 +3653,32 @@ async def handle_assets(request: Request) -> Response:
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
     
-    file_path = request.path_params.get("file_path", "")
-    safe_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "assets"))
-    target = os.path.abspath(os.path.join(safe_dir, file_path))
-    if not target.startswith(safe_dir) or not os.path.exists(target) or os.path.isdir(target):
-        return JSONResponse({"error": "Asset not found"}, status_code=404, headers=cors_headers)
+    file_path = request.path_params.get("file_path", "").lstrip("/")
+    
+    # Check multiple candidate directories (local dev, docker container, site-packages, Render environment)
+    candidate_dirs = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "assets")),
+        os.path.abspath(os.path.join(os.getcwd(), "dashboard", "assets")),
+        os.path.abspath(os.path.join(os.getcwd(), "..", "dashboard", "assets")),
+        os.path.abspath("/app/dashboard/assets"),
+        os.path.abspath("/opt/render/project/src/dashboard/assets"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "assets")),
+    ]
+    
+    target = None
+    for c_dir in candidate_dirs:
+        cand = os.path.abspath(os.path.join(c_dir, file_path))
+        if cand.startswith(c_dir) and os.path.exists(cand) and not os.path.isdir(cand):
+            target = cand
+            break
+            
+    if not target:
+        # High-Availability CDN fallback: If server environment stripped assets, redirect to GitHub Raw CDN
+        from starlette.responses import RedirectResponse
+        cdn_fallback = f"https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/{file_path}"
+        cors_headers["location"] = cdn_fallback
+        cors_headers["cache-control"] = "public, max-age=3600"
+        return RedirectResponse(cdn_fallback, status_code=307, headers=cors_headers)
     
     media_type = "image/jpeg"
     if target.endswith(".png"):

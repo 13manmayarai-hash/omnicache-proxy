@@ -69,7 +69,7 @@ omnicache = "server.cli:main"
 include = ["core*", "server*", "persistence*", "mcp*", "dashboard*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.html", "*.json", "*.md"]
+"*" = ["*.html", "*.json", "*.md", "*.jpg", "*.jpeg", "*.png", "*.svg", "*.webp", "*.css", "*.js", "*.ico"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

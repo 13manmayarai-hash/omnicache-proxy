@@ -1,0 +1,6 @@
+include README.md LICENSE
+recursive-include dashboard *
+recursive-include server *
+recursive-include core *
+recursive-include mcp *
+recursive-include persistence *

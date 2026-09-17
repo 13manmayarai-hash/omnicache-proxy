@@ -1810,7 +1810,11 @@
           <!-- View 1: 3D Isometric Engine Showcase -->
           <div id="hero-view-3d" class="hero-perspective-stage">
             <div class="hero-poster-frame">
-              <img src="/assets/omnicache_saas_poster.jpg" alt="OmniCache 3D Engine Visualization" class="hero-poster-img">
+              <img src="/assets/omnicache_saas_poster.jpg" 
+                   onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_saas_poster.jpg'; }" 
+                   alt="OmniCache 3D Engine Visualization" 
+                   class="hero-poster-img" 
+                   loading="eager">
               <!-- Floating Hologram Badges -->
               <div class="float-pill float-pill-1">
                 <span class="live-pulse"></span>
@@ -1913,7 +1917,12 @@
         <div class="bp-poster-split">
           <!-- Left: Swiss Modernist Blueprint Visual Poster -->
           <div class="bp-artwork-box">
-            <img src="/assets/omnicache_blueprint_poster.jpg" alt="OmniCache Swiss Modernist Blueprint Engineering Poster" onclick="openPosterModal()" title="Click to expand 4K Blueprint">
+            <img src="/assets/omnicache_blueprint_poster.jpg" 
+                 onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_blueprint_poster.jpg'; }" 
+                 alt="OmniCache Swiss Modernist Blueprint Engineering Poster" 
+                 onclick="openPosterModal()" 
+                 title="Click to expand 4K Blueprint" 
+                 loading="lazy">
             <div class="bp-artwork-caption">
               <div>SCHEMATIC: <strong>RADIX L1 &amp; INT8 TOPOGRAPHY</strong></div>
               <button class="hero-tab-btn" onclick="openPosterModal()" style="padding: 4px 8px; font-size: 10px;">🔍 EXPAND 4K</button>
@@ -2375,7 +2384,10 @@ print(response.choices[0].message.content)</code></pre>
     <div id="posterModal" onclick="closePosterModal(event)">
       <div class="poster-modal-content" onclick="event.stopPropagation()">
         <button class="poster-modal-close" onclick="closePosterModal()" title="Close (Esc)">✕</button>
-        <img src="/assets/omnicache_blueprint_poster.jpg" alt="OmniCache 4K High-Res Architectural Blueprint Poster" style="width: 100%; height: auto; display: block;">
+        <img src="/assets/omnicache_blueprint_poster.jpg" 
+             onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_blueprint_poster.jpg'; }" 
+             alt="OmniCache 4K High-Res Architectural Blueprint Poster" 
+             style="width: 100%; height: auto; display: block;">
       </div>
     </div>
   </main>

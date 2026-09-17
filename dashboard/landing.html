@@ -557,46 +557,36 @@
       font-size: 15px;
     }
 
-    /* 21st.dev Style Hero Viewport Switcher */
-    .hero-view-toggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-
-    .hero-tab-btn {
-      background: #171b26;
-      border: 1.5px solid var(--border-dark);
-      box-shadow: 2px 2px 0 #000;
-      color: var(--text-muted);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 6px 12px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .hero-tab-btn:hover {
-      color: var(--volt);
-      border-color: var(--volt);
-    }
-
-    .hero-tab-btn.active {
-      background: var(--volt);
-      color: #000;
-      border-color: #000;
-      box-shadow: 3px 3px 0 #000;
-    }
-
-    /* 3D Perspective Hero Stage */
-    .hero-perspective-stage {
-      perspective: 1200px;
+    /* Subtle Hero Architectural Backdrop Graphic behind Headline */
+    .hero-text-col {
       position: relative;
     }
+
+    .hero-backdrop-graphic {
+      position: absolute;
+      top: -30px;
+      left: -30px;
+      right: -20px;
+      bottom: -20px;
+      background-image: url('/assets/omnicache_saas_poster.jpg');
+      background-size: cover;
+      background-position: 60% 40%;
+      background-repeat: no-repeat;
+      opacity: 0.18;
+      filter: contrast(1.2) brightness(1.1) saturate(1.2);
+      -webkit-mask-image: radial-gradient(ellipse at 42% 45%, rgba(0, 0, 0, 0.95) 20%, rgba(0, 0, 0, 0.4) 60%, transparent 85%);
+      mask-image: radial-gradient(ellipse at 42% 45%, rgba(0, 0, 0, 0.95) 20%, rgba(0, 0, 0, 0.4) 60%, transparent 85%);
+      pointer-events: none;
+      z-index: 0;
+      border-radius: 20px;
+    }
+
+    .hero-text-content {
+      position: relative;
+      z-index: 1;
+    }
+
+
 
     /* 21st.dev Animated Border-Beam */
     @property --beam-angle {
@@ -651,58 +641,6 @@
         --beam-angle: 360deg;
         transform: rotate(360deg);
       }
-    }
-
-    .hero-poster-frame {
-      position: relative;
-      border: 2.5px solid #000;
-      box-shadow: 8px 12px 28px rgba(0, 0, 0, 0.75), 0 0 40px rgba(191, 119, 255, 0.18);
-      background: #090b14;
-      border-radius: 8px;
-      overflow: hidden;
-      transform: rotateX(3deg) rotateY(-4deg) rotateZ(0.5deg);
-      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
-    }
-
-    .hero-poster-frame:hover {
-      transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1.01);
-      box-shadow: 10px 18px 36px rgba(0, 0, 0, 0.85), 0 0 50px rgba(0, 240, 255, 0.25);
-    }
-
-    .hero-poster-img {
-      width: 100%;
-      height: auto;
-      display: block;
-      filter: contrast(1.04) brightness(1.02);
-    }
-
-    /* Floating Hologram Badges on 3D Stage */
-    .float-pill {
-      position: absolute;
-      background: rgba(13, 16, 25, 0.9);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      border: 1.5px solid #000;
-      box-shadow: 3px 3px 0 #000;
-      padding: 5px 11px;
-      border-radius: 9999px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      font-weight: 800;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      animation: float-badge 3.6s ease-in-out infinite alternate;
-      z-index: 10;
-    }
-
-    .float-pill-1 { top: 18px; left: 16px; color: var(--volt); border-color: rgba(200, 255, 0, 0.6); }
-    .float-pill-2 { bottom: 20px; left: 18px; color: var(--cyan); border-color: rgba(0, 240, 255, 0.6); animation-delay: 1.2s; }
-    .float-pill-3 { top: 22px; right: 16px; color: #38ef7d; border-color: rgba(56, 239, 125, 0.6); animation-delay: 2.1s; }
-
-    @keyframes float-badge {
-      0% { transform: translateY(0px); }
-      100% { transform: translateY(-6px); }
     }
 
     /* 21st.dev Style Interactive Terminal Comparison Card */
@@ -935,64 +873,20 @@
       .bp-poster-meta { text-align: right; }
     }
 
-    /* Split Poster Architecture: Left Visual Artwork + Right 5-Stage Bus Pipeline */
-    .bp-poster-split {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 28px;
-      margin-bottom: 28px;
-      align-items: center;
-    }
-
-    @media (min-width: 960px) {
-      .bp-poster-split {
-        grid-template-columns: 1fr 1.2fr;
-      }
-    }
-
-    .bp-artwork-box {
-      background: #080a10;
-      border: 2.5px solid #000;
-      box-shadow: 6px 6px 0 #000;
-      position: relative;
-      border-radius: 6px;
-      overflow: hidden;
-    }
-
-    .bp-artwork-box img {
-      width: 100%;
-      height: auto;
-      display: block;
-      cursor: pointer;
-      transition: transform 0.3s ease;
-    }
-
-    .bp-artwork-box img:hover {
-      transform: scale(1.02);
-    }
-
-    .bp-artwork-caption {
-      padding: 10px 14px;
-      background: #11141e;
-      border-top: 2px solid #000;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-
-    .bp-artwork-caption strong {
-      color: var(--volt);
-    }
-
     /* 5-Node Schematic Pipeline Grid */
     .bp-flow-pipeline {
       display: grid;
       grid-template-columns: 1fr;
       gap: 12px;
+      margin-bottom: 28px;
       position: relative;
+    }
+
+    @media (min-width: 860px) {
+      .bp-flow-pipeline {
+        grid-template-columns: repeat(5, 1fr);
+        gap: 14px;
+      }
     }
 
     .bp-node-card {
@@ -1071,62 +965,6 @@
     }
 
     .bp-node-spec-box strong { color: var(--text); }
-
-    /* Modal for Fullscreen Blueprint Lightbox */
-    #posterModal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(4, 5, 8, 0.94);
-      backdrop-filter: blur(12px);
-      z-index: 2000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    #posterModal.active {
-      display: flex;
-    }
-
-    .poster-modal-content {
-      max-width: 900px;
-      max-height: 90vh;
-      background: #090b14;
-      border: 3px solid #000;
-      box-shadow: 12px 12px 0 #000;
-      position: relative;
-      overflow-y: auto;
-      border-radius: 6px;
-    }
-
-    .poster-modal-close {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      background: var(--volt);
-      border: 2px solid #000;
-      box-shadow: 2px 2px 0 #000;
-      font-family: var(--font-mono);
-      font-size: 16px;
-      font-weight: 900;
-      color: #000;
-      width: 36px;
-      height: 36px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 20;
-    }
-
-    .poster-modal-close:hover {
-      background: #dcff4d;
-      transform: translate(-1px, -1px);
-    }
 
     /* Comparative Telemetry HUD Strip */
     .bp-hud-strip {
@@ -1850,112 +1688,76 @@
   <main class="container">
     <section class="hero">
       <div class="hero-grid">
-        <!-- Left: Typography & Action CTAs -->
-        <div>
-          <div class="oc-hero-badge-strip">
-            <span class="bp-chip chip-volt">
-              <span class="live-pulse"></span>
-              RADIX L1 TRIE // 0.06MS
-            </span>
-            <span class="bp-chip chip-cyan">INT8 VECTOR ANN</span>
-            <span class="bp-chip">RFC 7636 MCP NATIVE</span>
-          </div>
+        <!-- Left: Typography & Action CTAs with Subtle Architectural Backdrop -->
+        <div class="hero-text-col">
+          <div class="hero-backdrop-graphic" aria-hidden="true"></div>
+          <div class="hero-text-content">
+            <div class="oc-hero-badge-strip">
+              <span class="bp-chip chip-volt">
+                <span class="live-pulse"></span>
+                RADIX L1 TRIE // 0.06MS
+              </span>
+              <span class="bp-chip chip-cyan">INT8 VECTOR ANN</span>
+              <span class="bp-chip">RFC 7636 MCP NATIVE</span>
+            </div>
 
-          <h1 class="hero-title">
-            Cut your LLM bill by <span class="highlight-volt">85%</span>.<br>
-            Kill <span class="highlight-cyan">90%</span> of prompt latency.
-          </h1>
+            <h1 class="hero-title">
+              Cut your LLM bill by <span class="highlight-volt">85%</span>.<br>
+              Kill <span class="highlight-cyan">90%</span> of prompt latency.
+            </h1>
 
-          <p class="hero-desc">
-            The transparent localhost proxy for <strong>Claude Code</strong>, <strong>Cursor</strong>, and enterprise AI agents. 
-            Fingerprints Git working trees, detects semantic similarities via quantized Int8 vectors, and replays tool executions from SQLite WAL memory at <strong>$0.00 token cost</strong> in <strong>&lt;0.1ms</strong>.
-          </p>
+            <p class="hero-desc">
+              The transparent localhost proxy for <strong>Claude Code</strong>, <strong>Cursor</strong>, and enterprise AI agents. 
+              Fingerprints Git working trees, detects semantic similarities via quantized Int8 vectors, and replays tool executions from SQLite WAL memory at <strong>$0.00 token cost</strong> in <strong>&lt;0.1ms</strong>.
+            </p>
 
-          <div class="hero-cta-group">
-            <a href="/auth/google/login" class="btn btn-volt">
-              <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#000" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#000" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#000" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#000" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
-              Start Free with Google (1,000 Req)
-            </a>
-            <a href="#architecture" class="btn btn-dark">Inspect Architecture ↓</a>
-            <a href="/dashboard" class="btn btn-white">Open Live Dashboard ↗</a>
+            <div class="hero-cta-group">
+              <a href="/auth/google/login" class="btn btn-volt">
+                <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#000" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#000" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#000" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#000" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+                Start Free with Google (1,000 Req)
+              </a>
+              <a href="#architecture" class="btn btn-dark">Inspect Architecture ↓</a>
+              <a href="/dashboard" class="btn btn-white">Open Live Dashboard ↗</a>
+            </div>
           </div>
         </div>
 
-        <!-- Right: 21st.dev Interactive 3D Showcase & Terminal Diff -->
-        <div>
-          <!-- View Switcher Tabs -->
-          <div class="hero-view-toggle">
-            <button id="btn-hero-3d" class="hero-tab-btn active" onclick="switchHeroView('3d')">
-              🎨 3D Isometric View
-            </button>
-            <button id="btn-hero-term" class="hero-tab-btn" onclick="switchHeroView('term')">
-              ⚡ Terminal Diff
-            </button>
-          </div>
-
-          <!-- View 1: 3D Isometric Engine Showcase -->
-          <div id="hero-view-3d" class="hero-perspective-stage">
-            <div class="border-beam-wrapper">
-              <div class="border-beam-inner">
-                <div class="hero-poster-frame">
-                  <img src="/assets/omnicache_saas_poster.jpg" 
-                       onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_saas_poster.jpg'; }" 
-                       alt="OmniCache 3D Engine Visualization" 
-                       class="hero-poster-img" 
-                       loading="eager">
-                  <!-- Floating Hologram Badges -->
-                  <div class="float-pill float-pill-1">
-                    <span class="live-pulse"></span>
-                    <span>0.06ms L1 HIT</span>
+        <!-- Right: 21st.dev Interactive Terminal Diff Sandbox -->
+        <div class="hero-terminal-col">
+          <div class="border-beam-wrapper">
+            <div class="border-beam-inner">
+              <div class="oc-terminal-card">
+                <div class="oc-terminal-header">
+                  <div class="oc-term-dots">
+                    <div class="oc-term-dot dot-r"></div>
+                    <div class="oc-term-dot dot-y"></div>
+                    <div class="oc-term-dot dot-g"></div>
                   </div>
-                  <div class="float-pill float-pill-2">
-                    <span>⚡ 0.30ms REPLAY</span>
-                  </div>
-                  <div class="float-pill float-pill-3">
-                    <span>$0.00 TOKENS</span>
-                  </div>
+                  <div class="oc-term-title">omnicache-daemon ~ proxy-interceptor:8000</div>
+                  <span style="font-family: var(--font-mono); font-size: 10px; color: var(--volt);">● LIVE WAL</span>
                 </div>
-              </div>
-            </div>
-          </div>
+                <div class="oc-terminal-body">
+                  <div style="color: var(--text-muted); margin-bottom: 12px;"># Request Intercepted from Claude Code CLI</div>
 
-          <!-- View 2: Interactive Terminal Sandbox -->
-          <div id="hero-view-term" style="display: none;">
-            <div class="border-beam-wrapper">
-              <div class="border-beam-inner">
-                <div class="oc-terminal-card">
-                  <div class="oc-terminal-header">
-                    <div class="oc-term-dots">
-                      <div class="oc-term-dot dot-r"></div>
-                      <div class="oc-term-dot dot-y"></div>
-                      <div class="oc-term-dot dot-g"></div>
+                  <div style="margin-bottom: 14px; border-left: 2px solid var(--orange); padding-left: 10px;">
+                    <span class="oc-term-tag oc-tag-miss">CLOUD MISS</span>
+                    <span style="color: #fff;">GET package.json (mtime: 172651100)</span>
+                    <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
+                      → Upstream Anthropic API (Roundtrip: 1,840ms | 4,210 tokens | $0.063)
                     </div>
-                    <div class="oc-term-title">omnicache-daemon ~ proxy-interceptor:8000</div>
-                    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--volt);">● LIVE WAL</span>
                   </div>
-                  <div class="oc-terminal-body">
-                    <div style="color: var(--text-muted); margin-bottom: 12px;"># Request Intercepted from Claude Code CLI</div>
 
-                    <div style="margin-bottom: 14px; border-left: 2px solid var(--orange); padding-left: 10px;">
-                      <span class="oc-term-tag oc-tag-miss">CLOUD MISS</span>
-                      <span style="color: #fff;">GET package.json (mtime: 172651100)</span>
-                      <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
-                        → Upstream Anthropic API (Roundtrip: 1,840ms | 4,210 tokens | $0.063)
-                      </div>
+                  <div style="border-left: 2px solid var(--volt); padding-left: 10px; background: rgba(200, 255, 0, 0.05); padding-top: 6px; padding-bottom: 6px;">
+                    <span class="oc-term-tag oc-tag-hit">WAL HIT</span>
+                    <span style="color: #fff;">GET package.json (Git SHA: 9f8a2c unchanged)</span>
+                    <div style="color: var(--volt); font-size: 11px; font-weight: 700; margin-top: 2px;">
+                      ⚡ Served from Radix L1 Memory (0.06ms | 0 tokens | $0.00)
                     </div>
+                  </div>
 
-                    <div style="border-left: 2px solid var(--volt); padding-left: 10px; background: rgba(200, 255, 0, 0.05); padding-top: 6px; padding-bottom: 6px;">
-                      <span class="oc-term-tag oc-tag-hit">WAL HIT</span>
-                      <span style="color: #fff;">GET package.json (Git SHA: 9f8a2c unchanged)</span>
-                      <div style="color: var(--volt); font-size: 11px; font-weight: 700; margin-top: 2px;">
-                        ⚡ Served from Radix L1 Memory (0.06ms | 0 tokens | $0.00)
-                      </div>
-                    </div>
-
-                    <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono);">
-                      <span style="color: var(--cyan);">NET LATENCY: -99.96%</span>
-                      <span style="color: var(--volt);">SAVED: 4,210 TOKENS ($0.00)</span>
-                    </div>
+                  <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono);">
+                    <span style="color: var(--cyan);">NET LATENCY: -99.96%</span>
+                    <span style="color: var(--volt);">SAVED: 4,210 TOKENS ($0.00)</span>
                   </div>
                 </div>
               </div>
@@ -2007,24 +1809,8 @@
           </div>
         </div>
 
-        <!-- Split Poster Architecture: Left Visual Artwork + Right 5-Stage Bus Pipeline -->
-        <div class="bp-poster-split">
-          <!-- Left: Swiss Modernist Blueprint Visual Poster -->
-          <div class="bp-artwork-box">
-            <img src="/assets/omnicache_blueprint_poster.jpg" 
-                 onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_blueprint_poster.jpg'; }" 
-                 alt="OmniCache Swiss Modernist Blueprint Engineering Poster" 
-                 onclick="openPosterModal()" 
-                 title="Click to expand 4K Blueprint" 
-                 loading="lazy">
-            <div class="bp-artwork-caption">
-              <div>SCHEMATIC: <strong>RADIX L1 &amp; INT8 TOPOGRAPHY</strong></div>
-              <button class="hero-tab-btn" onclick="openPosterModal()" style="padding: 4px 8px; font-size: 10px;">🔍 EXPAND 4K</button>
-            </div>
-          </div>
-
-          <!-- Right: 5-Node Schematic Pipeline Grid -->
-          <div class="bp-flow-pipeline">
+        <!-- 5-Node Schematic Pipeline Grid (Full-Width Engineering Bus) -->
+        <div class="bp-flow-pipeline">
             <!-- Node 01: Interceptor -->
             <div class="bp-node-card">
               <div>
@@ -2115,7 +1901,6 @@
               </div>
             </div>
           </div>
-        </div>
 
         <!-- Comparative Telemetry HUD Strip -->
         <div class="bp-hud-strip">
@@ -2473,17 +2258,6 @@ print(response.choices[0].message.content)</code></pre>
         </div>
       </div>
     </section>
-
-    <!-- Lightbox Modal for 4K Blueprint Poster -->
-    <div id="posterModal" onclick="closePosterModal(event)">
-      <div class="poster-modal-content" onclick="event.stopPropagation()">
-        <button class="poster-modal-close" onclick="closePosterModal()" title="Close (Esc)">✕</button>
-        <img src="/assets/omnicache_blueprint_poster.jpg" 
-             onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_blueprint_poster.jpg'; }" 
-             alt="OmniCache 4K High-Res Architectural Blueprint Poster" 
-             style="width: 100%; height: auto; display: block;">
-      </div>
-    </div>
   </main>
 
   <!-- 21st.dev Style Swiss Engineering Architecture Footer -->
@@ -2742,49 +2516,8 @@ print(message.content[0].text)`,
       });
     }
 
-    /* 21st.dev Viewport & Lightbox Handlers */
-    function switchHeroView(mode) {
-      const btn3d = document.getElementById('btn-hero-3d');
-      const btnTerm = document.getElementById('btn-hero-term');
-      const view3d = document.getElementById('hero-view-3d');
-      const viewTerm = document.getElementById('hero-view-term');
-      if (!btn3d || !btnTerm || !view3d || !viewTerm) return;
-      if (mode === '3d') {
-        btn3d.classList.add('active');
-        btnTerm.classList.remove('active');
-        view3d.style.display = 'block';
-        viewTerm.style.display = 'none';
-      } else {
-        btn3d.classList.remove('active');
-        btnTerm.classList.add('active');
-        view3d.style.display = 'none';
-        viewTerm.style.display = 'block';
-      }
-    }
-
-    function openPosterModal() {
-      const modal = document.getElementById('posterModal');
-      if (modal) {
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-      }
-    }
-
-    function closePosterModal(e) {
-      if (e && e.target && e.target.closest && e.target.closest('.poster-modal-content') && !e.target.classList.contains('poster-modal-close')) {
-        return;
-      }
-      const modal = document.getElementById('posterModal');
-      if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
-      }
-    }
-
+    /* Global Shortcuts */
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        closePosterModal();
-      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         const el = document.getElementById('quickstart');

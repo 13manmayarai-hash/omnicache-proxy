@@ -598,6 +598,61 @@
       position: relative;
     }
 
+    /* 21st.dev Animated Border-Beam */
+    @property --beam-angle {
+      syntax: '<angle>';
+      inherits: false;
+      initial-value: 0deg;
+    }
+
+    .border-beam-wrapper {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      padding: 2.5px;
+      background: #000;
+      box-shadow: 8px 12px 28px rgba(0, 0, 0, 0.75);
+    }
+
+    .border-beam-wrapper::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: conic-gradient(
+        from var(--beam-angle, 0deg),
+        transparent 0deg,
+        transparent 250deg,
+        var(--volt) 305deg,
+        var(--cyan) 360deg
+      );
+      animation: rotate-beam 5.5s linear infinite;
+      z-index: 0;
+    }
+
+    .border-beam-inner {
+      position: relative;
+      z-index: 1;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-card);
+      height: 100%;
+      width: 100%;
+    }
+
+    @keyframes rotate-beam {
+      0% {
+        --beam-angle: 0deg;
+        transform: rotate(0deg);
+      }
+      100% {
+        --beam-angle: 360deg;
+        transform: rotate(360deg);
+      }
+    }
+
     .hero-poster-frame {
       position: relative;
       border: 2.5px solid #000;
@@ -729,6 +784,37 @@
       box-shadow: var(--shadow-md);
       padding: 20px;
       position: relative;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 6px 6px 0 #000;
+    }
+
+    /* 21st.dev Dynamic Mouse Spotlight */
+    .spotlight-card {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .spotlight-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        280px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+        rgba(200, 255, 0, 0.08),
+        transparent 65%
+      );
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      z-index: 2;
+    }
+
+    .spotlight-card:hover::after {
+      opacity: 1;
     }
 
     .stat-card::before {
@@ -1809,60 +1895,68 @@
 
           <!-- View 1: 3D Isometric Engine Showcase -->
           <div id="hero-view-3d" class="hero-perspective-stage">
-            <div class="hero-poster-frame">
-              <img src="/assets/omnicache_saas_poster.jpg" 
-                   onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_saas_poster.jpg'; }" 
-                   alt="OmniCache 3D Engine Visualization" 
-                   class="hero-poster-img" 
-                   loading="eager">
-              <!-- Floating Hologram Badges -->
-              <div class="float-pill float-pill-1">
-                <span class="live-pulse"></span>
-                <span>0.06ms L1 HIT</span>
-              </div>
-              <div class="float-pill float-pill-2">
-                <span>⚡ 0.30ms REPLAY</span>
-              </div>
-              <div class="float-pill float-pill-3">
-                <span>$0.00 TOKENS</span>
+            <div class="border-beam-wrapper">
+              <div class="border-beam-inner">
+                <div class="hero-poster-frame">
+                  <img src="/assets/omnicache_saas_poster.jpg" 
+                       onerror="if (this.src.indexOf('githubusercontent') === -1) { this.src='https://raw.githubusercontent.com/13manmayarai-hash/omnicache-proxy/main/dashboard/assets/omnicache_saas_poster.jpg'; }" 
+                       alt="OmniCache 3D Engine Visualization" 
+                       class="hero-poster-img" 
+                       loading="eager">
+                  <!-- Floating Hologram Badges -->
+                  <div class="float-pill float-pill-1">
+                    <span class="live-pulse"></span>
+                    <span>0.06ms L1 HIT</span>
+                  </div>
+                  <div class="float-pill float-pill-2">
+                    <span>⚡ 0.30ms REPLAY</span>
+                  </div>
+                  <div class="float-pill float-pill-3">
+                    <span>$0.00 TOKENS</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           <!-- View 2: Interactive Terminal Sandbox -->
           <div id="hero-view-term" style="display: none;">
-            <div class="oc-terminal-card">
-              <div class="oc-terminal-header">
-                <div class="oc-term-dots">
-                  <div class="oc-term-dot dot-r"></div>
-                  <div class="oc-term-dot dot-y"></div>
-                  <div class="oc-term-dot dot-g"></div>
-                </div>
-                <div class="oc-term-title">omnicache-daemon ~ proxy-interceptor:8000</div>
-                <span style="font-family: var(--font-mono); font-size: 10px; color: var(--volt);">● LIVE WAL</span>
-              </div>
-              <div class="oc-terminal-body">
-                <div style="color: var(--text-muted); margin-bottom: 12px;"># Request Intercepted from Claude Code CLI</div>
-
-                <div style="margin-bottom: 14px; border-left: 2px solid var(--orange); padding-left: 10px;">
-                  <span class="oc-term-tag oc-tag-miss">CLOUD MISS</span>
-                  <span style="color: #fff;">GET package.json (mtime: 172651100)</span>
-                  <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
-                    → Upstream Anthropic API (Roundtrip: 1,840ms | 4,210 tokens | $0.063)
+            <div class="border-beam-wrapper">
+              <div class="border-beam-inner">
+                <div class="oc-terminal-card">
+                  <div class="oc-terminal-header">
+                    <div class="oc-term-dots">
+                      <div class="oc-term-dot dot-r"></div>
+                      <div class="oc-term-dot dot-y"></div>
+                      <div class="oc-term-dot dot-g"></div>
+                    </div>
+                    <div class="oc-term-title">omnicache-daemon ~ proxy-interceptor:8000</div>
+                    <span style="font-family: var(--font-mono); font-size: 10px; color: var(--volt);">● LIVE WAL</span>
                   </div>
-                </div>
+                  <div class="oc-terminal-body">
+                    <div style="color: var(--text-muted); margin-bottom: 12px;"># Request Intercepted from Claude Code CLI</div>
 
-                <div style="border-left: 2px solid var(--volt); padding-left: 10px; background: rgba(200, 255, 0, 0.05); padding-top: 6px; padding-bottom: 6px;">
-                  <span class="oc-term-tag oc-tag-hit">WAL HIT</span>
-                  <span style="color: #fff;">GET package.json (Git SHA: 9f8a2c unchanged)</span>
-                  <div style="color: var(--volt); font-size: 11px; font-weight: 700; margin-top: 2px;">
-                    ⚡ Served from Radix L1 Memory (0.06ms | 0 tokens | $0.00)
+                    <div style="margin-bottom: 14px; border-left: 2px solid var(--orange); padding-left: 10px;">
+                      <span class="oc-term-tag oc-tag-miss">CLOUD MISS</span>
+                      <span style="color: #fff;">GET package.json (mtime: 172651100)</span>
+                      <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
+                        → Upstream Anthropic API (Roundtrip: 1,840ms | 4,210 tokens | $0.063)
+                      </div>
+                    </div>
+
+                    <div style="border-left: 2px solid var(--volt); padding-left: 10px; background: rgba(200, 255, 0, 0.05); padding-top: 6px; padding-bottom: 6px;">
+                      <span class="oc-term-tag oc-tag-hit">WAL HIT</span>
+                      <span style="color: #fff;">GET package.json (Git SHA: 9f8a2c unchanged)</span>
+                      <div style="color: var(--volt); font-size: 11px; font-weight: 700; margin-top: 2px;">
+                        ⚡ Served from Radix L1 Memory (0.06ms | 0 tokens | $0.00)
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono);">
+                      <span style="color: var(--cyan);">NET LATENCY: -99.96%</span>
+                      <span style="color: var(--volt);">SAVED: 4,210 TOKENS ($0.00)</span>
+                    </div>
                   </div>
-                </div>
-
-                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono);">
-                  <span style="color: var(--cyan);">NET LATENCY: -99.96%</span>
-                  <span style="color: var(--volt);">SAVED: 4,210 TOKENS ($0.00)</span>
                 </div>
               </div>
             </div>
@@ -1872,19 +1966,19 @@
 
       <!-- Bento Live Stats Ribbon -->
       <div class="hero-stats">
-        <div class="stat-card v-volt">
-          <div class="stat-val">&lt; 0.1ms</div>
+        <div class="stat-card spotlight-card v-volt">
+          <div class="stat-val" data-target="0.06" data-prefix="< " data-suffix="ms" data-decimals="2">&lt; 0.1ms</div>
           <div class="stat-label">Cache Hit Latency</div>
         </div>
-        <div class="stat-card v-cyan">
-          <div class="stat-val">85.4%</div>
+        <div class="stat-card spotlight-card v-cyan">
+          <div class="stat-val" data-target="85.4" data-suffix="%" data-decimals="1">85.4%</div>
           <div class="stat-label">Avg Token Savings</div>
         </div>
-        <div class="stat-card v-orange">
-          <div class="stat-val">0 Code</div>
+        <div class="stat-card spotlight-card v-orange">
+          <div class="stat-val" data-target="0" data-suffix=" Code" data-decimals="0">0 Code</div>
           <div class="stat-label">Drop-In SDK Changes</div>
         </div>
-        <div class="stat-card v-purple">
+        <div class="stat-card spotlight-card v-purple">
           <div class="stat-val">RFC 7636</div>
           <div class="stat-label">Native MCP OAuth</div>
         </div>
@@ -2697,6 +2791,59 @@ print(message.content[0].text)`,
         if (el) el.scrollIntoView({ behavior: 'smooth' });
       }
     });
+
+    /* 21st.dev Interactive Enhancements: Dynamic Spotlight & Kinetic Odometers */
+    function initSpotlights() {
+      document.querySelectorAll('.spotlight-card').forEach(card => {
+        card.addEventListener('mousemove', (e) => {
+          const rect = card.getBoundingClientRect();
+          card.style.setProperty('--mouse-x', `${e.clientX - rect.left}px`);
+          card.style.setProperty('--mouse-y', `${e.clientY - rect.top}px`);
+        });
+      });
+    }
+
+    function initOdometers() {
+      if (!('IntersectionObserver' in window)) return;
+      const observer = new IntersectionObserver((entries, obs) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const el = entry.target;
+            const target = parseFloat(el.getAttribute('data-target'));
+            if (isNaN(target)) return;
+            const prefix = el.getAttribute('data-prefix') || '';
+            const suffix = el.getAttribute('data-suffix') || '';
+            const decimals = parseInt(el.getAttribute('data-decimals') || '0', 10);
+            const duration = 1400;
+            const startTime = performance.now();
+            
+            function step(now) {
+              const elapsed = now - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+              const ease = 1 - Math.pow(1 - progress, 3);
+              const current = (target * ease).toFixed(decimals);
+              el.innerText = `${prefix}${current}${suffix}`;
+              if (progress < 1) {
+                requestAnimationFrame(step);
+              } else {
+                el.innerText = `${prefix}${target.toFixed(decimals)}${suffix}`;
+              }
+            }
+            requestAnimationFrame(step);
+            obs.unobserve(el);
+          }
+        });
+      }, { threshold: 0.2 });
+
+      document.querySelectorAll('.stat-val[data-target]').forEach(el => observer.observe(el));
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      initSpotlights();
+      initOdometers();
+    });
+    initSpotlights();
+    initOdometers();
   </script>
 </body>
 </html>

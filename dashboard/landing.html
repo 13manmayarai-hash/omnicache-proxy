@@ -557,6 +557,99 @@
       font-size: 15px;
     }
 
+    /* 21st.dev Style Hero Viewport Switcher */
+    .hero-view-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .hero-tab-btn {
+      background: #171b26;
+      border: 1.5px solid var(--border-dark);
+      box-shadow: 2px 2px 0 #000;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .hero-tab-btn:hover {
+      color: var(--volt);
+      border-color: var(--volt);
+    }
+
+    .hero-tab-btn.active {
+      background: var(--volt);
+      color: #000;
+      border-color: #000;
+      box-shadow: 3px 3px 0 #000;
+    }
+
+    /* 3D Perspective Hero Stage */
+    .hero-perspective-stage {
+      perspective: 1200px;
+      position: relative;
+    }
+
+    .hero-poster-frame {
+      position: relative;
+      border: 2.5px solid #000;
+      box-shadow: 8px 12px 28px rgba(0, 0, 0, 0.75), 0 0 40px rgba(191, 119, 255, 0.18);
+      background: #090b14;
+      border-radius: 8px;
+      overflow: hidden;
+      transform: rotateX(3deg) rotateY(-4deg) rotateZ(0.5deg);
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s ease;
+    }
+
+    .hero-poster-frame:hover {
+      transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1.01);
+      box-shadow: 10px 18px 36px rgba(0, 0, 0, 0.85), 0 0 50px rgba(0, 240, 255, 0.25);
+    }
+
+    .hero-poster-img {
+      width: 100%;
+      height: auto;
+      display: block;
+      filter: contrast(1.04) brightness(1.02);
+    }
+
+    /* Floating Hologram Badges on 3D Stage */
+    .float-pill {
+      position: absolute;
+      background: rgba(13, 16, 25, 0.9);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1.5px solid #000;
+      box-shadow: 3px 3px 0 #000;
+      padding: 5px 11px;
+      border-radius: 9999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      animation: float-badge 3.6s ease-in-out infinite alternate;
+      z-index: 10;
+    }
+
+    .float-pill-1 { top: 18px; left: 16px; color: var(--volt); border-color: rgba(200, 255, 0, 0.6); }
+    .float-pill-2 { bottom: 20px; left: 18px; color: var(--cyan); border-color: rgba(0, 240, 255, 0.6); animation-delay: 1.2s; }
+    .float-pill-3 { top: 22px; right: 16px; color: #38ef7d; border-color: rgba(56, 239, 125, 0.6); animation-delay: 2.1s; }
+
+    @keyframes float-badge {
+      0% { transform: translateY(0px); }
+      100% { transform: translateY(-6px); }
+    }
+
     /* 21st.dev Style Interactive Terminal Comparison Card */
     .oc-terminal-card {
       background: var(--bg-card);
@@ -756,43 +849,89 @@
       .bp-poster-meta { text-align: right; }
     }
 
+    /* Split Poster Architecture: Left Visual Artwork + Right 5-Stage Bus Pipeline */
+    .bp-poster-split {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 28px;
+      margin-bottom: 28px;
+      align-items: center;
+    }
+
+    @media (min-width: 960px) {
+      .bp-poster-split {
+        grid-template-columns: 1fr 1.2fr;
+      }
+    }
+
+    .bp-artwork-box {
+      background: #080a10;
+      border: 2.5px solid #000;
+      box-shadow: 6px 6px 0 #000;
+      position: relative;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .bp-artwork-box img {
+      width: 100%;
+      height: auto;
+      display: block;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+    }
+
+    .bp-artwork-box img:hover {
+      transform: scale(1.02);
+    }
+
+    .bp-artwork-caption {
+      padding: 10px 14px;
+      background: #11141e;
+      border-top: 2px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .bp-artwork-caption strong {
+      color: var(--volt);
+    }
+
     /* 5-Node Schematic Pipeline Grid */
     .bp-flow-pipeline {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 18px;
+      gap: 12px;
       position: relative;
-    }
-
-    @media (min-width: 1024px) {
-      .bp-flow-pipeline {
-        grid-template-columns: repeat(5, 1fr);
-        gap: 14px;
-      }
     }
 
     .bp-node-card {
       background: #141822;
       border: 2px solid #000;
-      box-shadow: 4px 4px 0px #000;
-      padding: 18px 14px;
+      box-shadow: 3px 3px 0px #000;
+      padding: 14px 16px;
       position: relative;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s;
     }
 
     .bp-node-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 6px 6px 0px #000;
+      transform: translateX(4px);
+      box-shadow: 5px 5px 0px #000;
+      border-color: var(--volt);
     }
 
     .bp-node-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .bp-node-id {
@@ -812,7 +951,7 @@
 
     .bp-reticle {
       font-family: var(--font-mono);
-      font-size: 13px;
+      font-size: 12px;
       color: var(--text-dim);
     }
 
@@ -820,7 +959,7 @@
       font-size: 15px;
       font-weight: 900;
       text-transform: uppercase;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       line-height: 1.25;
       color: var(--text);
     }
@@ -829,21 +968,79 @@
       font-size: 12px;
       color: var(--text-muted);
       line-height: 1.5;
-      margin-bottom: 14px;
+      margin-bottom: 8px;
     }
 
     .bp-node-spec-box {
       background: var(--bg-well);
       border: 1px solid var(--border-subtle);
       box-shadow: var(--neu-pressed);
-      padding: 8px 10px;
+      padding: 6px 10px;
       font-family: var(--font-mono);
       font-size: 10px;
       color: var(--text-muted);
-      line-height: 1.6;
+      line-height: 1.5;
+      display: flex;
+      justify-content: space-between;
     }
 
     .bp-node-spec-box strong { color: var(--text); }
+
+    /* Modal for Fullscreen Blueprint Lightbox */
+    #posterModal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(4, 5, 8, 0.94);
+      backdrop-filter: blur(12px);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    #posterModal.active {
+      display: flex;
+    }
+
+    .poster-modal-content {
+      max-width: 900px;
+      max-height: 90vh;
+      background: #090b14;
+      border: 3px solid #000;
+      box-shadow: 12px 12px 0 #000;
+      position: relative;
+      overflow-y: auto;
+      border-radius: 6px;
+    }
+
+    .poster-modal-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: var(--volt);
+      border: 2px solid #000;
+      box-shadow: 2px 2px 0 #000;
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 900;
+      color: #000;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+
+    .poster-modal-close:hover {
+      background: #dcff4d;
+      transform: translate(-1px, -1px);
+    }
 
     /* Comparative Telemetry HUD Strip */
     .bp-hud-strip {
@@ -1598,40 +1795,71 @@
           </div>
         </div>
 
-        <!-- Right: 21st.dev Interactive Terminal Sandbox -->
+        <!-- Right: 21st.dev Interactive 3D Showcase & Terminal Diff -->
         <div>
-          <div class="oc-terminal-card">
-            <div class="oc-terminal-header">
-              <div class="oc-term-dots">
-                <div class="oc-term-dot dot-r"></div>
-                <div class="oc-term-dot dot-y"></div>
-                <div class="oc-term-dot dot-g"></div>
+          <!-- View Switcher Tabs -->
+          <div class="hero-view-toggle">
+            <button id="btn-hero-3d" class="hero-tab-btn active" onclick="switchHeroView('3d')">
+              🎨 3D Isometric View
+            </button>
+            <button id="btn-hero-term" class="hero-tab-btn" onclick="switchHeroView('term')">
+              ⚡ Terminal Diff
+            </button>
+          </div>
+
+          <!-- View 1: 3D Isometric Engine Showcase -->
+          <div id="hero-view-3d" class="hero-perspective-stage">
+            <div class="hero-poster-frame">
+              <img src="/assets/omnicache_saas_poster.jpg" alt="OmniCache 3D Engine Visualization" class="hero-poster-img">
+              <!-- Floating Hologram Badges -->
+              <div class="float-pill float-pill-1">
+                <span class="live-pulse"></span>
+                <span>0.06ms L1 HIT</span>
               </div>
-              <div class="oc-term-title">omnicache-daemon ~ proxy-interceptor:8000</div>
-              <span style="font-family: var(--font-mono); font-size: 10px; color: var(--volt);">● LIVE WAL</span>
+              <div class="float-pill float-pill-2">
+                <span>⚡ 0.30ms REPLAY</span>
+              </div>
+              <div class="float-pill float-pill-3">
+                <span>$0.00 TOKENS</span>
+              </div>
             </div>
-            <div class="oc-terminal-body">
-              <div style="color: var(--text-muted); margin-bottom: 12px;"># Request Intercepted from Claude Code CLI</div>
+          </div>
 
-              <div style="margin-bottom: 14px; border-left: 2px solid var(--orange); padding-left: 10px;">
-                <span class="oc-term-tag oc-tag-miss">CLOUD MISS</span>
-                <span style="color: #fff;">GET package.json (mtime: 172651100)</span>
-                <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
-                  → Upstream Anthropic API (Roundtrip: 1,840ms | 4,210 tokens | $0.063)
+          <!-- View 2: Interactive Terminal Sandbox -->
+          <div id="hero-view-term" style="display: none;">
+            <div class="oc-terminal-card">
+              <div class="oc-terminal-header">
+                <div class="oc-term-dots">
+                  <div class="oc-term-dot dot-r"></div>
+                  <div class="oc-term-dot dot-y"></div>
+                  <div class="oc-term-dot dot-g"></div>
                 </div>
+                <div class="oc-term-title">omnicache-daemon ~ proxy-interceptor:8000</div>
+                <span style="font-family: var(--font-mono); font-size: 10px; color: var(--volt);">● LIVE WAL</span>
               </div>
+              <div class="oc-terminal-body">
+                <div style="color: var(--text-muted); margin-bottom: 12px;"># Request Intercepted from Claude Code CLI</div>
 
-              <div style="border-left: 2px solid var(--volt); padding-left: 10px; background: rgba(200, 255, 0, 0.05); padding-top: 6px; padding-bottom: 6px;">
-                <span class="oc-term-tag oc-tag-hit">WAL HIT</span>
-                <span style="color: #fff;">GET package.json (Git SHA: 9f8a2c unchanged)</span>
-                <div style="color: var(--volt); font-size: 11px; font-weight: 700; margin-top: 2px;">
-                  ⚡ Served from Radix L1 Memory (0.06ms | 0 tokens | $0.00)
+                <div style="margin-bottom: 14px; border-left: 2px solid var(--orange); padding-left: 10px;">
+                  <span class="oc-term-tag oc-tag-miss">CLOUD MISS</span>
+                  <span style="color: #fff;">GET package.json (mtime: 172651100)</span>
+                  <div style="color: var(--text-dim); font-size: 11px; margin-top: 2px;">
+                    → Upstream Anthropic API (Roundtrip: 1,840ms | 4,210 tokens | $0.063)
+                  </div>
                 </div>
-              </div>
 
-              <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono);">
-                <span style="color: var(--cyan);">NET LATENCY: -99.96%</span>
-                <span style="color: var(--volt);">SAVED: 4,210 TOKENS ($0.00)</span>
+                <div style="border-left: 2px solid var(--volt); padding-left: 10px; background: rgba(200, 255, 0, 0.05); padding-top: 6px; padding-bottom: 6px;">
+                  <span class="oc-term-tag oc-tag-hit">WAL HIT</span>
+                  <span style="color: #fff;">GET package.json (Git SHA: 9f8a2c unchanged)</span>
+                  <div style="color: var(--volt); font-size: 11px; font-weight: 700; margin-top: 2px;">
+                    ⚡ Served from Radix L1 Memory (0.06ms | 0 tokens | $0.00)
+                  </div>
+                </div>
+
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--border-subtle); display: flex; justify-content: space-between; font-size: 11px; font-family: var(--font-mono);">
+                  <span style="color: var(--cyan);">NET LATENCY: -99.96%</span>
+                  <span style="color: var(--volt);">SAVED: 4,210 TOKENS ($0.00)</span>
+                </div>
               </div>
             </div>
           </div>
@@ -1681,95 +1909,107 @@
           </div>
         </div>
 
-        <!-- 5-Node Schematic Pipeline Grid -->
-        <div class="bp-flow-pipeline">
-          <!-- Node 01: Interceptor -->
-          <div class="bp-node-card">
-            <div>
-              <div class="bp-node-top">
-                <span class="bp-node-id node-id-1">STAGE 01</span>
-                <span class="bp-reticle">⌖ INT-01</span>
-              </div>
-              <h3 class="bp-node-title">Sidecar Intercept</h3>
-              <p class="bp-node-desc">
-                Transparently intercepts OpenAI, Anthropic, and MCP tool requests on localhost port <code>8000</code>.
-              </p>
-            </div>
-            <div class="bp-node-spec-box">
-              <div>TARGET: <strong>127.0.0.1:8000</strong></div>
-              <div>OVERHEAD: <strong>0.02ms</strong></div>
+        <!-- Split Poster Architecture: Left Visual Artwork + Right 5-Stage Bus Pipeline -->
+        <div class="bp-poster-split">
+          <!-- Left: Swiss Modernist Blueprint Visual Poster -->
+          <div class="bp-artwork-box">
+            <img src="/assets/omnicache_blueprint_poster.jpg" alt="OmniCache Swiss Modernist Blueprint Engineering Poster" onclick="openPosterModal()" title="Click to expand 4K Blueprint">
+            <div class="bp-artwork-caption">
+              <div>SCHEMATIC: <strong>RADIX L1 &amp; INT8 TOPOGRAPHY</strong></div>
+              <button class="hero-tab-btn" onclick="openPosterModal()" style="padding: 4px 8px; font-size: 10px;">🔍 EXPAND 4K</button>
             </div>
           </div>
 
-          <!-- Node 02: Radix L1 Check -->
-          <div class="bp-node-card">
-            <div>
-              <div class="bp-node-top">
-                <span class="bp-node-id node-id-2">STAGE 02</span>
-                <span class="bp-reticle">⌖ L1-TRIE</span>
+          <!-- Right: 5-Node Schematic Pipeline Grid -->
+          <div class="bp-flow-pipeline">
+            <!-- Node 01: Interceptor -->
+            <div class="bp-node-card">
+              <div>
+                <div class="bp-node-top">
+                  <span class="bp-node-id node-id-1">STAGE 01</span>
+                  <span class="bp-reticle">⌖ INT-01</span>
+                </div>
+                <h3 class="bp-node-title">Sidecar Intercept</h3>
+                <p class="bp-node-desc">
+                  Transparently intercepts OpenAI, Anthropic, and MCP tool requests on localhost port <code>8000</code>.
+                </p>
               </div>
-              <h3 class="bp-node-title">L1 Radix Lookup</h3>
-              <p class="bp-node-desc">
-                Deterministic O(k) prefix tree matches prompts & verifies SHA-256 Git mtime to prevent stale context.
-              </p>
+              <div class="bp-node-spec-box">
+                <div>TARGET: <strong>127.0.0.1:8000</strong></div>
+                <div>OVERHEAD: <strong>0.02ms</strong></div>
+              </div>
             </div>
-            <div class="bp-node-spec-box">
-              <div>LOOKUP: <strong>0.06ms</strong></div>
-              <div>VERIFY: <strong>Git SHA-256</strong></div>
-            </div>
-          </div>
 
-          <!-- Node 03: Vector Quantization -->
-          <div class="bp-node-card">
-            <div>
-              <div class="bp-node-top">
-                <span class="bp-node-id node-id-3">STAGE 03</span>
-                <span class="bp-reticle">⌖ ANN-VEC</span>
+            <!-- Node 02: Radix L1 Check -->
+            <div class="bp-node-card">
+              <div>
+                <div class="bp-node-top">
+                  <span class="bp-node-id node-id-2">STAGE 02</span>
+                  <span class="bp-reticle">⌖ L1-TRIE</span>
+                </div>
+                <h3 class="bp-node-title">L1 Radix Lookup</h3>
+                <p class="bp-node-desc">
+                  Deterministic O(k) prefix tree matches prompts & verifies SHA-256 Git mtime to prevent stale context.
+                </p>
               </div>
-              <h3 class="bp-node-title">Int8 ANN Search</h3>
-              <p class="bp-node-desc">
-                Quantizes embeddings into Int8 vectors. Computes SIMD cosine similarity to detect semantically identical turns.
-              </p>
+              <div class="bp-node-spec-box">
+                <div>LOOKUP: <strong>0.06ms</strong></div>
+                <div>VERIFY: <strong>Git SHA-256</strong></div>
+              </div>
             </div>
-            <div class="bp-node-spec-box">
-              <div>THRESHOLD: <strong>Cosine ≥ 0.88</strong></div>
-              <div>QUANT: <strong>Int8 SIMD</strong></div>
-            </div>
-          </div>
 
-          <!-- Node 04: Zero-Token Replay -->
-          <div class="bp-node-card">
-            <div>
-              <div class="bp-node-top">
-                <span class="bp-node-id node-id-4">STAGE 04</span>
-                <span class="bp-reticle">⌖ WAL-MEM</span>
+            <!-- Node 03: Vector Quantization -->
+            <div class="bp-node-card">
+              <div>
+                <div class="bp-node-top">
+                  <span class="bp-node-id node-id-3">STAGE 03</span>
+                  <span class="bp-reticle">⌖ ANN-VEC</span>
+                </div>
+                <h3 class="bp-node-title">Int8 ANN Search</h3>
+                <p class="bp-node-desc">
+                  Quantizes embeddings into Int8 vectors. Computes SIMD cosine similarity to detect semantically identical turns.
+                </p>
               </div>
-              <h3 class="bp-node-title">Zero-Token Replay</h3>
-              <p class="bp-node-desc">
-                On cache hit, replays file contents & tool call results directly from SQLite WAL for $0.00.
-              </p>
+              <div class="bp-node-spec-box">
+                <div>THRESHOLD: <strong>Cosine ≥ 0.88</strong></div>
+                <div>QUANT: <strong>Int8 SIMD</strong></div>
+              </div>
             </div>
-            <div class="bp-node-spec-box">
-              <div>COST: <strong>$0.00 / 0 Tokens</strong></div>
-              <div>SPEED: <strong>&lt;0.1ms Replay</strong></div>
-            </div>
-          </div>
 
-          <!-- Node 05: Fallback & Compaction -->
-          <div class="bp-node-card">
-            <div>
-              <div class="bp-node-top">
-                <span class="bp-node-id node-id-5">STAGE 05</span>
-                <span class="bp-reticle">⌖ CMP-UP</span>
+            <!-- Node 04: Zero-Token Replay -->
+            <div class="bp-node-card">
+              <div>
+                <div class="bp-node-top">
+                  <span class="bp-node-id node-id-4">STAGE 04</span>
+                  <span class="bp-reticle">⌖ WAL-MEM</span>
+                </div>
+                <h3 class="bp-node-title">Zero-Token Replay</h3>
+                <p class="bp-node-desc">
+                  On cache hit, replays file contents & tool call results directly from SQLite WAL for $0.00.
+                </p>
               </div>
-              <h3 class="bp-node-title">Prune &amp; Cloud Turn</h3>
-              <p class="bp-node-desc">
-                On cache miss, compacts redundant head/tail context, invokes upstream cloud, and writes back to WAL.
-              </p>
+              <div class="bp-node-spec-box">
+                <div>COST: <strong>$0.00 / 0 Tokens</strong></div>
+                <div>SPEED: <strong>&lt;0.1ms Replay</strong></div>
+              </div>
             </div>
-            <div class="bp-node-spec-box">
-              <div>FALLBACK: <strong>Anthropic / OpenAI</strong></div>
-              <div>WRITE-BACK: <strong>Async SQLite</strong></div>
+
+            <!-- Node 05: Fallback & Compaction -->
+            <div class="bp-node-card">
+              <div>
+                <div class="bp-node-top">
+                  <span class="bp-node-id node-id-5">STAGE 05</span>
+                  <span class="bp-reticle">⌖ CMP-UP</span>
+                </div>
+                <h3 class="bp-node-title">Prune &amp; Cloud Turn</h3>
+                <p class="bp-node-desc">
+                  On cache miss, compacts redundant head/tail context, invokes upstream cloud, and writes back to WAL.
+                </p>
+              </div>
+              <div class="bp-node-spec-box">
+                <div>FALLBACK: <strong>Anthropic / OpenAI</strong></div>
+                <div>WRITE-BACK: <strong>Async SQLite</strong></div>
+              </div>
             </div>
           </div>
         </div>
@@ -2130,6 +2370,14 @@ print(response.choices[0].message.content)</code></pre>
         </div>
       </div>
     </section>
+
+    <!-- Lightbox Modal for 4K Blueprint Poster -->
+    <div id="posterModal" onclick="closePosterModal(event)">
+      <div class="poster-modal-content" onclick="event.stopPropagation()">
+        <button class="poster-modal-close" onclick="closePosterModal()" title="Close (Esc)">✕</button>
+        <img src="/assets/omnicache_blueprint_poster.jpg" alt="OmniCache 4K High-Res Architectural Blueprint Poster" style="width: 100%; height: auto; display: block;">
+      </div>
+    </div>
   </main>
 
   <!-- 21st.dev Style Swiss Engineering Architecture Footer -->
@@ -2387,6 +2635,56 @@ print(message.content[0].text)`,
         }, 1500);
       });
     }
+
+    /* 21st.dev Viewport & Lightbox Handlers */
+    function switchHeroView(mode) {
+      const btn3d = document.getElementById('btn-hero-3d');
+      const btnTerm = document.getElementById('btn-hero-term');
+      const view3d = document.getElementById('hero-view-3d');
+      const viewTerm = document.getElementById('hero-view-term');
+      if (!btn3d || !btnTerm || !view3d || !viewTerm) return;
+      if (mode === '3d') {
+        btn3d.classList.add('active');
+        btnTerm.classList.remove('active');
+        view3d.style.display = 'block';
+        viewTerm.style.display = 'none';
+      } else {
+        btn3d.classList.remove('active');
+        btnTerm.classList.add('active');
+        view3d.style.display = 'none';
+        viewTerm.style.display = 'block';
+      }
+    }
+
+    function openPosterModal() {
+      const modal = document.getElementById('posterModal');
+      if (modal) {
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+      }
+    }
+
+    function closePosterModal(e) {
+      if (e && e.target && e.target.closest && e.target.closest('.poster-modal-content') && !e.target.classList.contains('poster-modal-close')) {
+        return;
+      }
+      const modal = document.getElementById('posterModal');
+      if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closePosterModal();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        const el = document.getElementById('quickstart');
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
   </script>
 </body>
 </html>

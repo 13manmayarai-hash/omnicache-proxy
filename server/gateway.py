@@ -3647,6 +3647,37 @@ async def handle_landing(request: Request) -> Response:
     return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
+async def handle_assets(request: Request) -> Response:
+    """Serves static dashboard visual assets (e.g. posters, diagrams, icons)."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    
+    file_path = request.path_params.get("file_path", "")
+    safe_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "assets"))
+    target = os.path.abspath(os.path.join(safe_dir, file_path))
+    if not target.startswith(safe_dir) or not os.path.exists(target) or os.path.isdir(target):
+        return JSONResponse({"error": "Asset not found"}, status_code=404, headers=cors_headers)
+    
+    media_type = "image/jpeg"
+    if target.endswith(".png"):
+        media_type = "image/png"
+    elif target.endswith(".svg"):
+        media_type = "image/svg+xml"
+    elif target.endswith(".webp"):
+        media_type = "image/webp"
+    elif target.endswith(".css"):
+        media_type = "text/css"
+    elif target.endswith(".js"):
+        media_type = "application/javascript"
+        
+    with open(target, "rb") as f:
+        content = f.read()
+    cors_headers["cache-control"] = "public, max-age=86400"
+    return Response(content, media_type=media_type, headers=cors_headers)
+
+
+
 
 
 # =====================================================================
@@ -4963,6 +4994,7 @@ routes = [
     Route("/dashboard", handle_dashboard, methods=["GET"]),
     Route("/ws", handle_ws_http, methods=["GET", "POST", "OPTIONS"]),
     WebSocketRoute("/ws", handle_ws),
+    Route("/assets/{file_path:path}", handle_assets, methods=["GET", "OPTIONS"]),
     Route("/{rest_of_path:path}", handle_catchall, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 ]
 

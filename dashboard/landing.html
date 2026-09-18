@@ -1463,6 +1463,137 @@
       font-weight: 900;
     }
 
+    /* Dark Neo-Brutalist FAQ Accordion Section */
+    .faq-section {
+      margin-bottom: 80px;
+    }
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    @media (min-width: 860px) {
+      .faq-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+    }
+
+    .faq-card {
+      background: var(--bg-card);
+      border: 2.5px solid #000;
+      box-shadow: var(--shadow-sm);
+      border-radius: 6px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .faq-card:hover {
+      border-color: var(--border-subtle);
+      box-shadow: var(--shadow-md);
+    }
+
+    .faq-card.open {
+      border-color: var(--volt);
+      box-shadow: 4px 4px 0px #000;
+    }
+
+    .faq-question {
+      padding: 18px 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      user-select: none;
+      background: var(--bg-card-alt);
+    }
+
+    .faq-question-text {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1.35;
+    }
+
+    .faq-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 900;
+      padding: 2px 6px;
+      border: 1px solid #000;
+      box-shadow: 1px 1px 0 #000;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .faq-badge-mcp { background: var(--cyan); color: #000; }
+    .faq-badge-core { background: var(--volt); color: #000; }
+    .faq-badge-mcb { background: var(--purple); color: #000; }
+    .faq-badge-sec { background: #38ef7d; color: #000; }
+    .faq-badge-pay { background: var(--orange); color: #000; }
+
+    .faq-toggle-icon {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--volt);
+      transition: transform 0.25s ease, background 0.2s ease;
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border: 1.5px solid #000;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+    }
+
+    .faq-card.open .faq-toggle-icon {
+      transform: rotate(45deg);
+      background: var(--volt);
+      color: #000;
+    }
+
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease;
+      background: var(--bg-card);
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      border-top: 1px solid transparent;
+      padding: 0 20px;
+    }
+
+    .faq-card.open .faq-answer {
+      max-height: 600px;
+      padding: 16px 20px 20px 20px;
+      border-top-color: var(--border-subtle);
+    }
+
+    .faq-answer strong {
+      color: var(--text);
+    }
+
+    .faq-answer code {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      background: #080a10;
+      padding: 2px 6px;
+      border: 1px solid var(--border-subtle);
+      color: var(--volt);
+    }
+
     /* 21st.dev Style Swiss Engineering Architecture Footer */
     footer {
       border-top: 3px solid #000;
@@ -1636,6 +1767,7 @@
         <li><a href="#quickstart" class="nav-link">Quickstart</a></li>
         <li><a href="#benchmarks" class="nav-link">Benchmarks</a></li>
         <li><a href="#pricing" class="nav-link">Pricing</a></li>
+        <li><a href="#faqs" class="nav-link">FAQs</a></li>
       </ul>
       <div class="nav-actions">
         <!-- 21st.dev Style Quick Command Trigger -->
@@ -1674,6 +1806,7 @@
       <li><a href="#quickstart" onclick="toggleMobileDrawer()">Quickstart</a></li>
       <li><a href="#benchmarks" onclick="toggleMobileDrawer()">Benchmarks</a></li>
       <li><a href="#pricing" onclick="toggleMobileDrawer()">Pricing Plans</a></li>
+      <li><a href="#faqs" onclick="toggleMobileDrawer()">FAQs &amp; MCP Guide</a></li>
       <li><a href="/dashboard" onclick="toggleMobileDrawer()">Live Dashboard ↗</a></li>
     </ul>
     <div style="margin-top: auto; display: flex; flex-direction: column; gap: 10px;">
@@ -2258,6 +2391,110 @@ print(response.choices[0].message.content)</code></pre>
         </div>
       </div>
     </section>
+
+    <!-- Frequently Asked Questions & MCP Architecture Guide -->
+    <section id="faqs" class="faq-section">
+      <div class="section-title-wrap">
+        <span class="section-badge">Engineering FAQs</span>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+        <p style="color: var(--text-muted); font-size: 15px; margin-top: 10px;">
+          Everything you need to know about Model Context Protocol (MCP), Model Cascading (MCB), cross-provider caching, and local privacy.
+        </p>
+      </div>
+
+      <div class="faq-grid">
+        <!-- Question 1: MCP Integration -->
+        <div class="faq-card open">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <div class="faq-question-text">
+              <span class="faq-badge faq-badge-mcp">MCP</span>
+              <span>How does OmniCache integrate with Model Context Protocol (MCP)?</span>
+            </div>
+            <div class="faq-toggle-icon">+</div>
+          </div>
+          <div class="faq-answer">
+            OmniCache operates as a native <strong>RFC 7636 PKCE Model Context Protocol (MCP)</strong> streaming server on <code>http://127.0.0.1:8000/mcp</code>. It seamlessly bridges to <strong>Claude Desktop</strong>, <strong>Claude Code CLI</strong>, and <strong>Cursor</strong> via standard JSON-RPC 2.0. When an autonomous coding agent triggers tool executions (e.g. <code>read_file</code>, <code>bash</code>, or codebase search), OmniCache intercepts the call, verifies the Git working tree SHA-256, and replays identical executions directly from SQLite WAL memory in <strong>&lt;0.1ms</strong> at <strong>$0.00 token cost</strong> without invoking the upstream frontier model.
+          </div>
+        </div>
+
+        <!-- Question 2: Difference vs Native Provider Caching -->
+        <div class="faq-card open">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <div class="faq-question-text">
+              <span class="faq-badge faq-badge-core">CORE</span>
+              <span>How does OmniCache differ from Anthropic &amp; OpenAI native caching?</span>
+            </div>
+            <div class="faq-toggle-icon">+</div>
+          </div>
+          <div class="faq-answer">
+            Native prompt caching from Anthropic or OpenAI has three structural limitations that OmniCache solves:
+            <br><br>
+            1. <strong>Provider Silos:</strong> Anthropic's cache only works for Claude; OpenAI's only works for GPT. OmniCache provides a <strong>cross-provider cache fabric</strong> where common prompt turns and tool outputs are shared across Claude, GPT-4o, DeepSeek, and Ollama.<br>
+            2. <strong>Zero Tool-Call Replay:</strong> Upstream providers only cache raw text prompt prefixes—they <em>never</em> cache tool executions. OmniCache replays expensive file reads and shell commands deterministically.<br>
+            3. <strong>Ephemeral &amp; Per-Key:</strong> Native provider caching expires quickly (e.g. 5-minute TTL) and cannot be shared across multiple developer API keys. OmniCache shares warm cache state across your entire engineering team and CI/CD runs.
+          </div>
+        </div>
+
+        <!-- Question 3: Model Cascading (MCB) -->
+        <div class="faq-card">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <div class="faq-question-text">
+              <span class="faq-badge faq-badge-mcb">MCB</span>
+              <span>What is Model Cascading (MCB) and how does fallback routing work?</span>
+            </div>
+            <div class="faq-toggle-icon">+</div>
+          </div>
+          <div class="faq-answer">
+            <strong>Model Cascading (MCB / Model Cascading Bridge)</strong> dynamically routes LLM requests based on prompt complexity and upstream provider health:
+            <br><br>
+            • <strong>Complexity Delegation:</strong> Simple factual queries, syntax formatting, and repetitive prompts are automatically delegated to fast, low-cost models (e.g. <code>gpt-4o-mini</code> or <code>claude-3-5-haiku</code>), saving up to 90% compared to frontier models.<br>
+            • <strong>Graceful Fallback:</strong> If an upstream cloud provider triggers an HTTP <code>429 Rate Limit</code> or service outage, OmniCache transparently cascades the request to an equivalent healthy model without crashing your agent session.
+          </div>
+        </div>
+
+        <!-- Question 4: Freshness & Stale Data Prevention -->
+        <div class="faq-card">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <div class="faq-question-text">
+              <span class="faq-badge faq-badge-sec">FRESH</span>
+              <span>How does OmniCache prevent stale cache hits when code changes?</span>
+            </div>
+            <div class="faq-toggle-icon">+</div>
+          </div>
+          <div class="faq-answer">
+            OmniCache binds each cached tool call and prompt turn to the developer's <strong>Git working tree SHA-256 and file modification timestamps (mtime)</strong>. If you edit a file, run a build, or switch Git branches, the cache key immediately invalidates. You receive fresh disk output instantly—avoiding stale hallucinations while preserving sub-millisecond replays for all unchanged context.
+          </div>
+        </div>
+
+        <!-- Question 5: Air-Gapped Privacy & Security -->
+        <div class="faq-card">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <div class="faq-question-text">
+              <span class="faq-badge faq-badge-sec">PRIVACY</span>
+              <span>Is my source code or prompt data sent to external cloud servers?</span>
+            </div>
+            <div class="faq-toggle-icon">+</div>
+          </div>
+          <div class="faq-answer">
+            <strong>No. OmniCache runs 100% locally on localhost (127.0.0.1:8000).</strong> All prompts, responses, tool executions, and tokens are stored in your private, local SQLite WAL database on your own machine. There is zero telemetry, zero cloud prompt logging, and zero external vector DB dependence. For team and enterprise deployments, OmniCache runs inside your own private VPC.
+          </div>
+        </div>
+
+        <!-- Question 6: Billing & Quotas -->
+        <div class="faq-card">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <div class="faq-question-text">
+              <span class="faq-badge faq-badge-pay">BILLING</span>
+              <span>How does INR billing and USD spend protection work?</span>
+            </div>
+            <div class="faq-toggle-icon">+</div>
+          </div>
+          <div class="faq-answer">
+            OmniCache offers transparent, developer-friendly billing powered by <strong>Razorpay</strong> in Indian Rupees (INR) with instant UPI, RuPay, and domestic credit/debit card checkout. Because upstream LLM providers (Anthropic, OpenAI) invoice developers in USD, OmniCache's virtual key engine enforces atomic <strong>monthly USD spend protection caps</strong> (e.g., $100/mo on Developer Pro) to ensure runaway agent loops never cause unexpected cloud billing shocks.
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <!-- 21st.dev Style Swiss Engineering Architecture Footer -->
@@ -2310,6 +2547,7 @@ print(response.choices[0].message.content)</code></pre>
           <ul class="footer-links">
             <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy#model-context-protocol-mcp-integration" target="_blank">Claude Code Sidecar</a></li>
             <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy#model-context-protocol-mcp-integration" target="_blank">Cursor MCP Gateway</a></li>
+            <li><a href="#faqs">Architecture &amp; MCP FAQ</a></li>
             <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank">Aider Local Proxy</a></li>
             <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank">Cline VSCode Extension</a></li>
             <li><a href="/auth/google/login">RFC 7636 OAuth Handler</a></li>
@@ -2569,6 +2807,13 @@ print(message.content[0].text)`,
       }, { threshold: 0.2 });
 
       document.querySelectorAll('.stat-val[data-target]').forEach(el => observer.observe(el));
+    }
+
+    function toggleFaq(el) {
+      const card = el.closest('.faq-card');
+      if (card) {
+        card.classList.toggle('open');
+      }
     }
 
     document.addEventListener('DOMContentLoaded', () => {

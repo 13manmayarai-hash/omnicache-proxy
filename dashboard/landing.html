@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OmniCache — Sub-Millisecond Semantic AI Proxy & MCP Gateway</title>
+  <title>OmniCache — Sub-Millisecond AI Proxy, Cross-Provider Caching & Tool-Call Replay Gateway</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Space+Grotesk:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -1595,25 +1595,25 @@
   <!-- Top Announcement Ticker -->
   <div class="marquee-strip">
     <div class="marquee-track">
-      <span>⚡ SUB-MILLISECOND LATENCY (0.8MS)</span>
+      <span>⚡ SUB-MILLISECOND LATENCY (&lt;0.1MS)</span>
       <span>•</span>
-      <span>💰 85%+ AVERAGE COST REDUCTION</span>
+      <span>🔄 CROSS-PROVIDER CACHE (CLAUDE + GPT + OLLAMA)</span>
       <span>•</span>
-      <span>🔌 ZERO CODE SDK CHANGES</span>
+      <span>🛠️ DETERMINISTIC TOOL-CALL REPLAY ($0.00)</span>
       <span>•</span>
-      <span>🤖 CLAUDE CONNECTORS & CURSOR MCP VERIFIED</span>
+      <span>👥 TEAM-SHARED WORKSPACE MEMORY</span>
       <span>•</span>
-      <span>🔒 LOCAL QUANTIZED VECTOR EMBEDDINGS</span>
+      <span>🔌 ZERO SDK REWRITE</span>
       <span>•</span>
-      <span>🌐 DISTRIBUTED CRDT P2P EDGE MESH</span>
+      <span>🤖 RFC 7636 MCP NATIVE</span>
       <span>•</span>
-      <span>⚡ SUB-MILLISECOND LATENCY (0.8MS)</span>
+      <span>⚡ SUB-MILLISECOND LATENCY (&lt;0.1MS)</span>
       <span>•</span>
-      <span>💰 85%+ AVERAGE COST REDUCTION</span>
+      <span>🔄 CROSS-PROVIDER CACHE (CLAUDE + GPT + OLLAMA)</span>
       <span>•</span>
-      <span>🔌 ZERO CODE SDK CHANGES</span>
+      <span>🛠️ DETERMINISTIC TOOL-CALL REPLAY ($0.00)</span>
       <span>•</span>
-      <span>🤖 CLAUDE CONNECTORS & CURSOR MCP VERIFIED</span>
+      <span>👥 TEAM-SHARED WORKSPACE MEMORY</span>
     </div>
   </div>
 
@@ -1697,7 +1697,7 @@
                 <span class="live-pulse"></span>
                 RADIX L1 TRIE // 0.06MS
               </span>
-              <span class="bp-chip chip-cyan">INT8 VECTOR ANN</span>
+              <span class="bp-chip chip-cyan">CROSS-PROVIDER REPLAY</span>
               <span class="bp-chip">RFC 7636 MCP NATIVE</span>
             </div>
 
@@ -1707,8 +1707,8 @@
             </h1>
 
             <p class="hero-desc">
-              The transparent localhost proxy for <strong>Claude Code</strong>, <strong>Cursor</strong>, and enterprise AI agents. 
-              Fingerprints Git working trees, detects semantic similarities via quantized Int8 vectors, and replays tool executions from SQLite WAL memory at <strong>$0.00 token cost</strong> in <strong>&lt;0.1ms</strong>.
+              The transparent localhost proxy for <strong>Claude Code</strong>, <strong>Cursor</strong>, and autonomous AI agents. 
+              Delivers unified <strong>cross-provider caching</strong> (Claude, GPT, Ollama), instant <strong>deterministic tool-call replay</strong> from Git working trees, and team-shared memory from SQLite WAL at <strong>$0.00 token cost</strong> in <strong>&lt;0.1ms</strong>.
             </p>
 
             <div class="hero-cta-group">
@@ -1805,7 +1805,7 @@
           <div class="bp-poster-meta">
             <div>LATENCY TARGET: &lt;0.1ms DETERMINISTIC</div>
             <div>FRESHNESS: SHA-256 GIT WORKING TREE</div>
-            <div>SIMILARITY: INT8 SIMD COSINE (≥0.88)</div>
+            <div>MATCH METHOD: RADIX L1 + FUZZY SUBWORD</div>
           </div>
         </div>
 
@@ -1820,7 +1820,7 @@
                 </div>
                 <h3 class="bp-node-title">Sidecar Intercept</h3>
                 <p class="bp-node-desc">
-                  Transparently intercepts OpenAI, Anthropic, and MCP tool requests on localhost port <code>8000</code>.
+                  Transparently intercepts OpenAI, Anthropic, Ollama, and MCP tool requests on localhost port <code>8000</code>.
                 </p>
               </div>
               <div class="bp-node-spec-box">
@@ -1847,21 +1847,21 @@
               </div>
             </div>
 
-            <!-- Node 03: Vector Quantization -->
+            <!-- Node 03: Subword Lexical Projection -->
             <div class="bp-node-card">
               <div>
                 <div class="bp-node-top">
                   <span class="bp-node-id node-id-3">STAGE 03</span>
-                  <span class="bp-reticle">⌖ ANN-VEC</span>
+                  <span class="bp-reticle">⌖ FUZZY-PROJ</span>
                 </div>
-                <h3 class="bp-node-title">Int8 ANN Search</h3>
+                <h3 class="bp-node-title">Subword Lexical Match</h3>
                 <p class="bp-node-desc">
-                  Quantizes embeddings into Int8 vectors. Computes SIMD cosine similarity to detect semantically identical turns.
+                  Projects subword tokens & hashes n-grams (<code>fuzzy_lexical_subword_projection</code>) to detect lexical matches without external model roundtrips.
                 </p>
               </div>
               <div class="bp-node-spec-box">
-                <div>THRESHOLD: <strong>Cosine ≥ 0.88</strong></div>
-                <div>QUANT: <strong>Int8 SIMD</strong></div>
+                <div>METHOD: <strong>Fuzzy Subword</strong></div>
+                <div>OVERHEAD: <strong>&lt;0.05ms Local</strong></div>
               </div>
             </div>
 
@@ -1872,9 +1872,9 @@
                   <span class="bp-node-id node-id-4">STAGE 04</span>
                   <span class="bp-reticle">⌖ WAL-MEM</span>
                 </div>
-                <h3 class="bp-node-title">Zero-Token Replay</h3>
+                <h3 class="bp-node-title">Zero-Token Tool Replay</h3>
                 <p class="bp-node-desc">
-                  On cache hit, replays file contents & tool call results directly from SQLite WAL for $0.00.
+                  On cache hit, replays file contents & tool call results directly from SQLite WAL for $0.00 without invoking upstream models.
                 </p>
               </div>
               <div class="bp-node-spec-box">
@@ -1929,7 +1929,7 @@
     <section id="demo" style="padding-top: 40px;">
       <div class="section-title-wrap">
         <span class="section-badge">Live Interactive Simulator</span>
-        <h2 class="section-title">See Semantic Vector Matching In Action</h2>
+        <h2 class="section-title">See Fuzzy Lexical &amp; Prefix Matching In Action</h2>
       </div>
 
       <div class="demo-frame">
@@ -1939,7 +1939,7 @@
             <div class="dot dot-yellow"></div>
             <div class="dot dot-green"></div>
           </div>
-          <div class="demo-title-bar">omnicache-simulator ~ semantic-matching-engine</div>
+          <div class="demo-title-bar">omnicache-simulator ~ fuzzy-projection-engine</div>
           <div style="font-family: 'JetBrains Mono'; font-size: 11px; color: var(--volt);">● LIVE CLUSTER</div>
         </div>
         <div class="demo-body">
@@ -1982,7 +1982,7 @@
 
             <!-- With OmniCache -->
             <div class="result-box cached">
-              <span class="result-badge badge-hit" id="cacheHitBadge">⚡ OmniCache Semantic Hit (98.4% Match)</span>
+              <span class="result-badge badge-hit" id="cacheHitBadge">⚡ OmniCache Fuzzy Lexical Hit (98.4% Match)</span>
               <div class="metric-row">
                 <span class="metric-label">Latency:</span>
                 <span class="metric-val" id="cachedLatency" style="color: var(--volt);">0.8 ms (1,775x faster)</span>
@@ -1996,8 +1996,8 @@
                 <span class="metric-val" id="cachedTokens" style="color: var(--volt);">0 tokens ($ avoided)</span>
               </div>
               <div class="metric-row">
-                <span class="metric-label">Vector Radix:</span>
-                <span class="metric-val" style="color: var(--cyan);">Exact Radix L1 + HNSW L2</span>
+                <span class="metric-label">Match Method:</span>
+                <span class="metric-val" style="color: var(--cyan);">fuzzy_lexical_subword_projection</span>
               </div>
               <div class="result-text" id="cachedResponse">
                 "Tokyo is currently experiencing mild spring weather with an average temperature of 18°C (64°F) and moderate humidity..."
@@ -2018,20 +2018,40 @@
       <div class="features-grid">
         <div class="feature-card">
           <div>
-            <div class="feature-icon">⚡</div>
-            <h3 class="feature-title">Zero SDK Rewrite</h3>
+            <div class="feature-icon">🔄</div>
+            <h3 class="feature-title">Cross-Provider Cache Fabric</h3>
             <p class="feature-desc">
-              Change just one string: point <code>base_url</code> to OmniCache. Works out-of-the-box with official <code>openai</code>, <code>anthropic</code>, LangChain, and LlamaIndex libraries.
+              Break out of vendor silos. While native caching is locked inside OpenAI or Anthropic, OmniCache normalizes and matches prompts across Claude, GPT-4o, Ollama, and DeepSeek with unified zero-cost replay.
             </p>
           </div>
         </div>
 
         <div class="feature-card">
           <div>
-            <div class="feature-icon">🧠</div>
-            <h3 class="feature-title">Local Quantized Embeddings</h3>
+            <div class="feature-icon">🛠️</div>
+            <h3 class="feature-title">Deterministic Tool-Call Replay</h3>
             <p class="feature-desc">
-              Embedding models run right inside the proxy binary. Zero external network calls to calculate prompt similarity vectors. Fast, private, zero added cost.
+              Upstream AI providers never cache tool executions. When Claude Code or Cursor reads unchanged files, runs idempotent bash commands, or inspects Git state, OmniCache replays outputs from SQLite WAL in &lt;0.1ms at $0.00 cost.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">👥</div>
+            <h3 class="feature-title">Team-Shared Workspace Caching</h3>
+            <p class="feature-desc">
+              Native provider caching is ephemeral (5-minute TTL) and strictly per-API-key. OmniCache synchronizes warm cache memory across your whole development team, multiple Cursor seats, and CI/CD pipelines.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div>
+            <div class="feature-icon">⚡</div>
+            <h3 class="feature-title">Zero SDK Rewrite</h3>
+            <p class="feature-desc">
+              Change just one string: point <code>base_url</code> to <code>http://localhost:8000/v1</code>. Works out-of-the-box with official <code>openai</code>, <code>anthropic</code>, LangChain, and Cursor.
             </p>
           </div>
         </div>
@@ -2039,29 +2059,9 @@
         <div class="feature-card">
           <div>
             <div class="feature-icon">🤖</div>
-            <h3 class="feature-title">Model Context Protocol</h3>
+            <h3 class="feature-title">Model Context Protocol (MCP)</h3>
             <p class="feature-desc">
-              First-class MCP JSON-RPC 2.0 streaming server. RFC 6749 and RFC 7636 PKCE compliant for Claude Connectors Directory, Claude Desktop, and Cursor.
-            </p>
-          </div>
-        </div>
-
-        <div class="feature-card">
-          <div>
-            <div class="feature-icon">📉</div>
-            <h3 class="feature-title">Model Cascading</h3>
-            <p class="feature-desc">
-              Intelligently evaluates query complexity. Automatically delegates simple factual requests to fast, cheap models (e.g. <code>gpt-4o-mini</code>) while routing complex reasoning to <code>o3</code> or <code>claude-3-7-sonnet</code>.
-            </p>
-          </div>
-        </div>
-
-        <div class="feature-card">
-          <div>
-            <div class="feature-icon">🌐</div>
-            <h3 class="feature-title">Distributed CRDT Edge Mesh</h3>
-            <p class="feature-desc">
-              Multi-node peer mesh syncs cache states and vector embeddings over encrypted HTTP/2 gossip with Hybrid Logical Clocks (HLC) and conflict-free data types.
+              Native RFC 7636 PKCE JSON-RPC 2.0 streaming server. Built for Claude Connectors, Claude Code CLI sidecars, and Cursor agent extensions with zero setup friction.
             </p>
           </div>
         </div>
@@ -2069,9 +2069,9 @@
         <div class="feature-card">
           <div>
             <div class="feature-icon">🛡️</div>
-            <h3 class="feature-title">Enterprise Virtual Keys</h3>
+            <h3 class="feature-title">Virtual Keys &amp; Spend Caps</h3>
             <p class="feature-desc">
-              Assign virtual API keys to teams, apps, or subagents. Enforce monthly dollar budget caps and per-minute rate limits atomically with zero race conditions.
+              Assign virtual API keys to developers, apps, or subagents. Enforce hard monthly budget caps and sliding-window rate limits atomically with check-and-reserve TOCTOU protection.
             </p>
           </div>
         </div>
@@ -2102,7 +2102,7 @@ client = OpenAI(
     api_key="omni_live_your_virtual_key"  # or upstream OPENAI_API_KEY
 )
 
-# 2. Make requests as normal — semantic vector caching is automatic!
+# 2. Make requests as normal — cross-provider caching & tool replay is automatic!
 response = client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "Explain vector indexing in 3 bullet points"}]
@@ -2125,58 +2125,58 @@ print(response.choices[0].message.content)</code></pre>
           <thead>
             <tr>
               <th>Architecture</th>
-              <th>P95 Latency</th>
-              <th>Semantic Matching</th>
-              <th>Cost Reduction</th>
-              <th>MCP OAuth (RFC 7636)</th>
-              <th>Deployment</th>
+              <th>Hit Latency</th>
+              <th>Cross-Provider</th>
+              <th>Tool-Call Replay</th>
+              <th>Team Memory</th>
+              <th>Air-Gapped Local</th>
             </tr>
           </thead>
           <tbody>
             <tr class="highlight-row">
               <td>⚡ OmniCache Proxy</td>
-              <td>0.8 ms</td>
-              <td>✓ Local Quantized Vector</td>
-              <td>85% - 95%</td>
-              <td>✓ Native PKCE + Google Auth</td>
-              <td>1 Docker Container</td>
+              <td>&lt;0.1 ms</td>
+              <td>✓ Unified (Claude + GPT + Ollama)</td>
+              <td>✓ Deterministic $0.00 Replay</td>
+              <td>✓ Team-Shared SQLite WAL</td>
+              <td>✓ 100% Localhost</td>
             </tr>
             <tr>
-              <td>Direct OpenAI / Claude</td>
-              <td>1,450 ms</td>
-              <td>✗ None (Zero reuse)</td>
-              <td>0% (Full Price)</td>
+              <td>Native Provider Caching (Anthropic/OpenAI)</td>
+              <td>400 - 1,200 ms</td>
+              <td>✗ Siloed to 1 Provider</td>
+              <td>✗ Not Cached Upstream</td>
+              <td>✗ 5-Min Ephemeral / Key</td>
+              <td>✗ Cloud Only</td>
+            </tr>
+            <tr>
+              <td>Redis / Memcached DIY</td>
+              <td>15 - 25 ms</td>
+              <td>⚠️ Manual Code Logic</td>
               <td>✗ None</td>
-              <td>Cloud API</td>
+              <td>⚠️ Key Sync Only</td>
+              <td>✓ Self-Hosted</td>
             </tr>
             <tr>
-              <td>Redis / Memcached</td>
-              <td>18 ms</td>
-              <td>✗ Exact String Only</td>
-              <td>15% - 25%</td>
+              <td>Remote Gateway (Portkey / Helicone)</td>
+              <td>60 - 150 ms</td>
+              <td>✓ Multi-Provider</td>
               <td>✗ None</td>
-              <td>Complex Cluster</td>
-            </tr>
-            <tr>
-              <td>Postgres pgvector Custom</td>
-              <td>180 ms</td>
-              <td>✓ Database Vector</td>
-              <td>40% - 60%</td>
-              <td>✗ Custom DIY</td>
-              <td>Heavy DB Maintenance</td>
+              <td>✓ Cloud Stored</td>
+              <td>✗ Remote Cloud Logged</td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- Pricing Section (Approved Developer-Friendly Tiers) -->
+    <!-- Pricing Section (India-First Developer & Team Tiers) -->
     <section id="pricing">
       <div class="section-title-wrap">
         <span class="section-badge">Transparent Developer Pricing</span>
         <h2 class="section-title">Start Free. Scale Painlessly.</h2>
         <p style="color: var(--text-muted); font-size: 15px; margin-top: 10px;">
-          Pay only for what you use. Protected with hard monthly LLM spend caps and sub-millisecond local replay.
+          Localhost speed with local UPI &amp; card billing. Protected with hard monthly upstream spend caps and sub-millisecond replay.
         </p>
       </div>
 
@@ -2188,12 +2188,12 @@ print(response.choices[0].message.content)</code></pre>
             <div class="price-amount">₹0 <span>/ forever</span></div>
             <p class="price-desc">Perfect for testing, personal agents, and solo hobbyist workflows.</p>
             <ul class="price-features">
-              <li><strong>$15/mo</strong> spend protection cap</li>
+              <li><strong>$15/mo (~₹1,250)</strong> upstream spend cap</li>
               <li>60 requests / min rate limit</li>
               <li>1 Workspace configuration</li>
               <li>Sub-0.1ms L1 Radix exact cache</li>
+              <li>Deterministic tool-call replay</li>
               <li>Instant Google Sign-In</li>
-              <li>Community Discord support</li>
             </ul>
           </div>
           <a href="/auth/google/login" class="btn btn-volt" style="width: 100%;">Get Started Free</a>
@@ -2204,15 +2204,15 @@ print(response.choices[0].message.content)</code></pre>
           <div class="price-pill">MOST POPULAR</div>
           <div>
             <h3 class="price-title" style="color: var(--volt);">Developer Pro</h3>
-            <div class="price-amount">₹499 <span>/ month</span></div>
+            <div class="price-amount">₹499 <span>/ month (~$6 USD)</span></div>
             <p class="price-desc">For active developers running Claude Code, Cursor, and daily agent loops.</p>
             <ul class="price-features">
-              <li><strong>$100/mo</strong> spend limit</li>
+              <li><strong>$100/mo (~₹8,300)</strong> upstream spend limit</li>
               <li>120 requests / min rate limit</li>
               <li>Up to 5 Workspaces</li>
-              <li>Priority L2 Int8 Vector ANN</li>
-              <li>Model Cascading (gpt-4o → mini)</li>
-              <li>Instant Razorpay UPI / Card billing</li>
+              <li>Cross-provider cache (Claude + GPT + Ollama)</li>
+              <li>Deterministic tool-call replay</li>
+              <li>Instant Razorpay UPI / RuPay / Cards</li>
               <li>VIP Support Channel</li>
             </ul>
           </div>
@@ -2223,14 +2223,14 @@ print(response.choices[0].message.content)</code></pre>
         <div class="price-card">
           <div>
             <h3 class="price-title" style="color: var(--cyan);">Team Scale</h3>
-            <div class="price-amount">₹1,999 <span>/ month</span></div>
+            <div class="price-amount">₹1,999 <span>/ month (~$24 USD)</span></div>
             <p class="price-desc">For fast-shipping teams sharing prompt contexts and multi-agent pipelines.</p>
             <ul class="price-features">
-              <li><strong>$500/mo</strong> spend limit</li>
+              <li><strong>$500/mo (~₹41,500)</strong> upstream spend limit</li>
               <li>300 requests / min rate limit</li>
               <li>Unlimited Workspaces &amp; seats</li>
-              <li>CRDT Mesh Distributed Sync</li>
-              <li>Shared Team Semantic Cache</li>
+              <li>Team-Shared Workspace State Sync</li>
+              <li>Cross-developer deterministic tool cache</li>
               <li>Custom Domain SSL integration</li>
               <li>Priority 24/7 SLA</li>
             </ul>
@@ -2242,10 +2242,10 @@ print(response.choices[0].message.content)</code></pre>
         <div class="price-card">
           <div>
             <h3 class="price-title" style="color: var(--purple);">Enterprise</h3>
-            <div class="price-amount">₹5,999 <span>/ month</span></div>
+            <div class="price-amount">₹5,999 <span>/ month (~$72 USD)</span></div>
             <p class="price-desc">Dedicated cloud clusters, VPC on-prem deployment, and enterprise compliance.</p>
             <ul class="price-features">
-              <li><strong>$2,000/mo</strong> spend limit</li>
+              <li><strong>$2,000/mo (~₹1,65,000)</strong> upstream spend limit</li>
               <li>1,000 requests / min rate limit</li>
               <li>Dedicated cluster node / VPC</li>
               <li>SAML SSO &amp; Custom OAuth</li>
@@ -2282,7 +2282,7 @@ print(response.choices[0].message.content)</code></pre>
             <div class="logo-text" style="font-size: 18px;">OmniCache Proxy</div>
           </div>
           <p class="footer-desc">
-            Sub-millisecond semantic AI proxy &amp; deterministic memory fabric for autonomous coding agents. Zero telemetry, 100% air-gapped localhost.
+            Sub-millisecond cross-provider AI proxy &amp; deterministic tool replay fabric for autonomous coding agents. Zero telemetry, 100% air-gapped localhost.
           </p>
 
           <!-- 1-Click Copyable Command Snippet -->
@@ -2297,10 +2297,10 @@ print(response.choices[0].message.content)</code></pre>
           <h4 class="footer-links-title">Memory Subsystems</h4>
           <ul class="footer-links">
             <li><a href="#architecture">L1 Radix Trie (0.06ms)</a></li>
-            <li><a href="#architecture">Int8 Vector Quantization</a></li>
-            <li><a href="#architecture">SQLite WAL Storage Engine</a></li>
+            <li><a href="#architecture">Subword Lexical Projection</a></li>
+            <li><a href="#architecture">Deterministic Tool-Call Replay</a></li>
             <li><a href="#architecture">Git SHA-256 Invalidation</a></li>
-            <li><a href="#architecture">Stream Compaction Engine</a></li>
+            <li><a href="#architecture">Team SQLite WAL Sync</a></li>
           </ul>
         </div>
 
@@ -2404,7 +2404,7 @@ print(response.choices[0].message.content)</code></pre>
       document.getElementById('cachedLatency').innerText = s.cachedLatency;
       document.getElementById('cachedCost').innerText = s.cachedCost;
       document.getElementById('cachedTokens').innerText = s.cachedTokens;
-      document.getElementById('cacheHitBadge').innerText = `⚡ OmniCache Semantic Hit (${s.similarity} Match)`;
+      document.getElementById('cacheHitBadge').innerText = `⚡ OmniCache Fuzzy Lexical Hit (${s.similarity} Match)`;
       document.getElementById('directResponse').innerText = s.response;
       document.getElementById('cachedResponse').innerText = s.response;
     }
@@ -2428,7 +2428,7 @@ client = OpenAI(
     api_key="omni_live_your_virtual_key"  # or upstream OPENAI_API_KEY
 )
 
-# 2. Make requests as normal — semantic vector caching is automatic!
+# 2. Make requests as normal — cross-provider caching & tool replay is automatic!
 response = client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": "Explain vector indexing in 3 bullet points"}]
@@ -2444,7 +2444,7 @@ client = anthropic.Anthropic(
     api_key="omni_live_your_virtual_key"
 )
 
-# 2. Send messages — deduplicated with sub-millisecond CRDT memory
+# 2. Send messages — deduplicated with sub-millisecond SQLite WAL memory
 message = client.messages.create(
     model="claude-3-7-sonnet-20250219",
     max_tokens=1000,
@@ -2470,7 +2470,7 @@ print(message.content[0].text)`,
   -H "Content-Type: application/json" \\
   -d '{
     "model": "gpt-4o",
-    "messages": [{"role": "user", "content": "Ping OmniCache semantic vector proxy"}]
+    "messages": [{"role": "user", "content": "Ping OmniCache cross-provider proxy"}]
   }'`
     };
 

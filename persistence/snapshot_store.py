@@ -185,6 +185,7 @@ class SnapshotStore:
                 spend_updates = []
                 signup_inserts = []
                 tag_deletes = []
+                key_deletes = []
                 purge_orgs = []
 
                 for it in items:
@@ -233,6 +234,8 @@ class SnapshotStore:
                         ))
                     elif op == "delete_tag":
                         tag_deletes.append((it["tag"], it.get("org_id")))
+                    elif op == "delete_key":
+                        key_deletes.append((it["key"], it.get("org_id")))
                     elif op == "purge":
                         purge_orgs.append(it.get("org_id"))
 
@@ -272,6 +275,12 @@ class SnapshotStore:
                         conn.execute("DELETE FROM cache_records WHERE tag = ? AND org_id = ?", (tag, org_id))
                     else:
                         conn.execute("DELETE FROM cache_records WHERE tag = ?", (tag,))
+
+                for c_key, org_id in key_deletes:
+                    if org_id:
+                        conn.execute("DELETE FROM cache_records WHERE key = ? AND org_id = ?", (c_key, org_id))
+                    else:
+                        conn.execute("DELETE FROM cache_records WHERE key = ?", (c_key,))
 
                 for org_id in purge_orgs:
                     if org_id:
@@ -423,6 +432,125 @@ class SnapshotStore:
 
     async def purge_all_async(self, org_id: Optional[str] = None) -> int:
         return await asyncio.to_thread(self.purge_all, org_id, True)
+
+    def delete_entry(self, key: str, org_id: Optional[str] = None, synchronous: bool = True) -> int:
+        """Deletes a single cache record by key from SQLite."""
+        if synchronous or not self._enable_write_behind:
+            self.flush()
+            conn = self._get_connection()
+            try:
+                with conn:
+                    if org_id:
+                        cursor = conn.execute("DELETE FROM cache_records WHERE key = ? AND org_id = ?", (key, org_id))
+                    else:
+                        cursor = conn.execute("DELETE FROM cache_records WHERE key = ?", (key,))
+                    return cursor.rowcount
+            except Exception as e:
+                logger.warning(f"[SnapshotStore] Delete entry failed: {e}")
+                return 0
+        else:
+            self._write_queue.put({"op": "delete_key", "key": key, "org_id": org_id})
+            return 1
+
+    async def delete_entry_async(self, key: str, org_id: Optional[str] = None) -> int:
+        return await asyncio.to_thread(self.delete_entry, key, org_id, True)
+
+    def list_entries(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        query: Optional[str] = None,
+        org_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Returns paginated cache records with metadata for the visual Cache Explorer."""
+        self.flush()
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        
+        where_clauses = []
+        params: List[Any] = []
+        if org_id:
+            where_clauses.append("org_id = ?")
+            params.append(org_id)
+        if query and query.strip():
+            q = f"%{query.strip()}%"
+            where_clauses.append("(user_prompt LIKE ? OR model LIKE ? OR tag LIKE ? OR key LIKE ?)")
+            params.extend([q, q, q, q])
+            
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        
+        # Count total
+        count_sql = f"SELECT COUNT(*) FROM cache_records {where_sql}"
+        cursor.execute(count_sql, params)
+        total_count = cursor.fetchone()[0]
+        
+        # Fetch entries
+        select_sql = f"""
+            SELECT key, org_id, model, user_prompt, system_prompt, tag, is_stream,
+                   created_at, last_accessed_at, ttl_seconds, hit_count, response_json
+            FROM cache_records
+            {where_sql}
+            ORDER BY last_accessed_at DESC
+            LIMIT ? OFFSET ?
+        """
+        fetch_params = params + [max(1, min(limit, 200)), max(0, offset)]
+        cursor.execute(select_sql, fetch_params)
+        rows = cursor.fetchall()
+        
+        entries = []
+        now = time.time()
+        for row in rows:
+            c_key, r_org, model, u_prompt, s_prompt, tag, is_stream, \
+                created_at, last_accessed_at, ttl_seconds, hit_count, response_json = row
+            
+            try:
+                res_obj = json.loads(response_json) if response_json else {}
+            except Exception:
+                res_obj = {}
+            
+            # Extract preview text
+            reply_preview = ""
+            reasoning_preview = ""
+            if isinstance(res_obj, dict):
+                choices = res_obj.get("choices", [])
+                if choices and isinstance(choices[0], dict):
+                    msg = choices[0].get("message", {})
+                    reply_preview = msg.get("content", "") or ""
+                    if "reasoning_content" in msg and msg["reasoning_content"]:
+                        reasoning_preview = msg["reasoning_content"]
+                        if not reply_preview:
+                            reply_preview = f"[Thinking: {reasoning_preview[:80]}...]"
+            
+            # Estimate tokens saved
+            toks_saved = (hit_count or 0) * (len((u_prompt or "").split()) + len(reply_preview.split()) + 20)
+            
+            entries.append({
+                "key": c_key,
+                "org_id": r_org,
+                "model": model,
+                "user_prompt": u_prompt or "",
+                "user_prompt_preview": (u_prompt[:120] + "...") if u_prompt and len(u_prompt) > 120 else (u_prompt or ""),
+                "system_prompt": s_prompt or "",
+                "tag": tag,
+                "is_stream": bool(is_stream),
+                "created_at": created_at,
+                "last_accessed_at": last_accessed_at,
+                "age_seconds": round(max(0.0, now - created_at), 1),
+                "ttl_seconds": ttl_seconds,
+                "ttl_remaining": max(0, int(ttl_seconds - (now - created_at))),
+                "hit_count": hit_count or 0,
+                "tokens_saved_estimate": toks_saved,
+                "reply_preview": (reply_preview[:160] + "...") if reply_preview and len(reply_preview) > 160 else reply_preview,
+                "reasoning_preview": (reasoning_preview[:120] + "...") if reasoning_preview and len(reasoning_preview) > 120 else reasoning_preview,
+                "response_payload": res_obj
+            })
+            
+        return {
+            "total": total_count,
+            "limit": limit,
+            "offset": offset,
+            "entries": entries
+        }
 
     # =========================================================================
     # Virtual Key Persistence API

@@ -30,10 +30,16 @@ def get_model_family(model: str) -> str:
         return "openai-gpt4o-mini"
     elif "gpt-4o" in m or "gpt-4" in m:
         return "openai-gpt4o"
-    elif "o1" in m or "o3" in m:
+    elif "o1" in m or "o3" in m or "o4" in m:
         return "openai-reasoning"
+    elif "deepseek" in m:
+        if "reasoner" in m or "r1" in m:
+            return "deepseek-reasoner"
+        return "deepseek-chat"
     elif "gemini" in m:
-        if "flash" in m:
+        if "thinking" in m:
+            return "google-gemini-thinking"
+        elif "flash" in m:
             return "google-gemini-flash"
         elif "pro" in m:
             return "google-gemini-pro"
@@ -211,6 +217,15 @@ class DualTierCache:
 
         if re.search(r"(\d+\s*[\+\-\*\/\^]\s*\d+|\bcalculate\b|\bsolve\b|\bevaluate\b)", prompt, re.IGNORECASE):
             return "math_calculation", 0.98, "INTENT_MATH_CALCULATION: Strict 0.98 threshold applied for arithmetic accuracy"
+
+        if re.search(r"\b(reason\s+step\s+by\s+step|think\s+deeply|chain\s+of\s+thought|prove\s+that|derive\b|mathematical\s+proof)\b", prompt, re.IGNORECASE):
+            return "deep_reasoning", 0.98, "INTENT_DEEP_REASONING: Strict 0.98 threshold applied for multi-step reasoning accuracy"
+
+        if re.search(r"\b(CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+TABLE)\b", prompt, re.IGNORECASE):
+            return "sql_database_query", 0.98, "INTENT_SQL_DATABASE: Strict 0.98 threshold applied for schema/data mutation fidelity"
+
+        if re.search(r"\b(format\s+as\s+json|output\s+valid\s+json|parse\s+into\s+json|return\s+json)\b", prompt, re.IGNORECASE):
+            return "structured_json", 0.95, "INTENT_STRUCTURED_JSON: Strict 0.95 threshold applied for JSON format conformity"
 
         if re.search(r"\b\d+\b", prompt):
             return "numeric_indexed_query", 0.90, "INTENT_NUMERIC_INDEXED_QUERY: Strict 0.90 threshold applied for numerical/index precision"
@@ -447,6 +462,26 @@ class DualTierCache:
                 idx.clear()
             self.ann_indices.clear()
         return self.storage.invalidate_tag(tag, org_id=org_id)
+
+    def delete_entry(self, key: str, org_id: Optional[str] = None) -> bool:
+        """Removes a specific entry from both L1 and L2 cache fabrics."""
+        deleted = False
+        # Remove from L1
+        if isinstance(self.storage, InMemoryCacheStorage):
+            if key in self.storage.l1_exact_cache:
+                del self.storage.l1_exact_cache[key]
+                deleted = True
+            # Remove from L2
+            for o_id, entries in list(self.storage.l2_semantic_cache.items()):
+                if org_id is None or o_id == org_id:
+                    new_entries = [e for e in entries if e.key != key]
+                    if len(new_entries) != len(entries):
+                        self.storage.l2_semantic_cache[o_id] = new_entries
+                        deleted = True
+        else:
+            self.storage.delete_exact(key, org_id=org_id)
+            deleted = True
+        return deleted
 
     def get_stats(self, org_id: Optional[str] = None) -> Dict[str, Any]:
         total_requests = self.total_exact_hits + self.total_semantic_hits + self.total_misses + self.total_bypasses

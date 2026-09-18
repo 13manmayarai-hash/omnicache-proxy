@@ -52,6 +52,7 @@ from server.stream_replayer import StreamReplayer
 from server.upstream import upstream_client
 from server.translator import ProtocolTranslator
 from server.failover import failover_engine
+from server.keepalive import keepalive_worker
 from persistence.snapshot_store import snapshot_store
 from mcp.server import process_mcp_jsonrpc, TOOLS_METADATA
 
@@ -84,7 +85,9 @@ METRICS_LEDGER = {
     "audio_cache_hits": 0,
     "audio_requests_processed": 0,
     "audio_tokens_saved": 0,
-    "quantized_embeddings_generated": 0
+    "quantized_embeddings_generated": 0,
+    "reasoning_tokens_saved": 0,
+    "structured_schema_validations": 0
 }
 
 loaded_entries = snapshot_store.load_into_cache(cache_instance)
@@ -93,6 +96,9 @@ if loaded_entries > 0:
 
 if hasattr(cache_instance.storage, "client") and cache_instance.storage.client is not None:
     flight_bus.set_redis_client(cache_instance.storage.client)
+
+# Start resilient background keepalive worker (prevents cloud cold-starts)
+keepalive_worker.start()
 
 def _handle_mesh_tombstone(resource_id: str, reason: str, metadata: Dict[str, Any]):
     """Applies cross-node CRDT tombstone invalidations to local cache fabrics."""
@@ -840,6 +846,31 @@ async def handle_chat_completions(request: Request) -> Response:
     else:
         status, entry, similarity, decision_reason = "BYPASS", None, 0.0, "BYPASS_EXPLICIT_HEADER: Bypassed via X-Cache-Bypass header"
 
+    schema_validated = False
+    if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC", "HIT_RADIX_TREE"):
+        # Guaranteed Structured Outputs / JSON Schema Validation
+        resp_fmt = payload.get("response_format")
+        if resp_fmt and isinstance(resp_fmt, dict):
+            fmt_type = resp_fmt.get("type")
+            if fmt_type in ("json_object", "json_schema"):
+                try:
+                    ch = entry.response_payload.get("choices", [])
+                    if ch and isinstance(ch[0], dict):
+                        content_str = ch[0].get("message", {}).get("content", "")
+                        parsed_json = json.loads(content_str)
+                        s_def = resp_fmt.get("json_schema", {}).get("schema", {})
+                        if s_def and isinstance(s_def, dict) and "required" in s_def:
+                            for req_field in s_def["required"]:
+                                if req_field not in parsed_json:
+                                    raise ValueError(f"Missing required schema field '{req_field}'")
+                        schema_validated = True
+                        METRICS_LEDGER["structured_schema_validations"] += 1
+                except Exception as json_err:
+                    status, entry, similarity, decision_reason = (
+                        "BYPASS", None, 0.0,
+                        f"BYPASS_SCHEMA_MISMATCH: Cached response failed JSON schema verification ({json_err})"
+                    )
+
     if entry is not None and status in ("HIT_EXACT", "HIT_SEMANTIC", "HIT_RADIX_TREE"):
         latency_ms = (time.perf_counter() - start_time) * 1000
         usage = entry.response_payload.get("usage", {})
@@ -892,8 +923,27 @@ async def handle_chat_completions(request: Request) -> Response:
             "X-Cascade-Applied": "false",
             **cors_headers
         }
+        if schema_validated:
+            resp_headers["X-OmniCache-Schema-Validated"] = "true"
 
         rehydrated_response = privacy_shield.rehydrate_response(entry.response_payload, pii_token_map)
+
+        # DeepSeek R1 / Reasoning Token Stripping on Demand
+        strip_thinking = (
+            request.headers.get("x-omnicache-strip-thinking", "false").lower() in ("true", "1") or
+            raw_payload.get("strip_thinking", False) is True
+        )
+        if strip_thinking and isinstance(rehydrated_response, dict):
+            ch_list = rehydrated_response.get("choices", [])
+            if ch_list and isinstance(ch_list[0], dict):
+                m_obj = ch_list[0].get("message", {})
+                if "reasoning_content" in m_obj:
+                    del m_obj["reasoning_content"]
+                    resp_headers["X-OmniCache-Thinking-Stripped"] = "true"
+                c_body = m_obj.get("content", "")
+                if c_body and "<think>" in c_body and "</think>" in c_body:
+                    m_obj["content"] = re.sub(r"<think>[\s\S]*?</think>", "", c_body).strip()
+                    resp_headers["X-OmniCache-Thinking-Stripped"] = "true"
 
         if is_stream:
             return StreamingResponse(
@@ -2762,6 +2812,124 @@ async def handle_invalidate_tag(request: Request) -> Response:
     }, headers=cors_headers)
 
 
+async def handle_cache_entries(request: Request) -> Response:
+    """Lists cached entries with search & pagination for the visual Cache Explorer."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    is_admin = key_info.get("role") == "admin"
+    scoped_org = None if is_admin else org_id
+    
+    limit = int(request.query_params.get("limit", 50))
+    offset = int(request.query_params.get("offset", 0))
+    query = request.query_params.get("q", request.query_params.get("query", None))
+
+    data = snapshot_store.list_entries(limit=limit, offset=offset, query=query, org_id=scoped_org)
+    return JSONResponse(data, headers=cors_headers)
+
+
+async def handle_delete_cache_entry(request: Request) -> Response:
+    """Deletes/evicts a specific cache record by key from both memory and disk."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    key = request.path_params.get("cache_key", "")
+    if not key:
+        return JSONResponse({"error": "Cache key required"}, status_code=400, headers=cors_headers)
+
+    is_admin = key_info.get("role") == "admin"
+    scoped_org = None if is_admin else org_id
+
+    mem_del = cache_instance.delete_entry(key, org_id=scoped_org)
+    db_del = snapshot_store.delete_entry(key, org_id=scoped_org)
+
+    if getattr(config, "MESH_ENABLED", True):
+        tomb = mesh_bus.record_local_mutation(key, reason="entry_eviction", metadata={"key": key, "org_id": scoped_org or "all"})
+        try:
+            asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
+        except Exception:
+            pass
+
+    return JSONResponse({
+        "status": "success",
+        "key": key,
+        "deleted_from_memory": mem_del,
+        "deleted_from_db": db_del
+    }, headers=cors_headers)
+
+
+async def handle_test_similarity(request: Request) -> Response:
+    """Tests a prompt against existing cache entries to preview similarity score and hit/miss status."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400, headers=cors_headers)
+
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        return JSONResponse({"error": "Field 'prompt' is required in JSON body"}, status_code=400, headers=cors_headers)
+
+    model = (body.get("model") or "gpt-4o").strip()
+    threshold = float(body.get("threshold", config.DEFAULT_SIMILARITY_THRESHOLD))
+
+    test_payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": float(body.get("temperature", 0.0))
+    }
+    status, entry, score, reason = cache_instance.lookup(test_payload, org_id=org_id, custom_threshold=threshold)
+    intent, intent_threshold, intent_explanation = cache_instance.classify_intent(
+        prompt, "no_schema", "no_tools", float(body.get("temperature", 0.0))
+    )
+
+    return JSONResponse({
+        "status": status,
+        "similarity_score": round(score, 4),
+        "similarity_percent": f"{round(score * 100, 1)}%",
+        "threshold": threshold,
+        "decision_reason": reason,
+        "classified_intent": intent,
+        "intent_dynamic_threshold": intent_threshold,
+        "matched": bool(entry is not None),
+        "matched_entry": {
+            "key": entry.key,
+            "model": entry.model,
+            "user_prompt": entry.user_prompt,
+            "user_prompt_preview": (entry.user_prompt[:120] + "...") if len(entry.user_prompt) > 120 else entry.user_prompt,
+            "hit_count": entry.hit_count,
+            "created_at": entry.created_at,
+            "age_seconds": round(entry.age_seconds(), 1)
+        } if entry else None
+    }, headers=cors_headers)
+
+
+async def handle_keepalive_ping(request: Request) -> Response:
+    """Triggers an immediate keepalive self-ping."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    res = await keepalive_worker.ping_now()
+    return JSONResponse(res, headers=cors_headers)
+
+
 async def handle_stats(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
@@ -3553,9 +3721,10 @@ async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     return JSONResponse({
         "status": "healthy",
-        "version": getattr(config, "VERSION", "3.0.5"),
+        "version": getattr(config, "VERSION", "3.1.0"),
         "service": "omnicache-proxy",
-        "circuit_breaker": failover_engine.circuit_breaker.get_status()
+        "circuit_breaker": failover_engine.circuit_breaker.get_status(),
+        "keepalive": keepalive_worker.get_status()
     }, headers=cors_headers)
 
 
@@ -5002,6 +5171,10 @@ routes = [
     Route("/auth/google/callback", handle_google_callback, methods=["GET", "OPTIONS"]),
     Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
+    Route("/v1/cache/entries", handle_cache_entries, methods=["GET", "OPTIONS"]),
+    Route("/v1/cache/entries/{cache_key:path}", handle_delete_cache_entry, methods=["DELETE", "OPTIONS"]),
+    Route("/v1/cache/test-similarity", handle_test_similarity, methods=["POST", "OPTIONS"]),
+    Route("/v1/system/keepalive/ping", handle_keepalive_ping, methods=["POST", "GET", "OPTIONS"]),
     Route("/v1/cache/purge", handle_purge, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/invalidate-tag", handle_invalidate_tag, methods=["POST", "DELETE", "GET", "OPTIONS"]),
     Route("/v1/cache/stats", handle_stats, methods=["GET", "OPTIONS"]),

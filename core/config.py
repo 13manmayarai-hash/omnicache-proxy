@@ -77,6 +77,12 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
     "gemini-2.5-flash": {"input": 0.10, "output": 0.40, "cached_input": 0.025},
     "gemini-1.5-pro": {"input": 1.25, "output": 5.00, "cached_input": 0.3125},
     "gemini-1.5-flash": {"input": 0.075, "output": 0.30, "cached_input": 0.01875},
+    "deepseek-chat": {"input": 0.14, "output": 0.28, "cached_input": 0.014},
+    "deepseek-reasoner": {"input": 0.55, "output": 2.19, "cached_input": 0.14},
+    "deepseek-r1": {"input": 0.55, "output": 2.19, "cached_input": 0.14},
+    "o1-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
+    "gemini-2.0-flash": {"input": 0.10, "output": 0.40, "cached_input": 0.025},
+    "gemini-2.0-flash-thinking-exp": {"input": 0.10, "output": 0.40, "cached_input": 0.025},
     "gpt-4": {"input": 30.00, "output": 60.00, "cached_input": 15.00},
     "default": {"input": 2.00, "output": 8.00, "cached_input": 1.00},
 }
@@ -92,6 +98,13 @@ class ProxyConfig:
     ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", os.getenv("OMNICACHE_ADMIN_KEY", ""))
     REQUIRE_AUTH: bool = os.getenv("REQUIRE_AUTH", "false").lower() in ("true", "1")
     ALLOW_INSECURE_NETWORK_EXPOSURE: bool = os.getenv("OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE", "false").lower() in ("true", "1")
+    
+    # Cloud Self-Keepalive Configuration (Prevents Render / Cloud 15-min idle spin-down)
+    RENDER_EXTERNAL_URL: str = os.getenv("RENDER_EXTERNAL_URL", "").strip()
+    PUBLIC_URL: str = os.getenv("OMNICACHE_PUBLIC_URL", os.getenv("PUBLIC_URL", os.getenv("RENDER_EXTERNAL_URL", ""))).strip()
+    KEEP_ALIVE_ENABLED: bool = os.getenv("KEEP_ALIVE_ENABLED", "true" if (os.getenv("RENDER_EXTERNAL_URL") or os.getenv("OMNICACHE_PUBLIC_URL") or os.getenv("PUBLIC_URL")) else "false").lower() in ("true", "1")
+    KEEP_ALIVE_INTERVAL_SECONDS: int = int(os.getenv("KEEP_ALIVE_INTERVAL_SECONDS", "540"))  # 9 minutes (well under Render 15m limit)
+    KEEP_ALIVE_URL: str = os.getenv("KEEP_ALIVE_URL", "").strip()
     
     # Cryptographically unique random PII salt (never static public string)
     PRIVACY_SALT: str = get_or_generate_privacy_salt()

@@ -38,6 +38,22 @@
       
       --font-mono: 'JetBrains Mono', monospace;
       --font-display: 'Space Grotesk', -apple-system, sans-serif;
+
+      /* Official Neumorphism Dark Monochrome Palette (IMG-20260911-WA0000.jpg) */
+      --c-obsidian: #06141B;
+      --c-midnight: #11212D;
+      --c-navy: #253745;
+      --c-slate: #4A5C6A;
+      --c-silver: #9BA8AB;
+      --c-frost: #CCD0CF;
+
+      /* Neumorphic Dual-Shadow Physics */
+      --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
+      --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
+      --neu-flat-3: 10px 10px 24px #02070b, -10px -10px 24px rgba(74, 92, 106, 0.28);
+      --neu-flat-hover: 7px 7px 18px #02070b, -7px -7px 18px rgba(74, 92, 106, 0.32);
+      --neu-pressed: inset 3px 3px 6px #02080d, inset -3px -3px 6px rgba(74, 92, 106, 0.2);
+      --neu-pressed-deep: inset 4px 4px 8px #01060a, inset -4px -4px 8px rgba(74, 92, 106, 0.25);
     }
 
     * {
@@ -820,6 +836,196 @@
       from { transform: translateY(10px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
+
+    /* =========================================================================
+       NEUMORPHISM DARK MONOCHROME CACHE EXPLORER (Product UI Styleguide)
+       Reference: IMG-20260911-WA0000.jpg
+       ========================================================================= */
+    .neu-card {
+      background: var(--c-midnight);
+      border-radius: 20px;
+      border: 1.5px solid var(--c-slate);
+      box-shadow: var(--neu-flat-2);
+      padding: 20px;
+      margin-bottom: 20px;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .neu-well {
+      background: var(--c-obsidian);
+      border-radius: 14px;
+      border: 1px solid rgba(74, 92, 106, 0.4);
+      box-shadow: var(--neu-pressed);
+      padding: 14px;
+    }
+
+    .neu-input {
+      background: var(--c-obsidian);
+      border-radius: 9999px;
+      border: 1px solid var(--c-slate);
+      box-shadow: var(--neu-pressed);
+      color: var(--c-frost);
+      padding: 8px 16px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .neu-input:focus {
+      border-color: var(--cyan);
+      box-shadow: var(--neu-pressed-deep), 0 0 8px rgba(0, 240, 255, 0.3);
+    }
+
+    .neu-pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: 9999px;
+      border: 1px solid var(--c-slate);
+      background: var(--c-navy);
+      color: var(--c-frost);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      box-shadow: var(--neu-flat-1);
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .neu-pill-btn:hover {
+      box-shadow: var(--neu-flat-hover);
+      transform: translateY(-1px);
+      background: #2f4354;
+      color: #ffffff;
+    }
+
+    .neu-pill-btn:active {
+      box-shadow: var(--neu-pressed);
+      transform: translateY(0);
+    }
+
+    .neu-pill-btn-volt {
+      background: var(--volt) !important;
+      color: #000000 !important;
+      font-weight: 800 !important;
+      border-color: #a8d900 !important;
+    }
+
+    .neu-pill-btn-volt:hover {
+      background: #d8ff33 !important;
+      color: #000000 !important;
+    }
+
+    .neu-pill-btn-danger {
+      background: #36141a !important;
+      color: #ff8b9e !important;
+      border-color: #5c202a !important;
+    }
+
+    .neu-pill-btn-danger:hover {
+      background: #ff5b24 !important;
+      color: #000000 !important;
+    }
+
+    .neu-badge {
+      border-radius: 9999px;
+      padding: 2px 8px;
+      font-size: 9.5px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      text-transform: uppercase;
+      border: 1px solid var(--c-slate);
+      background: var(--c-navy);
+      color: var(--c-silver);
+    }
+
+    .neu-badge-volt {
+      background: rgba(200, 255, 0, 0.12);
+      color: var(--volt);
+      border-color: rgba(200, 255, 0, 0.4);
+    }
+
+    .neu-badge-cyan {
+      background: rgba(0, 240, 255, 0.12);
+      color: var(--cyan);
+      border-color: rgba(0, 240, 255, 0.4);
+    }
+
+    .neu-badge-purple {
+      background: rgba(191, 119, 255, 0.12);
+      color: var(--purple);
+      border-color: rgba(191, 119, 255, 0.4);
+    }
+
+    .neu-table-wrapper {
+      background: var(--c-obsidian);
+      border-radius: 14px;
+      border: 1px solid rgba(74, 92, 106, 0.35);
+      box-shadow: var(--neu-pressed);
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+
+    .neu-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+
+    .neu-table th {
+      text-align: left;
+      padding: 10px 14px;
+      background: rgba(17, 33, 45, 0.85);
+      color: var(--c-silver);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--c-slate);
+    }
+
+    .neu-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(74, 92, 106, 0.2);
+      color: var(--c-frost);
+      vertical-align: middle;
+    }
+
+    .neu-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .neu-table tr:hover td {
+      background: rgba(37, 55, 69, 0.35);
+    }
+
+    .neu-gauge-container {
+      height: 12px;
+      background: var(--c-obsidian);
+      border-radius: 9999px;
+      border: 1px solid var(--c-slate);
+      box-shadow: var(--neu-pressed);
+      overflow: hidden;
+      margin: 8px 0;
+    }
+
+    .neu-gauge-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 9999px;
+      transition: width 0.35s ease, background-color 0.35s ease;
+    }
     /* Claude-Style Left Flyout Side Menu Drawer */
     #side-menu-backdrop {
       position: fixed;
@@ -1259,6 +1465,11 @@
           <span class="btn-label">CSV</span>
         </a>
 
+        <button onclick="scrollToExplorer()" class="btn-brutal btn-cyan" title="Visual Cache Fabric Explorer & Auditor">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <span class="btn-label">Explorer</span>
+        </button>
+
         <a href="/metrics" target="_blank" class="btn-brutal" title="Prometheus OpenMetrics feed">
           <span class="btn-label">Prom</span>
         </a>
@@ -1392,6 +1603,7 @@
       <button class="tab-nav-btn" onclick="switchMobileTab('pane-sandbox', this)">02 // Sandbox</button>
       <button class="tab-nav-btn" onclick="switchMobileTab('pane-workspace', this)">03 // Quotas</button>
       <button class="tab-nav-btn" onclick="switchMobileTab('pane-stream', this)">04 // Stream</button>
+      <button class="tab-nav-btn" onclick="switchMobileTab('pane-explorer', this)">05 // Explorer</button>
     </nav>
 
     <!-- Twin Telemetry Monitors (Timeline Line Chart + Resolution Doughnut) -->
@@ -1601,6 +1813,118 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       </section>
     </div>
 
+    <!-- =========================================================================
+         [// 05] VISUAL CACHE FABRIC EXPLORER & SEMANTIC AUDITOR
+         Neumorphism Dark Monochrome Styleguide (IMG-20260911-WA0000.jpg)
+         ========================================================================= -->
+    <div id="pane-explorer" class="blueprint-pane" style="margin-top: 24px; margin-bottom: 32px;">
+      <div class="neu-card">
+        
+        <!-- Header Bar -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--c-slate); padding-bottom: 14px;">
+          <div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="pulse-dot"></span>
+              <h2 style="font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: -0.01em; color: var(--c-frost); font-family: var(--font-display);">
+                [// 05] Visual Cache Fabric Explorer & Semantic Auditor
+              </h2>
+            </div>
+            <p style="font-size: 11px; color: var(--c-silver); font-family: var(--font-mono); margin-top: 4px;">
+              Inspect, search, test semantic similarity, and evict live L1/L2 records persisted in SQLite WAL.
+            </p>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <button onclick="toggleSimilarityTester()" class="neu-pill-btn" title="Open interactive semantic similarity test sandbox">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              <span>Test Match Sandbox</span>
+            </button>
+            <button onclick="fetchCacheEntries()" class="neu-pill-btn neu-pill-btn-volt" title="Reload cache entries from storage">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              <span>Refresh</span>
+            </button>
+            <button onclick="purgeCacheNow()" class="neu-pill-btn neu-pill-btn-danger" title="Purge entire cache fabric">
+              <span>Purge Fabric</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Semantic Similarity Test Sandbox Drawer (Collapsible) -->
+        <div id="similarity-tester-box" class="neu-well" style="display: none; margin-bottom: 20px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--cyan); font-family: var(--font-mono);">
+              ⚡ Semantic Similarity & Intent Tester
+            </div>
+            <span style="font-size: 10px; color: var(--c-silver); font-family: var(--font-mono);">Test a prompt against all cached vectors in real time</span>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; margin-bottom: 10px;">
+            <input type="text" id="sim-test-prompt" class="neu-input" placeholder="Type prompt to test semantic similarity (e.g., 'Write a python binary search')..." onkeydown="if(event.key==='Enter') runSimilarityTest()">
+            <select id="sim-test-model" class="neu-input" style="width: auto;">
+              <option value="gpt-4o">gpt-4o</option>
+              <option value="claude-3-5-sonnet">claude-3.5-sonnet</option>
+              <option value="deepseek-reasoner">deepseek-reasoner (R1)</option>
+            </select>
+            <button onclick="runSimilarityTest()" class="neu-pill-btn neu-pill-btn-volt" style="white-space: nowrap;">
+              Test Match →
+            </button>
+          </div>
+
+          <!-- Result Card -->
+          <div id="sim-test-result" style="display: none; margin-top: 10px; padding: 12px; border-radius: 10px; background: var(--c-midnight); border: 1px solid var(--c-slate);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="sim-result-status-badge" class="neu-badge neu-badge-volt">HIT_SEMANTIC</span>
+                <span id="sim-result-intent-badge" class="neu-badge neu-badge-cyan">INTENT_CODE</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 800; font-family: var(--font-mono); color: var(--c-frost);">
+                Score: <span id="sim-result-score" style="color: var(--volt);">0.0%</span> (Threshold: <span id="sim-result-threshold">0.75</span>)
+              </div>
+            </div>
+            <div class="neu-gauge-container">
+              <div id="sim-result-gauge" class="neu-gauge-bar" style="width: 0%; background: var(--volt);"></div>
+            </div>
+            <div id="sim-result-reason" style="font-size: 10.5px; color: var(--c-silver); font-family: var(--font-mono); margin-top: 6px;"></div>
+            <div id="sim-result-matched-snippet" style="font-size: 10.5px; color: var(--c-frost); font-family: var(--font-mono); margin-top: 4px; padding: 6px 8px; background: var(--c-obsidian); border-radius: 6px; border: 1px solid rgba(74,92,106,0.3); display: none;"></div>
+          </div>
+        </div>
+
+        <!-- Search Bar & Filters -->
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+          <div style="position: relative; flex: 1; min-width: 260px;">
+            <input type="text" id="cache-search-input" class="neu-input" placeholder="🔍 Search cached prompts, models, tags, or keys (live filter)..." oninput="debounceCacheSearch()">
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--c-silver);">
+            <span>Showing: <strong id="cache-entries-count" style="color: var(--c-frost);">0</strong> cached records</span>
+          </div>
+        </div>
+
+        <!-- Cache Entries Table -->
+        <div class="neu-table-wrapper">
+          <table class="neu-table">
+            <thead>
+              <tr>
+                <th style="width: 140px;">Model</th>
+                <th>Prompt Snippet / Intent</th>
+                <th style="width: 80px; text-align: center;">Hits</th>
+                <th style="width: 110px; text-align: center;">Tokens Saved</th>
+                <th style="width: 90px;">Age</th>
+                <th style="width: 130px; text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="cache-table-body">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--c-silver); padding: 28px;">
+                  ⚡ Loading live cache fabric entries from SQLite WAL...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
   </main>
 
   <!-- Dark Neo-Brutalist Auth Modal -->
@@ -1651,6 +1975,56 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           <button id="auth-modal-cancel-btn" onclick="closeAuthModal()" class="btn-brutal" style="font-size: 10px;">Cancel</button>
           <button onclick="submitAuthKey()" class="btn-brutal btn-volt" style="font-size: 10px;">Unlock Gateway</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cache Entry Detail Inspector Modal -->
+  <div id="cache-inspect-modal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closeCacheInspectModal();">
+    <div class="neu-card" style="max-width: 780px; width: 100%; max-height: 85vh; overflow-y: auto; position: relative; border-color: var(--cyan); box-shadow: 0 0 30px rgba(0,240,255,0.15); margin: 20px auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--c-slate); padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="neu-badge neu-badge-cyan" id="inspect-model-badge">MODEL</span>
+          <span class="neu-badge neu-badge-volt" id="inspect-hits-badge">0 HITS</span>
+          <span style="font-size: 11px; color: var(--c-silver); font-family: var(--font-mono); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" id="inspect-key-badge">KEY</span>
+        </div>
+        <button onclick="closeCacheInspectModal()" style="background: none; border: none; color: var(--c-silver); font-size: 18px; cursor: pointer; line-height: 1;">✕</button>
+      </div>
+
+      <!-- User Prompt -->
+      <div style="margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--c-silver); font-family: var(--font-mono);">User Prompt</span>
+          <button onclick="copyInspectPrompt()" class="neu-pill-btn" style="padding: 2px 8px; font-size: 9px;">Copy Prompt</button>
+        </div>
+        <pre id="inspect-user-prompt" class="neu-well" style="max-height: 150px; overflow-y: auto; white-space: pre-wrap; font-size: 10.5px; color: var(--c-frost); font-family: var(--font-mono); margin: 0;"></pre>
+      </div>
+
+      <!-- DeepSeek Reasoning Content (if present) -->
+      <div id="inspect-reasoning-section" style="margin-bottom: 14px; display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--purple); font-family: var(--font-mono);">🧠 DeepSeek R1 / CoT Reasoning Chain</span>
+        </div>
+        <pre id="inspect-reasoning-content" class="neu-well" style="max-height: 140px; overflow-y: auto; white-space: pre-wrap; font-size: 10px; color: #dcb3ff; font-family: var(--font-mono); margin: 0; background: #0c0814; border-color: rgba(191,119,255,0.3);"></pre>
+      </div>
+
+      <!-- Response Payload -->
+      <div style="margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--c-silver); font-family: var(--font-mono);">Cached Response JSON</span>
+          <button onclick="copyInspectJson()" class="neu-pill-btn" style="padding: 2px 8px; font-size: 9px;">Copy JSON</button>
+        </div>
+        <pre id="inspect-response-json" class="neu-well" style="max-height: 220px; overflow-y: auto; white-space: pre-wrap; font-size: 10px; color: var(--c-frost); font-family: var(--font-mono); margin: 0;"></pre>
+      </div>
+
+      <!-- Footer Actions -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--c-slate); padding-top: 14px; margin-top: 16px;">
+        <button id="inspect-btn-evict" onclick="evictInspectEntry()" class="neu-pill-btn neu-pill-btn-danger">
+          🗑️ Evict Entry From Cache
+        </button>
+        <button onclick="closeCacheInspectModal()" class="neu-pill-btn">
+          Close Inspector
+        </button>
       </div>
     </div>
   </div>
@@ -2847,6 +3221,270 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       }
     }
 
+    // =========================================================================
+    // VISUAL CACHE FABRIC EXPLORER LOGIC (Neumorphic Soft UI)
+    // =========================================================================
+    let currentCacheEntries = [];
+    let activeInspectEntry = null;
+    let cacheSearchDebounceTimer = null;
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    async function fetchCacheEntries(query = '') {
+      const tbody = document.getElementById('cache-table-body');
+      const countEl = document.getElementById('cache-entries-count');
+      try {
+        const qParam = query ? `?q=${encodeURIComponent(query)}` : '';
+        const res = await fetch(`${API_BASE}/v1/cache/entries${qParam}`, { headers: authHeaders() });
+        if (!res.ok) {
+          if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--orange); padding:20px;">Failed to load entries (${res.status}). Verify API Key.</td></tr>`;
+          return;
+        }
+        const data = await res.json();
+        currentCacheEntries = data.entries || [];
+        if (countEl) countEl.textContent = (data.total !== undefined ? data.total : currentCacheEntries.length).toString();
+
+        if (!currentCacheEntries.length) {
+          if (tbody) {
+            tbody.innerHTML = `
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--c-silver); padding: 32px; font-family: var(--font-mono);">
+                  <div style="font-size: 14px; font-weight: 700; color: var(--c-frost); margin-bottom: 6px;">No Cached Entries in Fabric</div>
+                  <div style="font-size: 11px;">Make queries via the Gateway Sandbox or use the Test Match Sandbox above to populate entries.</div>
+                </td>
+              </tr>`;
+          }
+          return;
+        }
+
+        if (tbody) {
+          tbody.innerHTML = currentCacheEntries.map(e => {
+            const isStreamBadge = e.is_stream ? `<span class="neu-badge neu-badge-purple" style="font-size:8px;">STREAM</span>` : '';
+            const hitClass = (e.hit_count && e.hit_count > 0) ? 'neu-badge-volt' : '';
+            const toksFormatted = (e.tokens_saved_estimate || 0).toLocaleString();
+            const ageSeconds = e.age_seconds || 0;
+            const ageFmt = ageSeconds < 60 ? `${Math.round(ageSeconds)}s ago` :
+                           ageSeconds < 3600 ? `${Math.round(ageSeconds/60)}m ago` :
+                           `${Math.round(ageSeconds/3600)}h ago`;
+
+            return `
+              <tr>
+                <td>
+                  <div style="display:flex; flex-direction:column; gap:4px;">
+                    <span class="neu-badge neu-badge-cyan" style="font-size:9.5px; width:fit-content;">${escapeHtml(e.model || 'unknown')}</span>
+                    ${isStreamBadge}
+                  </div>
+                </td>
+                <td>
+                  <div style="font-weight:600; color:var(--c-frost); margin-bottom:3px; word-break:break-word;">
+                    ${escapeHtml(e.user_prompt_preview || '(empty prompt)')}
+                  </div>
+                  <div style="font-size:9.5px; color:var(--c-silver); display:flex; gap:8px; align-items:center;">
+                    <span>Key: <code style="color:var(--cyan); font-size:9px;">${escapeHtml((e.key || '').slice(0, 16))}...</code></span>
+                    ${e.reply_preview ? `<span style="color:var(--c-silver);">• ${escapeHtml((e.reply_preview || '').slice(0, 50))}...</span>` : ''}
+                  </div>
+                </td>
+                <td style="text-align: center;">
+                  <span class="neu-badge ${hitClass}">${e.hit_count || 0} hits</span>
+                </td>
+                <td style="text-align: center; color: var(--volt); font-weight:700;">
+                  ${toksFormatted}
+                </td>
+                <td style="color: var(--c-silver); font-size:10px;">
+                  ${ageFmt}
+                </td>
+                <td style="text-align: right;">
+                  <div style="display:flex; gap:6px; justify-content:flex-end;">
+                    <button onclick="inspectCacheEntry('${escapeHtml(e.key)}')" class="neu-pill-btn" style="padding:4px 10px; font-size:9.5px;" title="Inspect prompt & response">
+                      Inspect
+                    </button>
+                    <button onclick="deleteCacheEntry('${escapeHtml(e.key)}')" class="neu-pill-btn neu-pill-btn-danger" style="padding:4px 8px; font-size:9.5px;" title="Evict entry">
+                      ✕
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      } catch (err) {
+        console.error('[CacheExplorer] Error fetching entries:', err);
+      }
+    }
+
+    function debounceCacheSearch() {
+      clearTimeout(cacheSearchDebounceTimer);
+      cacheSearchDebounceTimer = setTimeout(() => {
+        const val = document.getElementById('cache-search-input')?.value || '';
+        fetchCacheEntries(val);
+      }, 300);
+    }
+
+    async function deleteCacheEntry(key) {
+      if (!confirm('Evict this entry from cache fabric?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/cache/entries/${encodeURIComponent(key)}`, {
+          method: 'DELETE',
+          headers: authHeaders()
+        });
+        if (res.ok) {
+          showToast('Entry successfully evicted from cache fabric');
+          fetchCacheEntries(document.getElementById('cache-search-input')?.value || '');
+          if (activeInspectEntry && activeInspectEntry.key === key) {
+            closeCacheInspectModal();
+          }
+        } else {
+          showToast('Failed to delete entry');
+        }
+      } catch (e) {
+        showToast('Error communicating with gateway');
+      }
+    }
+
+    function toggleSimilarityTester() {
+      const box = document.getElementById('similarity-tester-box');
+      if (!box) return;
+      const isVisible = box.style.display !== 'none';
+      box.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible) {
+        document.getElementById('sim-test-prompt')?.focus();
+      }
+    }
+
+    async function runSimilarityTest() {
+      const prompt = document.getElementById('sim-test-prompt')?.value.trim();
+      const model = document.getElementById('sim-test-model')?.value || 'gpt-4o';
+      if (!prompt) {
+        showToast('Please type a prompt to test');
+        return;
+      }
+      const resultBox = document.getElementById('sim-test-result');
+      const scoreEl = document.getElementById('sim-result-score');
+      const gaugeEl = document.getElementById('sim-result-gauge');
+      const statusBadge = document.getElementById('sim-result-status-badge');
+      const intentBadge = document.getElementById('sim-result-intent-badge');
+      const reasonEl = document.getElementById('sim-result-reason');
+      const snippetEl = document.getElementById('sim-result-matched-snippet');
+
+      try {
+        const res = await fetch(`${API_BASE}/v1/cache/test-similarity`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ prompt, model })
+        });
+        if (!res.ok) {
+          showToast('Similarity test error: ' + res.status);
+          return;
+        }
+        const data = await res.json();
+        if (resultBox) resultBox.style.display = 'block';
+
+        const scorePct = Math.round((data.similarity_score || 0) * 100);
+        if (scoreEl) scoreEl.textContent = `${scorePct}%`;
+        if (gaugeEl) {
+          gaugeEl.style.width = `${scorePct}%`;
+          gaugeEl.style.backgroundColor = scorePct >= 90 ? 'var(--volt)' : scorePct >= 75 ? 'var(--cyan)' : 'var(--orange)';
+        }
+        if (statusBadge) {
+          statusBadge.textContent = data.status;
+          statusBadge.className = 'neu-badge ' + (data.status.includes('HIT') ? 'neu-badge-volt' : 'neu-badge-purple');
+        }
+        if (intentBadge) {
+          intentBadge.textContent = data.classified_intent || 'QA';
+        }
+        if (reasonEl) {
+          reasonEl.textContent = data.decision_reason || '';
+        }
+        if (snippetEl) {
+          if (data.matched_entry && data.matched_entry.user_prompt) {
+            snippetEl.style.display = 'block';
+            snippetEl.innerHTML = `<strong>Matched Entry:</strong> "${escapeHtml(data.matched_entry.user_prompt)}" (${data.matched_entry.hit_count} hits)`;
+          } else {
+            snippetEl.style.display = 'none';
+          }
+        }
+      } catch (e) {
+        showToast('Failed to run similarity test');
+      }
+    }
+
+    function inspectCacheEntry(key) {
+      const entry = currentCacheEntries.find(e => e.key === key);
+      if (!entry) return;
+      activeInspectEntry = entry;
+
+      const modal = document.getElementById('cache-inspect-modal');
+      const modelBadge = document.getElementById('inspect-model-badge');
+      const hitsBadge = document.getElementById('inspect-hits-badge');
+      const keyBadge = document.getElementById('inspect-key-badge');
+      const userPromptEl = document.getElementById('inspect-user-prompt');
+      const reasoningSection = document.getElementById('inspect-reasoning-section');
+      const reasoningContentEl = document.getElementById('inspect-reasoning-content');
+      const respJsonEl = document.getElementById('inspect-response-json');
+
+      if (modelBadge) modelBadge.textContent = entry.model || 'UNKNOWN';
+      if (hitsBadge) hitsBadge.textContent = `${entry.hit_count || 0} HITS`;
+      if (keyBadge) keyBadge.textContent = entry.key;
+      if (userPromptEl) userPromptEl.textContent = entry.user_prompt || '(empty user prompt)';
+
+      // Check reasoning content
+      const rContent = entry.reasoning_preview || (entry.response_payload?.choices?.[0]?.message?.reasoning_content);
+      if (rContent && reasoningSection && reasoningContentEl) {
+        reasoningSection.style.display = 'block';
+        reasoningContentEl.textContent = rContent;
+      } else if (reasoningSection) {
+        reasoningSection.style.display = 'none';
+      }
+
+      if (respJsonEl) {
+        respJsonEl.textContent = JSON.stringify(entry.response_payload, null, 2);
+      }
+
+      if (modal) modal.style.display = 'flex';
+    }
+
+    function closeCacheInspectModal() {
+      const modal = document.getElementById('cache-inspect-modal');
+      if (modal) modal.style.display = 'none';
+      activeInspectEntry = null;
+    }
+
+    function copyInspectPrompt() {
+      if (!activeInspectEntry) return;
+      navigator.clipboard.writeText(activeInspectEntry.user_prompt || '');
+      showToast('Prompt copied to clipboard');
+    }
+
+    function copyInspectJson() {
+      if (!activeInspectEntry) return;
+      navigator.clipboard.writeText(JSON.stringify(activeInspectEntry.response_payload, null, 2));
+      showToast('Response JSON copied to clipboard');
+    }
+
+    function evictInspectEntry() {
+      if (!activeInspectEntry) return;
+      deleteCacheEntry(activeInspectEntry.key);
+    }
+
+    function scrollToExplorer() {
+      const pane = document.getElementById('pane-explorer');
+      if (!pane) return;
+      const isMobile = window.innerWidth <= 960;
+      if (isMobile) {
+        switchMobileTab('pane-explorer', document.querySelector('.mobile-tab-nav button:nth-child(5)'));
+      }
+      pane.scrollIntoView({ behavior: 'smooth' });
+      fetchCacheEntries();
+    }
+
     function initApp() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -2896,6 +3534,7 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       fetchWorkspaceTierInfo();
       initCharts();
       refreshData();
+      fetchCacheEntries();
       initWebSocket();
       setInterval(refreshData, 2000);
     }

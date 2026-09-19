@@ -215,5 +215,25 @@ class TestOmniCacheGateway(unittest.TestCase):
         self.assertIn("text/html", res_docs.headers.get("content-type", ""))
         self.assertIn("SwaggerUIBundle", res_docs.text)
 
+    def test_10_logout_endpoints(self):
+        """Verify /logout and /auth/logout endpoints clear session cookie and redirect."""
+        # Browser GET /logout
+        res_browser = self.client.get("/logout?redirect_uri=/dashboard", follow_redirects=False)
+        self.assertEqual(res_browser.status_code, 302)
+        self.assertEqual(res_browser.headers.get("location"), "/dashboard")
+        set_cookie = res_browser.headers.get("set-cookie", "")
+        self.assertIn("omnicache_key=", set_cookie)
+        self.assertIn("max-age=0", set_cookie.lower())
+
+        # API JSON GET /logout
+        res_api = self.client.get("/logout", headers={"accept": "application/json"})
+        self.assertEqual(res_api.status_code, 200)
+        self.assertEqual(res_api.json()["status"], "ok")
+
+        # Alias /auth/logout
+        res_auth = self.client.get("/auth/logout", follow_redirects=False)
+        self.assertEqual(res_auth.status_code, 302)
+        self.assertIn("omnicache_key=", res_auth.headers.get("set-cookie", ""))
+
 if __name__ == "__main__":
     unittest.main()

@@ -5129,6 +5129,24 @@ async def handle_google_callback(request: Request) -> Response:
     return HTMLResponse(html, status_code=200, headers=cors_headers)
 
 
+async def handle_logout(request: Request) -> Response:
+    """
+    Session Logout Endpoint.
+    Clears the omnicache_key cookie and redirects to /dashboard or requested redirect_uri.
+    """
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    redirect_to = request.query_params.get("redirect_uri", "/dashboard")
+    accept = request.headers.get("accept", "").lower()
+    if "application/json" in accept and "text/html" not in accept:
+        response = JSONResponse({"status": "ok", "message": "Logged out successfully"}, headers=cors_headers)
+    else:
+        response = RedirectResponse(url=redirect_to, status_code=302, headers=cors_headers)
+    response.delete_cookie(key="omnicache_key", path="/")
+    return response
+
+
 async def handle_mcp(request: Request) -> Response:
     """
     Model Context Protocol (MCP) JSON-RPC 2.0 endpoint supporting Streamable HTTP.
@@ -5374,6 +5392,8 @@ routes = [
     Route("/oauth/token", handle_oauth_token, methods=["POST", "OPTIONS"]),
     Route("/auth/google/login", handle_google_login, methods=["GET", "OPTIONS"]),
     Route("/auth/google/callback", handle_google_callback, methods=["GET", "OPTIONS"]),
+    Route("/logout", handle_logout, methods=["GET", "POST", "OPTIONS"]),
+    Route("/auth/logout", handle_logout, methods=["GET", "POST", "OPTIONS"]),
     Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/mcp", handle_mcp, methods=["GET", "POST", "DELETE", "OPTIONS"]),
     Route("/v1/cache/entries", handle_cache_entries, methods=["GET", "OPTIONS"]),

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnicache-client"
+version = "3.1.0"
+description = "Official Python Client SDK for OmniCache AI Proxy & Radix Semantic Cache Fabric"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "OmniCache Team", email = "engineering@omnicache.ai" }
+]
+dependencies = [
+    "httpx>=0.25.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/13manmayarai-hash/omnicache-proxy"
+Documentation = "https://github.com/13manmayarai-hash/omnicache-proxy/tree/main/docs"
+Repository = "https://github.com/13manmayarai-hash/omnicache-proxy"

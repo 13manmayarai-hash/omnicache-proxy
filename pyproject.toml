@@ -76,6 +76,8 @@ testpaths = ["tests"]
 pythonpath = ["."]
 filterwarnings = [
     "ignore::starlette.exceptions.StarletteDeprecationWarning",
+    "ignore::DeprecationWarning:starlette.testclient.*",
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
 ]
 
 

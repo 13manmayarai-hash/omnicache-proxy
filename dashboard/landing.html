@@ -878,14 +878,21 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 12px;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
       position: relative;
     }
 
-    @media (min-width: 860px) {
+    @media (min-width: 640px) and (max-width: 1023px) {
       .bp-flow-pipeline {
-        grid-template-columns: repeat(5, 1fr);
-        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .bp-flow-pipeline {
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
       }
     }
 
@@ -893,16 +900,19 @@
       background: #141822;
       border: 2px solid #000;
       box-shadow: 3px 3px 0px #000;
-      padding: 14px 16px;
+      padding: 14px 14px;
       position: relative;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      height: 100%;
+      min-width: 0;
+      overflow: hidden;
       transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s;
     }
 
     .bp-node-card:hover {
-      transform: translateX(4px);
+      transform: translateY(-2px);
       box-shadow: 5px 5px 0px #000;
       border-color: var(--volt);
     }
@@ -911,16 +921,18 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      height: 24px;
       margin-bottom: 8px;
     }
 
     .bp-node-id {
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 9.5px;
       font-weight: 800;
       padding: 2px 6px;
       border: 1.5px solid #000;
       box-shadow: 1.5px 1.5px 0px #000;
+      text-transform: uppercase;
     }
 
     .node-id-1 { background: var(--cyan); color: #000; }
@@ -931,62 +943,141 @@
 
     .bp-reticle {
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-dim);
+      font-weight: 700;
     }
 
     .bp-node-title {
-      font-size: 15px;
+      font-size: 13.5px;
       font-weight: 900;
       text-transform: uppercase;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
       line-height: 1.25;
       color: var(--text);
+      min-height: 36px;
+      display: flex;
+      align-items: flex-start;
     }
 
     .bp-node-desc {
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-muted);
-      line-height: 1.5;
-      margin-bottom: 8px;
+      line-height: 1.45;
+      margin-bottom: 12px;
+      flex: 1 1 auto;
+      min-height: 52px;
+      overflow-wrap: break-word;
+      word-break: break-word;
     }
 
     .bp-node-spec-box {
-      background: var(--bg-well);
-      border: 1px solid var(--border-subtle);
-      box-shadow: var(--neu-pressed);
-      padding: 6px 10px;
+      background: #080b11;
+      border: 1.5px solid #000;
+      box-shadow: 2px 2px 0px #000;
+      padding: 6px 8px;
       font-family: var(--font-mono);
-      font-size: 10px;
-      color: var(--text-muted);
-      line-height: 1.5;
+      font-size: 9.5px;
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 3px;
+      min-height: 46px;
+      justify-content: center;
+      box-sizing: border-box;
     }
 
-    .bp-node-spec-box strong { color: var(--text); }
+    .bp-spec-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      line-height: 1.2;
+    }
+
+    .bp-spec-k {
+      color: var(--text-dim);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .bp-spec-v {
+      color: var(--cyan);
+      font-weight: 800;
+    }
 
     /* Comparative Telemetry HUD Strip */
     .bp-hud-strip {
-      margin-top: 32px;
+      margin-top: 24px;
       border-top: 2.5px solid #000;
-      padding-top: 24px;
+      padding-top: 20px;
       display: grid;
       grid-template-columns: 1fr;
-      gap: 16px;
+      gap: 14px;
     }
 
     @media (min-width: 768px) {
-      .bp-hud-strip { grid-template-columns: 1fr 1fr; }
+      .bp-hud-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     .bp-hud-box {
-      background: var(--bg-well);
-      border: 2px solid var(--border-subtle);
-      box-shadow: var(--neu-pressed);
-      padding: 16px 20px;
+      background: #0d1017;
+      border: 2px solid #000;
+      box-shadow: 3px 3px 0px #000;
+      padding: 14px 18px;
+      font-family: var(--font-mono);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 100%;
+      min-width: 0;
+    }
+
+    .bp-hud-header {
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
+    }
+
+    .bp-hud-tag {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.03em;
+    }
+
+    .tag-direct { color: var(--orange); }
+    .tag-omni { color: var(--volt); }
+
+    .bp-hud-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .bp-hud-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .bp-hud-label {
+      color: var(--text-muted);
+    }
+
+    .bp-hud-val {
+      font-weight: 700;
       font-family: var(--font-mono);
     }
+
+    .val-warn { color: #fff; }
+    .val-alert { color: var(--orange); }
+    .val-volt { color: var(--volt); }
+    .val-cyan { color: var(--cyan); }
 
     /* Interactive Demo Sandbox */
     .section-title-wrap {
@@ -1944,114 +2035,166 @@
 
         <!-- 5-Node Schematic Pipeline Grid (Full-Width Engineering Bus) -->
         <div class="bp-flow-pipeline">
-            <!-- Node 01: Interceptor -->
-            <div class="bp-node-card">
-              <div>
-                <div class="bp-node-top">
-                  <span class="bp-node-id node-id-1">STAGE 01</span>
-                  <span class="bp-reticle">⌖ INT-01</span>
-                </div>
-                <h3 class="bp-node-title">Sidecar Intercept</h3>
-                <p class="bp-node-desc">
-                  Transparently intercepts OpenAI, Anthropic, Ollama, and MCP tool requests on localhost port <code>8000</code>.
-                </p>
+          <!-- Node 01: Interceptor -->
+          <div class="bp-node-card">
+            <div>
+              <div class="bp-node-top">
+                <span class="bp-node-id node-id-1">STAGE 01</span>
+                <span class="bp-reticle">⌖ INT-01</span>
               </div>
-              <div class="bp-node-spec-box">
-                <div>TARGET: <strong>127.0.0.1:8000</strong></div>
-                <div>OVERHEAD: <strong>0.02ms</strong></div>
-              </div>
+              <h3 class="bp-node-title">Sidecar Intercept</h3>
+              <p class="bp-node-desc">
+                Transparently intercepts OpenAI, Anthropic, and MCP tool requests on localhost port 8000.
+              </p>
             </div>
-
-            <!-- Node 02: Radix L1 Check -->
-            <div class="bp-node-card">
-              <div>
-                <div class="bp-node-top">
-                  <span class="bp-node-id node-id-2">STAGE 02</span>
-                  <span class="bp-reticle">⌖ L1-TRIE</span>
-                </div>
-                <h3 class="bp-node-title">L1 Radix Lookup</h3>
-                <p class="bp-node-desc">
-                  Deterministic O(k) prefix tree matches prompts & verifies SHA-256 Git mtime to prevent stale context.
-                </p>
+            <div class="bp-node-spec-box">
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">TARGET</span>
+                <span class="bp-spec-v">127.0.0.1:8000</span>
               </div>
-              <div class="bp-node-spec-box">
-                <div>LOOKUP: <strong>0.06ms</strong></div>
-                <div>VERIFY: <strong>Git SHA-256</strong></div>
-              </div>
-            </div>
-
-            <!-- Node 03: Subword Lexical Projection -->
-            <div class="bp-node-card">
-              <div>
-                <div class="bp-node-top">
-                  <span class="bp-node-id node-id-3">STAGE 03</span>
-                  <span class="bp-reticle">⌖ FUZZY-PROJ</span>
-                </div>
-                <h3 class="bp-node-title">Subword Lexical Match</h3>
-                <p class="bp-node-desc">
-                  Projects subword tokens & hashes n-grams (<code>fuzzy_lexical_subword_projection</code>) to detect lexical matches without external model roundtrips.
-                </p>
-              </div>
-              <div class="bp-node-spec-box">
-                <div>METHOD: <strong>Fuzzy Subword</strong></div>
-                <div>OVERHEAD: <strong>&lt;0.05ms Local</strong></div>
-              </div>
-            </div>
-
-            <!-- Node 04: Zero-Token Replay -->
-            <div class="bp-node-card">
-              <div>
-                <div class="bp-node-top">
-                  <span class="bp-node-id node-id-4">STAGE 04</span>
-                  <span class="bp-reticle">⌖ WAL-MEM</span>
-                </div>
-                <h3 class="bp-node-title">Zero-Token Tool Replay</h3>
-                <p class="bp-node-desc">
-                  On cache hit, replays file contents & tool call results directly from SQLite WAL for $0.00 without invoking upstream models.
-                </p>
-              </div>
-              <div class="bp-node-spec-box">
-                <div>COST: <strong>$0.00 / 0 Tokens</strong></div>
-                <div>SPEED: <strong>&lt;0.1ms Replay</strong></div>
-              </div>
-            </div>
-
-            <!-- Node 05: Fallback & Compaction -->
-            <div class="bp-node-card">
-              <div>
-                <div class="bp-node-top">
-                  <span class="bp-node-id node-id-5">STAGE 05</span>
-                  <span class="bp-reticle">⌖ CMP-UP</span>
-                </div>
-                <h3 class="bp-node-title">Prune &amp; Cloud Turn</h3>
-                <p class="bp-node-desc">
-                  On cache miss, compacts redundant head/tail context, invokes upstream cloud, and writes back to WAL.
-                </p>
-              </div>
-              <div class="bp-node-spec-box">
-                <div>FALLBACK: <strong>Anthropic / OpenAI</strong></div>
-                <div>WRITE-BACK: <strong>Async SQLite</strong></div>
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">OVERHEAD</span>
+                <span class="bp-spec-v">0.02ms</span>
               </div>
             </div>
           </div>
+
+          <!-- Node 02: Radix L1 Check -->
+          <div class="bp-node-card">
+            <div>
+              <div class="bp-node-top">
+                <span class="bp-node-id node-id-2">STAGE 02</span>
+                <span class="bp-reticle">⌖ L1-TRIE</span>
+              </div>
+              <h3 class="bp-node-title">L1 Radix Lookup</h3>
+              <p class="bp-node-desc">
+                Deterministic O(k) prefix tree matches prompts &amp; verifies Git SHA-256 to prevent stale cache.
+              </p>
+            </div>
+            <div class="bp-node-spec-box">
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">LOOKUP</span>
+                <span class="bp-spec-v">0.06ms</span>
+              </div>
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">VERIFY</span>
+                <span class="bp-spec-v">Git SHA-256</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Node 03: Subword Lexical Projection -->
+          <div class="bp-node-card">
+            <div>
+              <div class="bp-node-top">
+                <span class="bp-node-id node-id-3">STAGE 03</span>
+                <span class="bp-reticle">⌖ FUZZY-PROJ</span>
+              </div>
+              <h3 class="bp-node-title">Subword Lexical Match</h3>
+              <p class="bp-node-desc">
+                Projects subword tokens &amp; hashes n-grams to detect lexical matches with zero external calls.
+              </p>
+            </div>
+            <div class="bp-node-spec-box">
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">METHOD</span>
+                <span class="bp-spec-v">Fuzzy Subword</span>
+              </div>
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">OVERHEAD</span>
+                <span class="bp-spec-v">&lt;0.05ms Local</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Node 04: Zero-Token Replay -->
+          <div class="bp-node-card">
+            <div>
+              <div class="bp-node-top">
+                <span class="bp-node-id node-id-4">STAGE 04</span>
+                <span class="bp-reticle">⌖ WAL-MEM</span>
+              </div>
+              <h3 class="bp-node-title">Zero-Token Replay</h3>
+              <p class="bp-node-desc">
+                On cache hit, replays file contents &amp; tool results directly from SQLite WAL for $0.00 cost.
+              </p>
+            </div>
+            <div class="bp-node-spec-box">
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">COST</span>
+                <span class="bp-spec-v">$0.00 / 0 Tok</span>
+              </div>
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">SPEED</span>
+                <span class="bp-spec-v">&lt;0.1ms Replay</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Node 05: Fallback & Compaction -->
+          <div class="bp-node-card">
+            <div>
+              <div class="bp-node-top">
+                <span class="bp-node-id node-id-5">STAGE 05</span>
+                <span class="bp-reticle">⌖ CMP-UP</span>
+              </div>
+              <h3 class="bp-node-title">Prune &amp; Cloud Turn</h3>
+              <p class="bp-node-desc">
+                On cache miss, compacts redundant head/tail context, routes to upstream cloud, and writes to WAL.
+              </p>
+            </div>
+            <div class="bp-node-spec-box">
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">FALLBACK</span>
+                <span class="bp-spec-v">Anthropic/OpenAI</span>
+              </div>
+              <div class="bp-spec-row">
+                <span class="bp-spec-k">PERSIST</span>
+                <span class="bp-spec-v">Async SQLite</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- Comparative Telemetry HUD Strip -->
         <div class="bp-hud-strip">
           <div class="bp-hud-box">
-            <div style="color: var(--orange); font-size: 11px; font-weight: 800; margin-bottom: 6px;">[WITHOUT OMNICACHE - FRONTIER CLOUD]</div>
-            <div style="font-size: 13px; line-height: 1.6; color: var(--text-muted);">
-              • Average Turn Latency: <span style="color: #fff;">1,850ms - 3,200ms</span><br>
-              • Cost per Re-Read Turn: <span style="color: #fff;">$0.04 - $0.15</span><br>
-              • Vulnerability: <span style="color: var(--orange);">Frequent 429 Rate Limits</span>
+            <div class="bp-hud-header">
+              <span class="bp-hud-tag tag-direct">[WITHOUT OMNICACHE - DIRECT FRONTIER CLOUD]</span>
+            </div>
+            <div class="bp-hud-rows">
+              <div class="bp-hud-row">
+                <span class="bp-hud-label">• Average Turn Latency:</span>
+                <span class="bp-hud-val val-warn">1,850ms - 3,200ms</span>
+              </div>
+              <div class="bp-hud-row">
+                <span class="bp-hud-label">• Cost per Re-Read Turn:</span>
+                <span class="bp-hud-val val-warn">$0.04 - $0.15</span>
+              </div>
+              <div class="bp-hud-row">
+                <span class="bp-hud-label">• Rate Limit Vulnerability:</span>
+                <span class="bp-hud-val val-alert">Frequent 429 Failures</span>
+              </div>
             </div>
           </div>
 
           <div class="bp-hud-box">
-            <div style="color: var(--volt); font-size: 11px; font-weight: 800; margin-bottom: 6px;">[WITH OMNICACHE SIDECAR - LOCALHOST WAL]</div>
-            <div style="font-size: 13px; line-height: 1.6; color: var(--text-muted);">
-              • Cache Hit Latency: <span style="color: var(--volt);">0.06ms - 0.09ms (99.9% faster)</span><br>
-              • Cost per Re-Read Turn: <span style="color: var(--volt);">$0.00 (Zero Token Burn)</span><br>
-              • Privacy: <span style="color: var(--cyan);">100% Air-Gapped Localhost</span>
+            <div class="bp-hud-header">
+              <span class="bp-hud-tag tag-omni">[WITH OMNICACHE SIDECAR - LOCALHOST WAL]</span>
+            </div>
+            <div class="bp-hud-rows">
+              <div class="bp-hud-row">
+                <span class="bp-hud-label">• Cache Hit Latency:</span>
+                <span class="bp-hud-val val-volt">0.06ms - 0.09ms (99.9% faster)</span>
+              </div>
+              <div class="bp-hud-row">
+                <span class="bp-hud-label">• Cost per Re-Read Turn:</span>
+                <span class="bp-hud-val val-volt">$0.00 (Zero Token Burn)</span>
+              </div>
+              <div class="bp-hud-row">
+                <span class="bp-hud-label">• Data Privacy &amp; Security:</span>
+                <span class="bp-hud-val val-cyan">100% Air-Gapped Localhost</span>
+              </div>
             </div>
           </div>
         </div>

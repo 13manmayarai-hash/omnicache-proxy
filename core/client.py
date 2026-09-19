@@ -6,8 +6,12 @@ semantic cache header injection, and cache metric introspection.
 
 import os
 import time
+import warnings
 from typing import Dict, Any, List, Optional, Union
 import httpx
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*Using `httpx` with `starlette.testclient`.*")
 
 
 class CacheMetadata:

@@ -625,7 +625,7 @@ async def handle_chat_completions(request: Request) -> Response:
         METRICS_LEDGER["privacy_scrubbed_count"] += scrubbed_count
         audit_logger.log_event(
             "PII_REDACTION",
-            tenant_id=scoped_org or "default",
+            tenant_id=org_id or "default",
             severity="WARNING",
             actor="privacy_shield",
             description=f"Redacted {scrubbed_count} sensitive PII entities from OpenAI prompt payload",
@@ -997,7 +997,7 @@ async def handle_chat_completions(request: Request) -> Response:
         })
         audit_logger.log_event(
             "MODEL_CASCADE",
-            tenant_id=scoped_org or "default",
+            tenant_id=org_id or "default",
             severity="INFO",
             actor="cascade_router",
             description=f"Cascaded request from {requested_model} to {routed_model} ({cascade_reason})",
@@ -1370,7 +1370,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
         METRICS_LEDGER["privacy_scrubbed_count"] += scrubbed_count
         audit_logger.log_event(
             "PII_REDACTION",
-            tenant_id=scoped_org or "default",
+            tenant_id=org_id or "default",
             severity="WARNING",
             actor="privacy_shield",
             description=f"Redacted {scrubbed_count} sensitive PII entities from Anthropic prompt payload",
@@ -1756,7 +1756,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
         })
         audit_logger.log_event(
             "MODEL_CASCADE",
-            tenant_id=scoped_org or "default",
+            tenant_id=org_id or "default",
             severity="INFO",
             actor="cascade_router",
             description=f"Cascaded request from {requested_model} to {routed_model} ({cascade_reason})",

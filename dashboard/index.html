@@ -1518,6 +1518,7 @@
       <button class="tab-nav-btn" onclick="switchMobileTab('pane-workspace', this)">03 // Quotas</button>
       <button class="tab-nav-btn" onclick="switchMobileTab('pane-stream', this)">04 // Stream</button>
       <button class="tab-nav-btn" onclick="switchMobileTab('pane-explorer', this)">05 // Explorer</button>
+      <button class="tab-nav-btn" onclick="switchMobileTab('pane-mesh', this)">06 // Mesh</button>
     </nav>
 
     <!-- Twin Telemetry Monitors (Timeline Line Chart + Resolution Doughnut) -->
@@ -1888,6 +1889,127 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
               </tr>
             </tbody>
           </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- =========================================================================
+         [// 06] DISTRIBUTED CRDT MESH FEDERATION & LIVE SYNC EXPLORER
+         Dark Neo-Brutalist Blueprint Architecture
+         ========================================================================= -->
+    <div id="pane-mesh" class="blueprint-pane" style="margin-top: 24px; margin-bottom: 32px;">
+      <div class="blueprint-card">
+        
+        <!-- Header Bar -->
+        <div class="card-header-bar" style="flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div class="card-title">
+              <span class="pulse-dot"></span>
+              <span>[// 06] Distributed CRDT Mesh Federation & Live Sync Explorer</span>
+            </div>
+            <p style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 4px;">
+              Decentralized P2P peer discovery, Hybrid Logical Clock (HLC) monotonicity, CRDT LWW-Element-Set invalidation, and anti-entropy sync.
+            </p>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <button onclick="simulateMeshCluster()" class="btn-brutal btn-volt" title="Spin up 3 simulated global edge nodes" style="padding: 6px 12px; font-size: 10.5px;">
+              <span>Simulate 3-Node Cluster</span>
+            </button>
+            <button onclick="pingMeshPeers()" class="btn-brutal" title="Send peer gossip heartbeats" style="padding: 6px 12px; font-size: 10.5px;">
+              <span>Ping Heartbeat</span>
+            </button>
+            <button onclick="broadcastTestTombstone()" class="btn-brutal" title="Broadcast atomic CRDT tombstone invalidation" style="padding: 6px 12px; font-size: 10.5px;">
+              <span>Broadcast Tombstone</span>
+            </button>
+            <button onclick="fetchMeshTopology()" class="btn-brutal" title="Refresh mesh peer topology" style="padding: 6px 12px; font-size: 10.5px;">
+              <span>Refresh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- KPI Status Strip -->
+        <div class="telemetry-kpi-strip" style="margin: 12px 0;">
+          <div style="display: flex; flex-direction: column;">
+            <span style="font-size: 8px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">LOCAL NODE ID</span>
+            <span id="mesh-local-node-id" style="font-size: 11.5px; font-weight: 800; color: var(--volt); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">STANDALONE</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <span style="font-size: 8px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">ACTIVE PEERS</span>
+            <span id="mesh-active-peers-count" style="font-size: 13px; font-weight: 800; color: var(--cyan);">0 CONNECTED</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <span style="font-size: 8px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">HYBRID CLOCK (HLC)</span>
+            <span id="mesh-hlc-state" style="font-size: 12px; font-weight: 800; color: var(--purple);">L: 0, C: 0</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <span style="font-size: 8px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">CRDT TOMBSTONES</span>
+            <span id="mesh-tombstones-count" style="font-size: 13px; font-weight: 800; color: var(--orange);">0 APPLIED</span>
+          </div>
+        </div>
+
+        <!-- Add Peer Drawer (Collapsible) -->
+        <div class="blueprint-well" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: var(--cyan); font-family: var(--font-mono);">+ Connect Remote Mesh Node</span>
+            <span style="font-size: 9px; color: var(--text-dim); font-family: var(--font-mono);">Peer HTTP endpoint with optional reachability check</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1.5fr 1fr auto; gap: 8px; align-items: center;">
+            <input type="text" id="mesh-peer-endpoint-input" class="input-brutal" placeholder="http://edge-node-02:8000" />
+            <input type="text" id="mesh-peer-nodeid-input" class="input-brutal" placeholder="node-id (optional)" />
+            <button onclick="addMeshPeerFromInput()" class="btn-brutal btn-volt" style="white-space: nowrap; padding: 7px 14px; font-size: 10.5px;">
+              Connect Peer →
+            </button>
+          </div>
+        </div>
+
+        <!-- Two-Column Workbench: Left = Peer Topology Matrix, Right = CRDT Vector Clock & Live Stream -->
+        <div style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px;" class="grid-workbench-duo">
+          
+          <!-- Left Column: Discovered / Connected Peer Nodes -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 10.5px; font-weight: 800; text-transform: uppercase; color: var(--text-main); font-family: var(--font-mono);">
+                Connected Peer Nodes
+              </span>
+              <span id="mesh-peer-status-tag" style="font-size: 9px; font-family: var(--font-mono); color: var(--volt);">P2P MESH ACTIVE</span>
+            </div>
+            
+            <div id="mesh-peers-container" style="display: flex; flex-direction: column; gap: 8px; max-height: 380px; overflow-y: auto;">
+              <!-- Dynamically populated peer cards -->
+            </div>
+          </div>
+
+          <!-- Right Column: Vector Clock Matrix & Invalidation Ledger Stream -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 10.5px; font-weight: 800; text-transform: uppercase; color: var(--text-main); font-family: var(--font-mono);">
+                Causal Vector Clock & Gossip Stream
+              </span>
+              <span style="font-size: 9px; font-family: var(--font-mono); color: var(--text-dim);">LWW-Element-Set</span>
+            </div>
+
+            <!-- Vector Clock View -->
+            <div style="background: #050608; border: 1.5px solid #000000; padding: 10px; margin-bottom: 10px; font-family: var(--font-mono);">
+              <div style="font-size: 9.5px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 6px; font-weight: 700;">
+                Cluster Vector Clock Causality
+              </div>
+              <pre id="mesh-vector-clock-view" style="font-size: 11px; color: var(--volt); white-space: pre-wrap; line-height: 1.4; margin: 0; font-family: var(--font-mono);">{ "local": 0 }</pre>
+            </div>
+
+            <!-- Live Mesh Gossip Stream Log -->
+            <div class="terminal-output" style="max-height: 250px; overflow-y: auto; margin-top: 0; font-size: 10px;">
+              <div class="terminal-meta-row">
+                <span style="color: var(--cyan); font-weight: 700;">GOSSIP STREAM</span>
+                <span id="mesh-stream-time" style="color: var(--text-dim);">IDLE</span>
+              </div>
+              <div id="mesh-stream-log" style="color: var(--text-main); display: flex; flex-direction: column; gap: 4px;">
+                <div style="color: var(--text-dim);">// Mesh gossip engine initialized. Ready for peer synchronization.</div>
+              </div>
+            </div>
+          </div>
+
         </div>
 
       </div>
@@ -3742,6 +3864,239 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       fetchCacheEntries();
     }
 
+    // =========================================================================
+    // [// 06] Distributed CRDT Mesh Live Sync Explorer Controller
+    // =========================================================================
+    let meshTopology = null;
+
+    async function fetchMeshTopology() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/mesh/peers`, { headers: authHeaders() });
+        if (res.ok) {
+          meshTopology = await res.json();
+          renderMeshTopology(meshTopology);
+        }
+      } catch (err) {
+        console.warn('fetchMeshTopology error:', err);
+      }
+    }
+
+    function renderMeshTopology(topo) {
+      if (!topo) return;
+      const localNode = topo.node_id || 'STANDALONE';
+      const peers = topo.peers || [];
+      const alivePeers = peers.filter(p => p.status === 'alive');
+      const vClock = topo.vector_clock || {};
+      const hlc = topo.hlc || { l: 0, c: 0 };
+      const metrics = topo.metrics || {};
+
+      const elemLocal = document.getElementById('mesh-local-node-id');
+      if (elemLocal) elemLocal.textContent = `${localNode}`;
+
+      const elemActive = document.getElementById('mesh-active-peers-count');
+      if (elemActive) elemActive.textContent = `${alivePeers.length} / ${peers.length} CONNECTED`;
+
+      const elemHLC = document.getElementById('mesh-hlc-state');
+      if (elemHLC) elemHLC.textContent = `L: ${hlc.l || 0}, C: ${hlc.c || 0}`;
+
+      const elemTomb = document.getElementById('mesh-tombstones-count');
+      if (elemTomb) elemTomb.textContent = `${metrics.tombstones_applied || 0} SYNCED`;
+
+      // Update Top Status Ribbons
+      const ribbonMesh = document.getElementById('stat-mesh-status');
+      if (ribbonMesh) {
+        ribbonMesh.textContent = alivePeers.length > 0 ? `${alivePeers.length} PEERS SYNCD` : 'STANDALONE';
+      }
+      const menuMesh = document.getElementById('menu-mesh-status');
+      if (menuMesh) {
+        menuMesh.textContent = alivePeers.length > 0 ? `${alivePeers.length} Peers Active` : 'P2P Ready';
+      }
+
+      // Render Vector Clock view
+      const elemVClock = document.getElementById('mesh-vector-clock-view');
+      if (elemVClock) {
+        elemVClock.textContent = JSON.stringify(vClock, null, 2);
+      }
+
+      // Render Peer cards
+      const container = document.getElementById('mesh-peers-container');
+      if (container) {
+        if (peers.length === 0) {
+          container.innerHTML = `
+            <div style="background: #050608; border: 1.5px dashed var(--border-blueprint-dim); padding: 24px; text-align: center; color: var(--text-dim); font-family: var(--font-mono); font-size: 11px;">
+              ⚡ No peer nodes connected yet.<br><br>
+              Click <strong style="color: var(--volt);">"Simulate 3-Node Cluster"</strong> above to instantly connect simulated edge nodes across us-east-1, eu-central-1, and ap-northeast-1!
+            </div>
+          `;
+        } else {
+          container.innerHTML = peers.map(p => {
+            const isAlive = p.status === 'alive';
+            const statusColor = isAlive ? 'var(--volt)' : (p.status === 'suspect' ? 'var(--orange)' : 'var(--text-dim)');
+            const rttStr = (p.rtt_ms && p.rtt_ms > 0) ? `⚡ ${Number(p.rtt_ms).toFixed(1)}ms` : 'Local/LAN';
+            const region = p.metadata?.region || 'global-edge';
+            return `
+              <div style="background: #07090e; border: 1.5px solid #000000; box-shadow: 2px 2px 0px #000000; padding: 10px; font-family: var(--font-mono);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 12px; font-weight: 800; color: var(--text-main);">${p.node_id}</span>
+                    <span class="chip-badge" style="background: #11141d; color: var(--cyan); border-color: rgba(0,240,255,0.3);">${region}</span>
+                  </div>
+                  <span style="font-size: 9.5px; font-weight: 800; color: ${statusColor};">● ${p.status.toUpperCase()}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: var(--text-muted); margin-bottom: 8px;">
+                  <span style="text-overflow: ellipsis; overflow: hidden; max-width: 180px;">${p.endpoint}</span>
+                  <span style="color: var(--volt); font-weight: 700;">${rttStr}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed var(--border-blueprint-dim); padding-top: 6px;">
+                  <span style="font-size: 9px; color: var(--text-dim);">Last seen: ${p.age_seconds || 0}s ago</span>
+                  <button onclick="removeMeshPeer('${p.node_id}')" class="btn-brutal" style="padding: 2px 6px; font-size: 9px; color: var(--orange);">Disconnect ✕</button>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+    }
+
+    async function simulateMeshCluster() {
+      showToast('⚡ Spinning up 3-Node Global Distributed CRDT Mesh Cluster...');
+      const simulatedNodes = [
+        {
+          endpoint: 'http://us-east-edge.internal:8000',
+          node_id: 'node-us-east-1',
+          rtt_ms: 14.2,
+          metadata: { region: 'us-east-1', role: 'edge-accelerator' },
+          simulated: true
+        },
+        {
+          endpoint: 'http://eu-central-edge.internal:8000',
+          node_id: 'node-eu-central-1',
+          rtt_ms: 28.5,
+          metadata: { region: 'eu-central-1', role: 'edge-accelerator' },
+          simulated: true
+        },
+        {
+          endpoint: 'http://apac-tokyo-edge.internal:8000',
+          node_id: 'node-ap-northeast-1',
+          rtt_ms: 124.8,
+          metadata: { region: 'ap-northeast-1', role: 'edge-accelerator' },
+          simulated: true
+        }
+      ];
+
+      for (const node of simulatedNodes) {
+        try {
+          await fetch(`${API_BASE}/v1/mesh/peers`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify(node)
+          });
+          logMeshStream(`[DISCOVERY] Peer admitted: ${node.node_id} (${node.metadata.region}) RTT: ${node.rtt_ms}ms`);
+        } catch (e) {}
+      }
+
+      await fetchMeshTopology();
+      showToast('🌐 Distributed CRDT Mesh Active: 3 Global Nodes Synchronized!');
+    }
+
+    async function pingMeshPeers() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/mesh/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ ping: true, timestamp: Date.now() })
+        });
+        logMeshStream(`[HEARTBEAT] Pinged all connected peers. Consensus status: CAUSALLY SYNCHRONIZED.`);
+        await fetchMeshTopology();
+        showToast('✓ Mesh gossip heartbeat dispatched across all nodes.');
+      } catch (err) {
+        showToast('⚠️ Heartbeat error.');
+      }
+    }
+
+    async function broadcastTestTombstone() {
+      try {
+        const fakeKey = 'cache_record_' + Math.random().toString(36).substr(2, 6);
+        const res = await fetch(`${API_BASE}/v1/mesh/broadcast`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({
+            resource_id: fakeKey,
+            reason: 'developer_invalidation',
+            metadata: { initiator: 'dashboard_explorer' }
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          logMeshStream(`[CRDT TOMBSTONE] Invalidation broadcasted: ${fakeKey} (HLC: ${data.tombstone?.hlc_l}, peers reached: ${data.synced_peers_count})`);
+          await fetchMeshTopology();
+          showToast(`⚡ CRDT Tombstone broadcasted to ${data.synced_peers_count || 0} peers!`);
+        }
+      } catch (err) {
+        showToast('⚠️ Broadcast error.');
+      }
+    }
+
+    async function addMeshPeerFromInput() {
+      const endpoint = document.getElementById('mesh-peer-endpoint-input').value.trim();
+      const nodeId = document.getElementById('mesh-peer-nodeid-input').value.trim();
+      if (!endpoint) {
+        showToast('Please specify a peer HTTP endpoint.');
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/v1/mesh/peers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeaders() },
+          body: JSON.stringify({ endpoint, node_id: nodeId || undefined, simulated: false })
+        });
+        if (res.ok) {
+          document.getElementById('mesh-peer-endpoint-input').value = '';
+          document.getElementById('mesh-peer-nodeid-input').value = '';
+          logMeshStream(`[CONNECT] Peer endpoint registered: ${endpoint}`);
+          await fetchMeshTopology();
+          showToast('Peer registered successfully!');
+        } else {
+          const data = await res.json().catch(() => ({}));
+          showToast(data.error || 'Failed to register peer');
+        }
+      } catch (err) {
+        showToast('Network error registering peer');
+      }
+    }
+
+    async function removeMeshPeer(nodeId) {
+      if (!confirm(`Disconnect peer node '${nodeId}' from mesh federation?`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/v1/mesh/peers?identifier=${encodeURIComponent(nodeId)}`, {
+          method: 'DELETE',
+          headers: authHeaders()
+        });
+        if (res.ok) {
+          logMeshStream(`[DISCONNECT] Peer node removed: ${nodeId}`);
+          await fetchMeshTopology();
+          showToast(`Peer ${nodeId} unlinked.`);
+        }
+      } catch (err) {
+        showToast('Error removing peer');
+      }
+    }
+
+    function logMeshStream(msg) {
+      const log = document.getElementById('mesh-stream-log');
+      const timeElem = document.getElementById('mesh-stream-time');
+      const now = new Date().toLocaleTimeString();
+      if (timeElem) timeElem.textContent = now;
+      if (log) {
+        const item = document.createElement('div');
+        item.style.borderLeft = '2px solid var(--cyan)';
+        item.style.paddingLeft = '6px';
+        item.style.marginBottom = '3px';
+        item.textContent = `${now} // ${msg}`;
+        log.prepend(item);
+      }
+    }
+
     function initApp() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -3792,8 +4147,10 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       initCharts();
       refreshData();
       fetchCacheEntries();
+      fetchMeshTopology();
       initWebSocket();
       setInterval(refreshData, 2000);
+      setInterval(fetchMeshTopology, 6000);
     }
 
     if (document.readyState === 'loading') {

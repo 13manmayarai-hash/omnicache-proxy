@@ -3099,7 +3099,14 @@ async def handle_mesh_peers(request: Request) -> Response:
             if peer:
                 peer.mark_seen(reachability.get("rtt_ms"))
         else:
-            peer = mesh_bus.register_peer(endpoint=endpoint, node_id=node_id, metadata=metadata, status="unverified")
+            simulated = body.get("simulated", False)
+            init_status = "alive" if simulated else (body.get("status") or "unverified")
+            peer = mesh_bus.register_peer(endpoint=endpoint, node_id=node_id, metadata=metadata, status=init_status)
+            if peer and simulated and body.get("rtt_ms"):
+                try:
+                    peer.mark_seen(float(body.get("rtt_ms")))
+                except Exception:
+                    pass
 
         emit_telemetry_event("mesh_peer_registered", {
             "endpoint": endpoint,

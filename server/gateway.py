@@ -55,6 +55,7 @@ from server.failover import failover_engine
 from server.keepalive import keepalive_worker
 from persistence.snapshot_store import snapshot_store
 from mcp.server import process_mcp_jsonrpc, TOOLS_METADATA
+from server.audit import audit_logger
 
 METRICS_LEDGER = {
     "total_savings_usd": 0.0,
@@ -334,6 +335,14 @@ def authenticate_tenant(request: Request) -> Tuple[bool, Optional[Response], Dic
                 headers=auth_headers
             ), {}, ""
         else:
+            audit_logger.log_event(
+                "QUOTA_DEPLETED",
+                tenant_id=key_info.get("org_id", "unknown"),
+                severity="CRITICAL",
+                actor=key_info.get("key_id", key),
+                description=f"Request blocked due to quota limit: {auth_reason}",
+                details={"reason": auth_reason, "key_id": key}
+            )
             return False, JSONResponse(
                 {"error": {"message": auth_reason, "type": "quota_exceeded"}},
                 status_code=429,
@@ -613,6 +622,14 @@ async def handle_chat_completions(request: Request) -> Response:
     payload, pii_token_map, scrubbed_count = privacy_shield.sanitize_payload(raw_payload)
     if scrubbed_count > 0:
         METRICS_LEDGER["privacy_scrubbed_count"] += scrubbed_count
+        audit_logger.log_event(
+            "PII_REDACTION",
+            tenant_id=scoped_org or "default",
+            severity="WARNING",
+            actor="privacy_shield",
+            description=f"Redacted {scrubbed_count} sensitive PII entities from OpenAI prompt payload",
+            details={"entities_redacted": scrubbed_count, "compliance_policy": "GDPR/HIPAA/PCI-DSS"}
+        )
 
     # In-Line Agent Tool Interception & Context Compaction
     payload, compacted_tokens, tools_recorded = compact_and_record_agent_tools(payload)
@@ -977,6 +994,14 @@ async def handle_chat_completions(request: Request) -> Response:
             "reason": cascade_reason,
             "arbitrage_savings_usd": round(cascade_router.arbitrage_savings_usd, 6)
         })
+        audit_logger.log_event(
+            "MODEL_CASCADE",
+            tenant_id=scoped_org or "default",
+            severity="INFO",
+            actor="cascade_router",
+            description=f"Cascaded request from {requested_model} to {routed_model} ({cascade_reason})",
+            details={"requested_model": requested_model, "routed_model": routed_model, "reason": cascade_reason, "tier": route_tier}
+        )
 
     exact_flight_key = RequestHasher.compute_exact_hash(payload, org_id=org_id)
 
@@ -1342,6 +1367,14 @@ async def handle_anthropic_messages(request: Request) -> Response:
     anthropic_payload, pii_token_map, scrubbed_count = privacy_shield.sanitize_payload(raw_payload)
     if scrubbed_count > 0:
         METRICS_LEDGER["privacy_scrubbed_count"] += scrubbed_count
+        audit_logger.log_event(
+            "PII_REDACTION",
+            tenant_id=scoped_org or "default",
+            severity="WARNING",
+            actor="privacy_shield",
+            description=f"Redacted {scrubbed_count} sensitive PII entities from Anthropic prompt payload",
+            details={"entities_redacted": scrubbed_count, "compliance_policy": "GDPR/HIPAA/PCI-DSS"}
+        )
 
     # In-Line Agent Tool Interception & Context Compaction
     anthropic_payload, compacted_tokens, tools_recorded = compact_and_record_agent_tools(anthropic_payload)
@@ -1720,6 +1753,14 @@ async def handle_anthropic_messages(request: Request) -> Response:
             "reason": cascade_reason,
             "arbitrage_savings_usd": round(cascade_router.arbitrage_savings_usd, 6)
         })
+        audit_logger.log_event(
+            "MODEL_CASCADE",
+            tenant_id=scoped_org or "default",
+            severity="INFO",
+            actor="cascade_router",
+            description=f"Cascaded request from {requested_model} to {routed_model} ({cascade_reason})",
+            details={"requested_model": requested_model, "routed_model": routed_model, "reason": cascade_reason, "tier": route_tier}
+        )
 
     req_params = dict(request.query_params) if request.query_params else None
     if "messages" in anthropic_payload and isinstance(anthropic_payload["messages"], list):
@@ -2766,6 +2807,15 @@ async def handle_purge(request: Request) -> Response:
             asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
         except Exception:
             pass
+
+    audit_logger.log_event(
+        "CACHE_PURGE",
+        tenant_id=req_org or "all",
+        severity="WARNING",
+        actor=key_info.get("api_key", "system_admin"),
+        description=f"Purged {in_mem_removed} cache memory entries and {db_removed} disk snapshot records",
+        details={"in_memory_purged": in_mem_removed, "db_purged": db_removed, "org_id": req_org or "all"}
+    )
     
     return JSONResponse({
         "status": "success",
@@ -2803,6 +2853,15 @@ async def handle_invalidate_tag(request: Request) -> Response:
             asyncio.create_task(mesh_bus.broadcast_tombstone_async(tomb))
         except Exception:
             pass
+
+    audit_logger.log_event(
+        "TAG_INVALIDATION",
+        tenant_id=req_org or "all",
+        severity="INFO",
+        actor=key_info.get("api_key", "system_admin"),
+        description=f"Invalidated cache tag '{tag}' ({removed} memory entries, {db_removed} db records)",
+        details={"tag": tag, "removed_entries": removed, "removed_db_records": db_removed, "org_id": req_org or "all"}
+    )
 
     return JSONResponse({
         "status": "success",
@@ -3341,6 +3400,115 @@ async def handle_quotas(request: Request) -> Response:
             return JSONResponse({"status": "success", "registered": created}, headers=cors_headers)
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=400, headers=cors_headers)
+
+    return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
+
+
+async def handle_audit_export(request: Request) -> Response:
+    """Enterprise Policy & Compliance Audit Export Endpoint (JSON, CSV, OpenTelemetry)."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    is_admin = key_info.get("role") == "admin" or not getattr(config, "REQUIRE_AUTH", False)
+    scoped_org = None if is_admin else org_id
+    requested_org = request.query_params.get("org_id") or request.query_params.get("tenant_id") or scoped_org
+    if not is_admin:
+        requested_org = scoped_org
+
+    fmt = request.query_params.get("format", "json").lower()
+    event_type = request.query_params.get("event_type")
+    limit = int(request.query_params.get("limit", 500))
+
+    now_ts = int(time.time())
+    if fmt == "csv":
+        csv_data = audit_logger.export_csv(limit=limit, event_type=event_type, tenant_id=requested_org)
+        headers = {
+            **cors_headers,
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": f'attachment; filename="omnicache_audit_{now_ts}.csv"'
+        }
+        return Response(content=csv_data, media_type="text/csv", headers=headers)
+    elif fmt == "otel":
+        otel_data = audit_logger.export_otel(limit=limit, event_type=event_type, tenant_id=requested_org)
+        headers = {
+            **cors_headers,
+            "Content-Type": "application/json",
+            "Content-Disposition": f'attachment; filename="omnicache_audit_otel_{now_ts}.json"'
+        }
+        return JSONResponse(otel_data, headers=headers)
+    else:
+        json_data = audit_logger.export_json(limit=limit, event_type=event_type, tenant_id=requested_org)
+        headers = {
+            **cors_headers,
+            "Content-Type": "application/json",
+            "Content-Disposition": f'attachment; filename="omnicache_audit_{now_ts}.json"'
+        }
+        return Response(content=json_data, media_type="application/json", headers=headers)
+
+
+async def handle_audit_summary(request: Request) -> Response:
+    """Returns high-level compliance KPI summary for enterprise dashboards."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    is_admin = key_info.get("role") == "admin" or not getattr(config, "REQUIRE_AUTH", False)
+    scoped_org = None if is_admin else org_id
+    requested_org = request.query_params.get("org_id") or request.query_params.get("tenant_id") or scoped_org
+    if not is_admin:
+        requested_org = scoped_org
+
+    summary = audit_logger.get_summary(tenant_id=requested_org)
+    return JSONResponse(summary, headers=cors_headers)
+
+
+async def handle_audit_events(request: Request) -> Response:
+    """Lists or logs enterprise policy compliance events."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+
+    auth_ok, auth_err, key_info, org_id = authenticate_tenant(request)
+    if not auth_ok:
+        return auth_err
+
+    is_admin = key_info.get("role") == "admin" or not getattr(config, "REQUIRE_AUTH", False)
+    scoped_org = None if is_admin else org_id
+    requested_org = request.query_params.get("org_id") or request.query_params.get("tenant_id") or scoped_org
+    if not is_admin:
+        requested_org = scoped_org
+
+    if request.method == "GET":
+        limit = int(request.query_params.get("limit", 100))
+        event_type = request.query_params.get("event_type")
+        events = audit_logger.get_events(limit=limit, event_type=event_type, tenant_id=requested_org)
+        return JSONResponse({"events": events, "count": len(events)}, headers=cors_headers)
+
+    elif request.method == "POST":
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400, headers=cors_headers)
+
+        target_tenant = scoped_org if not is_admin else (body.get("tenant_id") or requested_org or "default_tenant")
+        rec = audit_logger.log_event(
+            event_type=body.get("event_type", "CUSTOM_POLICY"),
+            tenant_id=target_tenant,
+            severity=body.get("severity", "INFO"),
+            actor=body.get("actor", "api_client"),
+            description=body.get("description", ""),
+            details=body.get("details", {})
+        )
+        return JSONResponse({"status": "recorded", "event": rec}, headers=cors_headers)
 
     return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
 
@@ -5202,6 +5370,9 @@ routes = [
     Route("/v1/system/circuit/reset", handle_circuit_reset, methods=["POST", "OPTIONS"]),
     Route("/v1/cache/export", handle_export_csv, methods=["GET", "OPTIONS"]),
     Route("/v1/enterprise/quotas", handle_quotas, methods=["GET", "POST", "OPTIONS"]),
+    Route("/v1/enterprise/audit/export", handle_audit_export, methods=["GET", "OPTIONS"]),
+    Route("/v1/enterprise/audit/summary", handle_audit_summary, methods=["GET", "OPTIONS"]),
+    Route("/v1/enterprise/audit/events", handle_audit_events, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/signup", handle_signup, methods=["POST", "OPTIONS"]),
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
     Route("/landing", handle_landing, methods=["GET", "OPTIONS"]),

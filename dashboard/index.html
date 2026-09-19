@@ -1779,6 +1779,71 @@ export ANTHROPIC_BASE_URL="http://127.0.0.1:8000"
 export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
           </div>
 
+          <!-- Enterprise Policy & Compliance Audit Exporter -->
+          <div class="blueprint-card" id="card-audit-exporter" style="margin-top: 10px;">
+            <div class="card-header-bar" style="flex-wrap: wrap; gap: 6px;">
+              <div class="card-title">
+                <span class="pulse-dot" style="background: var(--cyan);"></span>
+                <span>[// 05] Policy & Compliance Audit Exporter</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                <button onclick="downloadAuditExport('json')" class="btn-brutal btn-volt" style="padding: 2px 7px; font-size: 9px;" title="Export JSON audit trail">JSON ⤓</button>
+                <button onclick="downloadAuditExport('csv')" class="btn-brutal" style="padding: 2px 7px; font-size: 9px;" title="Export RFC-4180 CSV audit trail">CSV ⤓</button>
+                <button onclick="downloadAuditExport('otel')" class="btn-brutal btn-cyan" style="padding: 2px 7px; font-size: 9px;" title="Export OpenTelemetry Logs schema">OTel ⤓</button>
+              </div>
+            </div>
+
+            <!-- KPI Mini Grid -->
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px;">
+              <div style="background: #050608; border: 1px solid var(--border-blueprint-dim); padding: 5px; text-align: center;">
+                <div style="font-size: 8.5px; color: var(--text-dim); text-transform: uppercase; font-family: var(--font-mono);">PII Redacted</div>
+                <div id="audit-kpi-pii" style="font-size: 13px; font-weight: 700; color: var(--volt); font-family: var(--font-mono);">0</div>
+              </div>
+              <div style="background: #050608; border: 1px solid var(--border-blueprint-dim); padding: 5px; text-align: center;">
+                <div style="font-size: 8.5px; color: var(--text-dim); text-transform: uppercase; font-family: var(--font-mono);">Cascades</div>
+                <div id="audit-kpi-cascades" style="font-size: 13px; font-weight: 700; color: var(--cyan); font-family: var(--font-mono);">0</div>
+              </div>
+              <div style="background: #050608; border: 1px solid var(--border-blueprint-dim); padding: 5px; text-align: center;">
+                <div style="font-size: 8.5px; color: var(--text-dim); text-transform: uppercase; font-family: var(--font-mono);">Quota Alerts</div>
+                <div id="audit-kpi-quotas" style="font-size: 13px; font-weight: 700; color: var(--accent-orange, #ff9500); font-family: var(--font-mono);">0</div>
+              </div>
+              <div style="background: #050608; border: 1px solid var(--border-blueprint-dim); padding: 5px; text-align: center;">
+                <div style="font-size: 8.5px; color: var(--text-dim); text-transform: uppercase; font-family: var(--font-mono);">Total Events</div>
+                <div id="audit-kpi-total" style="font-size: 13px; font-weight: 700; color: var(--text-main); font-family: var(--font-mono);">0</div>
+              </div>
+            </div>
+
+            <!-- Filter Controls & Event Table -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <select id="audit-filter-type" onchange="fetchAuditEvents()" style="background: #050608; border: 1px solid var(--border-blueprint); color: var(--text-main); font-size: 9px; font-family: var(--font-mono); padding: 2px 4px;">
+                <option value="ALL">All Event Types</option>
+                <option value="PII_REDACTION">PII Redactions</option>
+                <option value="MODEL_CASCADE">Model Cascades</option>
+                <option value="QUOTA_WARNING">Quota Warnings</option>
+                <option value="QUOTA_DEPLETED">Quota Depleted</option>
+                <option value="CACHE_PURGE">Cache Purges</option>
+                <option value="CRDT_MESH_SYNC">CRDT Mesh Syncs</option>
+              </select>
+              <button onclick="fetchAuditEvents(); fetchAuditSummary();" class="btn-brutal" style="padding: 2px 6px; font-size: 8.5px;">↻ Refresh</button>
+            </div>
+
+            <div id="audit-events-table-container" style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border-blueprint-dim); background: #030405;">
+              <table style="width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 8.5px; text-align: left;">
+                <thead>
+                  <tr style="background: #080a0e; border-bottom: 1px solid var(--border-blueprint-dim); color: var(--text-muted);">
+                    <th style="padding: 3px 4px;">TIME</th>
+                    <th style="padding: 3px 4px;">EVENT</th>
+                    <th style="padding: 3px 4px;">SEV</th>
+                    <th style="padding: 3px 4px;">DESC</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-events-tbody">
+                  <tr><td colspan="4" style="padding: 8px; text-align: center; color: var(--text-dim);">Loading audit records...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
 
       </section>
@@ -4097,6 +4162,101 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       }
     }
 
+    async function fetchAuditSummary() {
+      try {
+        const res = await fetch(`${API_BASE}/v1/enterprise/audit/summary`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        const piiEl = document.getElementById('audit-kpi-pii');
+        const casEl = document.getElementById('audit-kpi-cascades');
+        const qEl = document.getElementById('audit-kpi-quotas');
+        const totEl = document.getElementById('audit-kpi-total');
+
+        if (piiEl) piiEl.textContent = data.pii_redactions || 0;
+        if (casEl) casEl.textContent = data.model_cascades || 0;
+        if (qEl) qEl.textContent = data.quota_warnings || 0;
+        if (totEl) totEl.textContent = data.total_audit_events || 0;
+      } catch (err) {
+        console.error('Failed to fetch audit summary:', err);
+      }
+    }
+
+    async function fetchAuditEvents() {
+      try {
+        const filterEl = document.getElementById('audit-filter-type');
+        const filterVal = filterEl ? filterEl.value : 'ALL';
+        let url = `${API_BASE}/v1/enterprise/audit/events?limit=50`;
+        if (filterVal && filterVal !== 'ALL') {
+          url += `&event_type=${encodeURIComponent(filterVal)}`;
+        }
+        const res = await fetch(url, { headers: authHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        const tbody = document.getElementById('audit-events-tbody');
+        if (!tbody) return;
+
+        if (!data.events || data.events.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="padding: 8px; text-align: center; color: var(--text-dim);">No audit records found matching criteria.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.events.map(ev => {
+          let sevColor = 'var(--cyan)';
+          if (ev.severity === 'WARNING') sevColor = 'var(--accent-orange, #ff9500)';
+          if (ev.severity === 'CRITICAL' || ev.severity === 'ERROR') sevColor = 'var(--danger, #ff3b30)';
+
+          const timeStr = (ev.timestamp || '').split('T')[1]?.substring(0, 8) || ev.timestamp || '';
+          const desc = ev.description || JSON.stringify(ev.details || {});
+
+          return `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <td style="padding: 3px 4px; color: var(--text-dim); white-space: nowrap;">${timeStr}</td>
+              <td style="padding: 3px 4px; font-weight: 700; color: var(--text-main);">${ev.event_type}</td>
+              <td style="padding: 3px 4px;"><span style="color: ${sevColor}; font-weight: 700;">${ev.severity}</span></td>
+              <td style="padding: 3px 4px; color: var(--text-muted); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${desc.replace(/"/g, '&quot;')}">${desc}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        console.error('Failed to fetch audit events:', err);
+      }
+    }
+
+    async function downloadAuditExport(format) {
+      try {
+        const filterEl = document.getElementById('audit-filter-type');
+        const filterVal = filterEl ? filterEl.value : 'ALL';
+        let url = `${API_BASE}/v1/enterprise/audit/export?format=${encodeURIComponent(format)}&limit=1000`;
+        if (filterVal && filterVal !== 'ALL') {
+          url += `&event_type=${encodeURIComponent(filterVal)}`;
+        }
+
+        showToast(`Preparing ${format.toUpperCase()} compliance export...`);
+        const res = await fetch(url, { headers: authHeaders() });
+        if (!res.ok) {
+          showToast(`Export failed: ${res.statusText}`);
+          return;
+        }
+
+        const blob = await res.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        const nowStr = new Date().toISOString().replace(/[:.]/g, '-');
+        const ext = format === 'csv' ? 'csv' : 'json';
+        a.download = `omnicache_audit_${nowStr}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+        showToast(`Compliance audit trail downloaded (${format.toUpperCase()})`);
+      } catch (err) {
+        console.error('Export download error:', err);
+        showToast('Export failed to download');
+      }
+    }
+
     function initApp() {
       try {
         const urlParams = new URLSearchParams(window.location.search);
@@ -4148,9 +4308,12 @@ export OPENAI_BASE_URL="http://127.0.0.1:8000/v1"</code></pre>
       refreshData();
       fetchCacheEntries();
       fetchMeshTopology();
+      fetchAuditSummary();
+      fetchAuditEvents();
       initWebSocket();
       setInterval(refreshData, 2000);
       setInterval(fetchMeshTopology, 6000);
+      setInterval(fetchAuditSummary, 8000);
     }
 
     if (document.readyState === 'loading') {

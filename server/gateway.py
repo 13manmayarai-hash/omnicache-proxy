@@ -3816,6 +3816,19 @@ async def handle_landing(request: Request) -> Response:
     return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
+async def handle_simulator(request: Request) -> Response:
+    """Serves the interactive standalone pipeline and cache hit simulator."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    sim_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "simulator.html"))
+    if os.path.exists(sim_path):
+        with open(sim_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        return HTMLResponse(html, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Simulator Not Found</h1>", status_code=404, headers=cors_headers)
+
+
 async def handle_assets(request: Request) -> Response:
     """Serves static dashboard visual assets (e.g. posters, diagrams, icons)."""
     cors_headers = get_cors_headers(request)
@@ -5186,6 +5199,7 @@ routes = [
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
     Route("/landing", handle_landing, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
+    Route("/simulator", handle_simulator, methods=["GET", "OPTIONS"]),
     Route("/ws", handle_ws_http, methods=["GET", "POST", "OPTIONS"]),
     WebSocketRoute("/ws", handle_ws),
     Route("/assets/{file_path:path}", handle_assets, methods=["GET", "OPTIONS"]),

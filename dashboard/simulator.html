@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --card: #0e111a;
+      --background: #080a10;
+      --border: #202636;
+      --foreground: #f1f5f9;
+      --muted-foreground: #94a3b8;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.3; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .pulse-active {
+      animation: pulse-ring 1.2s infinite ease-in-out;
+    }
+    .stage-transition {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+</head>
+<body class="bg-[#080a10] text-[var(--foreground)] antialiased p-2 sm:p-4 select-none min-h-screen flex items-center justify-center">
+
+  <!-- Main Container Card -->
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-xl p-3.5 sm:p-4 shadow-lg max-w-xl mx-auto flex flex-col gap-3 font-sans">
+    
+    <!-- Top Header -->
+    <div class="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <h2 class="text-xs sm:text-sm font-bold tracking-tight uppercase font-mono">
+          OmniCache // Pipeline Replay Sandbox
+        </h2>
+      </div>
+      <span id="pipeline-status" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+        STATUS: READY
+      </span>
+    </div>
+
+    <!-- 5-Stage Visual Pipeline Bar -->
+    <div class="grid grid-cols-5 gap-1.5 font-mono text-[9px] sm:text-[10px]">
+      <div id="st-1" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
+        <span class="font-bold">01 INT</span>
+        <span class="text-[8px] opacity-75">Sidecar</span>
+      </div>
+      <div id="st-2" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
+        <span class="font-bold">02 RADIX</span>
+        <span class="text-[8px] opacity-75">L1 Trie</span>
+      </div>
+      <div id="st-3" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
+        <span class="font-bold">03 FUZZY</span>
+        <span class="text-[8px] opacity-75">Subword</span>
+      </div>
+      <div id="st-4" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
+        <span class="font-bold">04 REPLAY</span>
+        <span class="text-[8px] opacity-75">WAL Mem</span>
+      </div>
+      <div id="st-5" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
+        <span class="font-bold">05 CLOUD</span>
+        <span class="text-[8px] opacity-75">Fallback</span>
+      </div>
+    </div>
+
+    <!-- Interactive Presets & Controls -->
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px] font-mono">
+        <span class="text-[var(--muted-foreground)] whitespace-nowrap text-[9px]">PRESETS:</span>
+        <button onclick="setScenario(0)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-cyan-500 hover:text-cyan-400 whitespace-nowrap">
+          ⚡ Rust Fib (L1 Radix)
+        </button>
+        <button onclick="setScenario(1)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-purple-500 hover:text-purple-400 whitespace-nowrap">
+          🧠 DeepSeek R1 CoT
+        </button>
+        <button onclick="setScenario(2)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
+          🔍 Fuzzy Prompt
+        </button>
+        <button onclick="setScenario(3)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-rose-500 hover:text-rose-400 whitespace-nowrap">
+          ✕ Cache Miss
+        </button>
+      </div>
+
+      <!-- Prompt Input & Run Button -->
+      <div class="flex gap-1.5">
+        <input id="prompt-input" type="text" class="flex-1 bg-[var(--background)] border border-[var(--border)] rounded px-2.5 py-1 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-cyan-500" value="Write a function to compute Fibonacci sequence in Rust" />
+        <button id="run-btn" onclick="runPipelineSimulation()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs px-3 py-1 rounded transition-colors whitespace-nowrap">
+          REPLAY ⌖
+        </button>
+      </div>
+    </div>
+
+    <!-- Telemetry HUD Outcome Grid -->
+    <div class="grid grid-cols-4 gap-1.5 font-mono text-[10px] pt-1 border-t border-[var(--border)]">
+      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
+        <span class="text-[9px] text-[var(--muted-foreground)]">DECISION</span>
+        <span id="hud-decision" class="text-xs font-black text-emerald-400">HIT_RADIX</span>
+      </div>
+      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
+        <span class="text-[9px] text-[var(--muted-foreground)]">LATENCY</span>
+        <span id="hud-latency" class="text-xs font-black text-cyan-400">0.06 ms</span>
+      </div>
+      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
+        <span class="text-[9px] text-[var(--muted-foreground)]">TOKENS SAVED</span>
+        <span id="hud-tokens" class="text-xs font-black text-amber-400">842 tok</span>
+      </div>
+      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
+        <span class="text-[9px] text-[var(--muted-foreground)]">COST AVOIDED</span>
+        <span id="hud-cost" class="text-xs font-black text-emerald-400">$0.0253</span>
+      </div>
+    </div>
+
+    <!-- Dynamic Reason & Terminal Output -->
+    <div class="bg-[var(--background)] border border-[var(--border)] rounded p-2 text-[10.5px] font-mono flex items-center justify-between text-[var(--muted-foreground)]">
+      <div class="truncate mr-2">
+        <span class="text-cyan-400 font-bold">INFO:</span>
+        <span id="hud-reason" class="text-[var(--foreground)]">Prefix trie match verified with Git SHA-256 mtime. Zero token invocation.</span>
+      </div>
+      <span id="hud-speedup" class="text-[10px] font-bold text-emerald-400 whitespace-nowrap bg-emerald-500/10 px-1.5 py-0.5 rounded">
+        99.9% FASTER
+      </span>
+    </div>
+
+  </div>
+
+  <script>
+    const scenarios = [
+      {
+        prompt: "Write a function to compute Fibonacci sequence in Rust",
+        stages: [1, 2, 4],
+        status: "HIT_RADIX",
+        latency: "0.06 ms",
+        tokens: "842 tok",
+        cost: "$0.0253",
+        reason: "Radix prefix trie matched. Replayed directly from SQLite WAL in 60 microseconds.",
+        speedup: "99.9% FASTER",
+        theme: "emerald"
+      },
+      {
+        prompt: "DeepSeek-R1 CoT: Solve 3x + 15 = 45 step by step with proof",
+        stages: [1, 2, 3, 4],
+        status: "HIT_REASONER_COT",
+        latency: "0.09 ms",
+        tokens: "2,410 tok",
+        cost: "$0.0723",
+        reason: "Frontier reasoner CoT cache hit. Replayed full chain-of-thought with zero token burn.",
+        speedup: "99.8% FASTER",
+        theme: "purple"
+      },
+      {
+        prompt: "Show me a rust fibonacci sequence code generator",
+        stages: [1, 2, 3, 4],
+        status: "HIT_SEMANTIC_FUZZY",
+        latency: "0.14 ms",
+        tokens: "790 tok",
+        cost: "$0.0237",
+        reason: "Subword lexical projection matched with 96.2% similarity against cached trie vector.",
+        speedup: "99.7% FASTER",
+        theme: "cyan"
+      },
+      {
+        prompt: "Generate an esoteric esoteric quantum gravity conjecture in Swahili",
+        stages: [1, 2, 3, 5],
+        status: "CACHE_MISS",
+        latency: "1,820 ms",
+        tokens: "0 tok",
+        cost: "$0.0000",
+        reason: "Zero lexical match. Transparently routed to upstream Anthropic cloud API & written to WAL.",
+        speedup: "UPSTREAM TURN",
+        theme: "rose"
+      }
+    ];
+
+    let isRunning = false;
+
+    function setScenario(idx) {
+      if (isRunning) return;
+      const s = scenarios[idx];
+      document.getElementById('prompt-input').value = s.prompt;
+      runPipelineSimulation(s);
+    }
+
+    function resetStages() {
+      for (let i = 1; i <= 5; i++) {
+        const el = document.getElementById(`st-${i}`);
+        el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]';
+      }
+    }
+
+    async function runPipelineSimulation(customScenario = null) {
+      if (isRunning) return;
+      isRunning = true;
+      resetStages();
+
+      const btn = document.getElementById('run-btn');
+      const statusEl = document.getElementById('pipeline-status');
+      btn.disabled = true;
+      btn.classList.add('opacity-50');
+      statusEl.textContent = 'STATUS: INTERCEPTING...';
+      statusEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-400';
+
+      const s = customScenario || scenarios[Math.floor(Math.random() * 3)];
+
+      for (let i = 0; i < s.stages.length; i++) {
+        const stNum = s.stages[i];
+        const el = document.getElementById(`st-${stNum}`);
+        
+        // Active pulse highlight
+        if (stNum === 5) {
+          el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-rose-500 bg-rose-500/20 text-rose-300 font-bold shadow-sm';
+        } else if (stNum === 4) {
+          el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-emerald-500 bg-emerald-500/20 text-emerald-300 font-bold shadow-sm';
+        } else {
+          el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-bold shadow-sm';
+        }
+
+        await new Promise(r => setTimeout(r, 180));
+      }
+
+      // Update HUD
+      document.getElementById('hud-decision').textContent = s.status;
+      document.getElementById('hud-decision').className = `text-xs font-black ${s.theme === 'rose' ? 'text-rose-400' : s.theme === 'purple' ? 'text-purple-400' : 'text-emerald-400'}`;
+      document.getElementById('hud-latency').textContent = s.latency;
+      document.getElementById('hud-tokens').textContent = s.tokens;
+      document.getElementById('hud-cost').textContent = s.cost;
+      document.getElementById('hud-reason').textContent = s.reason;
+      document.getElementById('hud-speedup').textContent = s.speedup;
+      document.getElementById('hud-speedup').className = `text-[10px] font-bold whitespace-nowrap px-1.5 py-0.5 rounded ${s.theme === 'rose' ? 'text-rose-400 bg-rose-500/10' : 'text-emerald-400 bg-emerald-500/10'}`;
+
+      statusEl.textContent = s.theme === 'rose' ? 'STATUS: UPSTREAM FALLBACK' : 'STATUS: CACHE REPLAYED';
+      statusEl.className = s.theme === 'rose' ? 'text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-rose-500/30 bg-rose-500/10 text-rose-400' : 'text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400';
+
+      btn.disabled = false;
+      btn.classList.remove('opacity-50');
+      isRunning = false;
+    }
+
+    // Auto-run scenario 0 on initial load
+    window.addEventListener('load', () => {
+      setTimeout(() => setScenario(0), 100);
+    });
+  </script>
+</body>
+</html>

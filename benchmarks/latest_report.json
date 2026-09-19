@@ -1,0 +1,125 @@
+{
+  "timestamp": "2026-09-19T02:49:41.023036+00:00",
+  "scenarios": [
+    {
+      "name": "copilot",
+      "total_requests": 40,
+      "successful_requests": 40,
+      "duration_seconds": 0.44355114601785317,
+      "rps": 90.18125724420962,
+      "hit_ratio_pct": 90.0,
+      "latencies": {
+        "min_ms": 3.907708,
+        "mean_ms": 10.599897125,
+        "p50_ms": 8.5552605,
+        "p75_ms": 11.910052,
+        "p90_ms": 18.72349,
+        "p95_ms": 25.943177,
+        "p99_ms": 31.119896,
+        "p999_ms": 31.119896,
+        "max_ms": 31.119896,
+        "stddev_ms": 6.010924720099128
+      },
+      "tiers": {
+        "exact_hits": 29,
+        "semantic_hits": 7,
+        "tool_hits": 0,
+        "misses": 4
+      },
+      "telemetry": {
+        "tokens_saved": 2902,
+        "cost_saved_usd": 0.024896999999999992
+      }
+    },
+    {
+      "name": "agent_swarm",
+      "total_requests": 40,
+      "successful_requests": 40,
+      "duration_seconds": 0.47612979100085795,
+      "rps": 84.01070623183905,
+      "hit_ratio_pct": 80.0,
+      "latencies": {
+        "min_ms": 3.83276,
+        "mean_ms": 11.6238802,
+        "p50_ms": 8.828568,
+        "p75_ms": 14.950261,
+        "p90_ms": 21.234427,
+        "p95_ms": 25.617084,
+        "p99_ms": 41.675833,
+        "p999_ms": 41.675833,
+        "max_ms": 41.675833,
+        "stddev_ms": 7.7186871899812415
+      },
+      "tiers": {
+        "exact_hits": 16,
+        "semantic_hits": 16,
+        "tool_hits": 0,
+        "misses": 8
+      },
+      "telemetry": {
+        "tokens_saved": 2458,
+        "cost_saved_usd": 0.025446
+      }
+    },
+    {
+      "name": "burst",
+      "total_requests": 40,
+      "successful_requests": 40,
+      "duration_seconds": 0.37125046795699745,
+      "rps": 107.74397193388391,
+      "hit_ratio_pct": 100.0,
+      "latencies": {
+        "min_ms": 4.470261,
+        "mean_ms": 9.135863425,
+        "p50_ms": 6.5137245,
+        "p75_ms": 8.976927,
+        "p90_ms": 12.977344,
+        "p95_ms": 16.608021,
+        "p99_ms": 39.713645,
+        "p999_ms": 39.713645,
+        "max_ms": 39.713645,
+        "stddev_ms": 7.448769422430905
+      },
+      "tiers": {
+        "exact_hits": 40,
+        "semantic_hits": 0,
+        "tool_hits": 0,
+        "misses": 0
+      },
+      "telemetry": {
+        "tokens_saved": 3417,
+        "cost_saved_usd": 0.029675999999999998
+      }
+    },
+    {
+      "name": "multi_tenant",
+      "total_requests": 40,
+      "successful_requests": 40,
+      "duration_seconds": 0.41096999996807426,
+      "rps": 97.33070541184844,
+      "hit_ratio_pct": 100.0,
+      "latencies": {
+        "min_ms": 4.337084,
+        "mean_ms": 10.123007775,
+        "p50_ms": 8.932082999999999,
+        "p75_ms": 11.075886,
+        "p90_ms": 15.094479,
+        "p95_ms": 17.940052,
+        "p99_ms": 36.748854,
+        "p999_ms": 36.748854,
+        "max_ms": 36.748854,
+        "stddev_ms": 5.679172924975859
+      },
+      "tiers": {
+        "exact_hits": 30,
+        "semantic_hits": 10,
+        "tool_hits": 0,
+        "misses": 0
+      },
+      "telemetry": {
+        "tokens_saved": 3195,
+        "cost_saved_usd": 0.027454999999999997
+      }
+    }
+  ]
+}

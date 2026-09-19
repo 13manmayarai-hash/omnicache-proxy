@@ -1,0 +1,135 @@
+# Default values for omnicache Helm Chart.
+# Declare variables to be passed into templates.
+
+replicaCount: 3
+
+image:
+  repository: omnicache/proxy
+  pullPolicy: IfNotPresent
+  tag: "3.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/metrics"
+  prometheus.io/port: "8000"
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+serviceHeadless:
+  enabled: true
+  port: 8000
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "64m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+  hosts:
+    - host: omnicache.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: omnicache-tls-cert
+      hosts:
+        - omnicache.example.com
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - omnicache
+          topologyKey: "kubernetes.io/hostname"
+
+# OmniCache Engine Configuration
+config:
+  port: 8000
+  host: "0.0.0.0"
+  requireAuth: true
+  similarityThreshold: 0.92
+  exactCacheTtl: 604800
+  semanticCacheTtl: 604800
+  cascadePolicy: "off"
+  meshEnabled: true
+  meshGossipInterval: 5.0
+  meshHeartbeatInterval: 3.0
+  meshTombstoneTtl: 86400
+
+# Sensitive Secrets (Admin Keys & Upstream Provider Credentials)
+secrets:
+  adminApiKey: "change-me-to-a-secure-random-admin-key"
+  openaiApiKey: ""
+  anthropicApiKey: ""
+  existingSecret: ""
+
+# Redis L2 Cache Fabric Integration
+redis:
+  enabled: false
+  url: "redis://omnicache-redis-master:6379/0"
+
+# Persistence for SQLite Snapshot Store (optional if Redis enabled)
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  mountPath: /data
+
+# Prometheus Operator ServiceMonitor
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  scrapeTimeout: 10s
+  namespace: ""
+  additionalLabels: {}

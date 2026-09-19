@@ -1,0 +1,19 @@
+apiVersion: v2
+name: omnicache
+description: Production-grade Kubernetes Helm Chart for OmniCache Enterprise AI Proxy & Radix Semantic Cache Fabric.
+type: application
+version: 3.1.0
+appVersion: "3.1.0"
+keywords:
+  - ai-proxy
+  - llm-cache
+  - semantic-cache
+  - radix-tree
+  - crdt-mesh
+  - pii-redaction
+home: https://github.com/13manmayarai-hash/omnicache-proxy
+sources:
+  - https://github.com/13manmayarai-hash/omnicache-proxy
+maintainers:
+  - name: OmniCache Engineering Team
+    email: engineering@omnicache.ai

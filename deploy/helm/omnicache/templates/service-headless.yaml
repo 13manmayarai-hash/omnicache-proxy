@@ -1,0 +1,18 @@
+{{- if .Values.serviceHeadless.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "omnicache.fullname" . }}-mesh
+  labels:
+    {{- include "omnicache.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - port: {{ .Values.serviceHeadless.port }}
+      targetPort: http
+      protocol: TCP
+      name: mesh-gossip
+  selector:
+    {{- include "omnicache.selectorLabels" . | nindent 4 }}
+{{- end }}

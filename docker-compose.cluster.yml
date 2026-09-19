@@ -1,0 +1,170 @@
+version: '3.8'
+
+networks:
+  omnicache-net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  omnicache_node1_data:
+  omnicache_node2_data:
+  omnicache_node3_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+  # L2 Shared Redis Cache Store
+  redis:
+    image: redis:7-alpine
+    container_name: omnicache-redis
+    restart: always
+    networks:
+      - omnicache-net
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --save 60 1
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Edge Pod 1 (Seed Mesh Node)
+  omnicache-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omnicache-edge-1
+    restart: always
+    networks:
+      - omnicache-net
+    ports:
+      - "8001:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - OMNICACHE_HOST=0.0.0.0
+      - OMNICACHE_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+      - REQUIRE_AUTH=true
+      - ADMIN_API_KEY=omnicache_admin_super_secret_2026
+      - MESH_ENABLED=true
+      - MESH_NODE_ID=node-edge-1
+      - MESH_PEERS=http://omnicache-2:8000,http://omnicache-3:8000
+      - SIMILARITY_THRESHOLD=0.92
+      - OMNICACHE_DB_PATH=/data/omnicache_node1.db
+    volumes:
+      - omnicache_node1_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Edge Pod 2 (Peer Mesh Node)
+  omnicache-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omnicache-edge-2
+    restart: always
+    networks:
+      - omnicache-net
+    ports:
+      - "8002:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - OMNICACHE_HOST=0.0.0.0
+      - OMNICACHE_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+      - REQUIRE_AUTH=true
+      - ADMIN_API_KEY=omnicache_admin_super_secret_2026
+      - MESH_ENABLED=true
+      - MESH_NODE_ID=node-edge-2
+      - MESH_PEERS=http://omnicache-1:8000,http://omnicache-3:8000
+      - SIMILARITY_THRESHOLD=0.92
+      - OMNICACHE_DB_PATH=/data/omnicache_node2.db
+    volumes:
+      - omnicache_node2_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Edge Pod 3 (Peer Mesh Node)
+  omnicache-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omnicache-edge-3
+    restart: always
+    networks:
+      - omnicache-net
+    ports:
+      - "8003:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - OMNICACHE_HOST=0.0.0.0
+      - OMNICACHE_PORT=8000
+      - REDIS_URL=redis://redis:6379/0
+      - REQUIRE_AUTH=true
+      - ADMIN_API_KEY=omnicache_admin_super_secret_2026
+      - MESH_ENABLED=true
+      - MESH_NODE_ID=node-edge-3
+      - MESH_PEERS=http://omnicache-1:8000,http://omnicache-2:8000
+      - SIMILARITY_THRESHOLD=0.92
+      - OMNICACHE_DB_PATH=/data/omnicache_node3.db
+    volumes:
+      - omnicache_node3_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  # Prometheus Metrics Collector
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: omnicache-prometheus
+    restart: always
+    networks:
+      - omnicache-net
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+
+  # Grafana Dashboard UI
+  grafana:
+    image: grafana/grafana:10.3.3
+    container_name: omnicache-grafana
+    restart: always
+    networks:
+      - omnicache-net
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=omnicache
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus

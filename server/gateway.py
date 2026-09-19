@@ -56,6 +56,7 @@ from server.keepalive import keepalive_worker
 from persistence.snapshot_store import snapshot_store
 from mcp.server import process_mcp_jsonrpc, TOOLS_METADATA
 from server.audit import audit_logger
+from server.openapi import OPENAPI_SPEC, render_swagger_html
 
 METRICS_LEDGER = {
     "total_savings_usd": 0.0,
@@ -3513,6 +3514,22 @@ async def handle_audit_events(request: Request) -> Response:
     return JSONResponse({"error": "Method not allowed"}, status_code=405, headers=cors_headers)
 
 
+async def handle_openapi_spec(request: Request) -> Response:
+    """Returns OpenAPI 3.1.0 specification JSON."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    return JSONResponse(OPENAPI_SPEC, headers=cors_headers)
+
+
+async def handle_swagger_docs(request: Request) -> Response:
+    """Renders interactive dark Swagger UI documentation."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    return HTMLResponse(render_swagger_html(), headers=cors_headers)
+
+
 # =====================================================================
 # Public Self-Service Signup (Free Tier)
 # =====================================================================
@@ -5375,6 +5392,8 @@ routes = [
     Route("/v1/enterprise/audit/events", handle_audit_events, methods=["GET", "POST", "OPTIONS"]),
     Route("/v1/signup", handle_signup, methods=["POST", "OPTIONS"]),
     Route("/metrics", handle_prometheus_metrics, methods=["GET", "OPTIONS"]),
+    Route("/openapi.json", handle_openapi_spec, methods=["GET", "OPTIONS"]),
+    Route("/docs", handle_swagger_docs, methods=["GET", "OPTIONS"]),
     Route("/landing", handle_landing, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
     Route("/simulator", handle_simulator, methods=["GET", "OPTIONS"]),

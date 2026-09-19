@@ -201,5 +201,19 @@ class TestOmniCacheGateway(unittest.TestCase):
         self.assertIn("text/csv", csv_resp.headers.get("content-type", ""))
         self.assertIn("Key,OrgID,Model", csv_resp.text)
 
+    def test_09_openapi_and_swagger_docs(self):
+        """Verify /openapi.json specification and /docs Swagger UI endpoints."""
+        res_json = self.client.get("/openapi.json")
+        self.assertEqual(res_json.status_code, 200)
+        spec = res_json.json()
+        self.assertEqual(spec["openapi"], "3.1.0")
+        self.assertIn("/v1/chat/completions", spec["paths"])
+        self.assertIn("/v1/enterprise/audit/export", spec["paths"])
+
+        res_docs = self.client.get("/docs")
+        self.assertEqual(res_docs.status_code, 200)
+        self.assertIn("text/html", res_docs.headers.get("content-type", ""))
+        self.assertIn("SwaggerUIBundle", res_docs.text)
+
 if __name__ == "__main__":
     unittest.main()

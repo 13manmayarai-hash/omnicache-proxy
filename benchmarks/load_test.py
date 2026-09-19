@@ -29,6 +29,17 @@ from benchmarks.reporter import (
     generate_markdown_report,
     generate_json_report
 )
+from server.quotas import quota_manager
+
+BENCHMARK_KEY = "bench_admin_key"
+quota_manager.register_key(
+    BENCHMARK_KEY,
+    team_name="Benchmark Harness",
+    org_id="admin",
+    role="admin",
+    monthly_budget_usd=10_000_000.0,
+    rate_limit_rpm=1_000_000
+)
 
 async def warmup_cache(client: httpx.AsyncClient, count: int = 5):
     """Primes cache with base prompts to establish warm cache baseline."""
@@ -43,7 +54,8 @@ async def warmup_cache(client: httpx.AsyncClient, count: int = 5):
                 },
                 headers={
                     "x-org-id": "warmup_tenant",
-                    "x-dashboard-playground": "true"
+                    "x-dashboard-playground": "true",
+                    "x-api-key": BENCHMARK_KEY
                 },
                 timeout=5.0
             )
@@ -58,12 +70,16 @@ async def execute_request(
 ) -> Dict[str, Any]:
     """Executes a single benchmark request within concurrency semaphore."""
     async with sem:
+        headers = dict(req.headers)
+        if "x-api-key" not in headers and "authorization" not in headers:
+            headers["x-api-key"] = BENCHMARK_KEY
+
         t0 = time.perf_counter_ns()
         try:
             resp = await client.post(
                 req.endpoint,
                 json=req.payload,
-                headers=req.headers,
+                headers=headers,
                 timeout=10.0
             )
             t1 = time.perf_counter_ns()

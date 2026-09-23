@@ -16,10 +16,10 @@
   <meta name="twitter:description" content="Sub-millisecond local proxy sidecar that intercepts tool calls, verifies Git workspace deltas, and replays unchanged agent operations with zero cloud tokens.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E95D2C'%3E%3Cpolygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/%3E%3C/svg%3E">
 
-  <!-- Google Sans / Inter typography + JetBrains Mono -->
+  <!-- Inter typography + JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     /* ─────────────────────────────────────────────────────────────────────────
@@ -44,31 +44,33 @@
       /* Typography with Swatch 4 (#B0CEE2) Titanium Cool Scale */
       --text-primary: #f5f9fc;                     /* Crisp high-contrast heading text */
       --text-secondary: #b0cee2;                   /* Swatch 4: Powder Ice Blue for subtitles & labels */
-      --text-tertiary: #7d96a8;                    /* Soft slate reading text */
-      --text-muted: #536777;                       /* Muted metadata */
+      --text-tertiary: #8fa3b0;                    /* High-contrast slate reading text (WCAG AA 7.2:1) */
+      --text-muted: #8fa3b0;                       /* Lightened for WCAG AA compliance (4.5:1+) */
 
-      /* Swatch 6 (#E95D2C) & Swatch 5 (#A63E1B) Orange Accents */
-      --accent-orange: #e95d2c;                    /* Swatch 6: Electric Vibrant Orange */
-      --accent-orange-glow: rgba(233, 93, 44, 0.42);
-      --accent-terracotta: #a63e1b;                /* Swatch 5: Deep Terracotta / Burnt Orange */
-      --accent-terracotta-glow: rgba(166, 62, 27, 0.35);
+      /* Semantic Color System */
+      --color-brand: #e95d2c;                      /* Swatch 6: Electric Vibrant Orange (Brand & CTAs) */
+      --color-brand-glow: rgba(233, 93, 44, 0.42);
+      --color-hit: #b0cee2;                        /* Swatch 4: Powder Ice Blue (Cache Hits & Savings) */
+      --color-hit-glow: rgba(176, 206, 226, 0.35);
+      --color-miss: #f0624d;                       /* Clear Red Tone (Cache Misses & Cost Egress) */
+      --color-miss-glow: rgba(240, 98, 77, 0.35);
+      --color-terracotta: #a63e1b;                 /* Swatch 5: Deep Terracotta */
+      --color-steel: #45586c;                      /* Swatch 3: Slate Steel */
 
-      /* Swatch 4 (#B0CEE2) & Swatch 3 (#45586C) Cool Accents */
-      --accent-ice: #b0cee2;                       /* Swatch 4: Powder Ice Blue */
-      --accent-ice-glow: rgba(176, 206, 226, 0.35);
-      --accent-steel: #45586c;                     /* Swatch 3: Steel Slate Blue */
+      /* Semantic & Backwards-Compatible Aliases */
+      --accent-orange: var(--color-brand);
+      --accent-orange-glow: var(--color-brand-glow);
+      --accent-terracotta: var(--color-terracotta);
+      --accent-ice: var(--color-hit);
+      --accent-ice-glow: var(--color-hit-glow);
+      --accent-steel: var(--color-steel);
+      --accent-emerald: var(--color-hit);
+      --accent-emerald-glow: var(--color-hit-glow);
+      --accent-cyan: var(--color-brand);
+      --accent-cyan-glow: var(--color-brand-glow);
+      --accent-rose: var(--color-miss);
 
-      /* Semantic Bindings */
-      --accent-cyan: #e95d2c;                      /* Primary action electric pulse */
-      --accent-cyan-glow: rgba(233, 93, 44, 0.35);
-      --accent-emerald: #b0cee2;                   /* Verified Ice Blue for hit tags */
-      --accent-emerald-glow: rgba(176, 206, 226, 0.35);
-      --accent-blue: #45586c;                      /* Swatch 3 Slate Blue */
-      --accent-violet: #b0cee2;                    /* Swatch 4 Powder Ice */
-      --accent-amber: #e95d2c;                     /* Swatch 6 Orange */
-      --accent-rose: #a63e1b;                      /* Swatch 5 Terracotta */
-
-      --font-sans: 'Google Sans', 'Inter', -apple-system, sans-serif;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
       --radius-sm: 8px;
@@ -84,6 +86,11 @@
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--color-brand);
+      outline-offset: 3px;
     }
 
     html {
@@ -297,6 +304,93 @@
       box-shadow: 0 0 16px rgba(255, 255, 255, 0.08);
     }
 
+    .mobile-nav-toggle {
+      display: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      width: 38px;
+      height: 38px;
+      padding: 8px;
+      cursor: pointer;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 4px;
+      transition: all 180ms ease;
+    }
+
+    .mobile-nav-toggle:hover,
+    .mobile-nav-toggle:focus-visible {
+      border-color: var(--color-brand);
+      background: var(--bg-elevated);
+    }
+
+    .hamburger-bar {
+      display: block;
+      width: 18px;
+      height: 2px;
+      background: var(--text-primary);
+      border-radius: 1px;
+      transition: transform 200ms ease, opacity 200ms ease;
+    }
+
+    .mobile-nav-toggle[aria-expanded="true"] .hamburger-bar:nth-child(1) {
+      transform: translateY(6px) rotate(45deg);
+    }
+    .mobile-nav-toggle[aria-expanded="true"] .hamburger-bar:nth-child(2) {
+      opacity: 0;
+    }
+    .mobile-nav-toggle[aria-expanded="true"] .hamburger-bar:nth-child(3) {
+      transform: translateY(-6px) rotate(-45deg);
+    }
+
+    .mobile-nav-panel {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: rgba(12, 17, 22, 0.98);
+      border-bottom: 1px solid var(--border-medium);
+      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.75);
+      padding: 16px 20px 24px;
+      z-index: 101;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+
+    .mobile-nav-panel[hidden] {
+      display: none;
+    }
+
+    .mobile-nav-items {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mobile-nav-link {
+      display: block;
+      font-size: 14.5px;
+      font-weight: 500;
+      color: var(--text-primary);
+      text-decoration: none;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      background: rgba(26, 39, 48, 0.5);
+      border: 1px solid var(--border-subtle);
+      transition: all 150ms ease;
+    }
+
+    .mobile-nav-link:hover,
+    .mobile-nav-link:focus-visible {
+      color: var(--color-brand);
+      background: var(--bg-elevated);
+      border-color: var(--color-brand);
+    }
+
     /* ─────────────────────────────────────────────────────────────────────────
        KEYFRAME ANIMATIONS (Google Web Designer Standard)
        Left-to-Right Flows, Circuit Pulses, Gliding Marquees
@@ -337,6 +431,30 @@
     @keyframes float-gentle {
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(-5px); }
+    }
+
+    /* Accessibility: Reduced Motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+      .marquee-track {
+        animation: none !important;
+        transform: none !important;
+      }
+      .brand-pill::before,
+      .pulse-dot {
+        animation: none !important;
+      }
+      .circuit-wire-active {
+        transition: none !important;
+      }
+      .circuit-packet-dot {
+        display: none !important;
+      }
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -687,9 +805,9 @@
     }
 
     .arch-card-desc {
-      font-size: 12.5px;
+      font-size: 14px;
       color: var(--text-secondary);
-      line-height: 1.45;
+      line-height: 1.5;
       margin-top: 2px;
     }
 
@@ -700,7 +818,7 @@
       margin-top: 8px;
       font-family: var(--font-mono);
       font-size: 11px;
-      color: var(--accent-emerald);
+      color: var(--color-hit);
     }
 
     /* Side Annotation on opposite side */
@@ -878,19 +996,19 @@
     }
 
     .telemetry-stat-title {
-      font-size: 10px;
+      font-size: 12px;
       color: var(--text-muted);
       text-transform: uppercase;
       font-weight: 600;
     }
 
     .telemetry-stat-value {
-      font-size: 13.5px;
+      font-size: 14px;
       font-weight: 700;
     }
 
     .telemetry-stat-value.emerald {
-      color: var(--accent-orange);
+      color: var(--color-hit);
     }
 
     .telemetry-stat-value.gray {
@@ -899,7 +1017,7 @@
     }
 
     .telemetry-stat-sub {
-      font-size: 10.5px;
+      font-size: 12px;
       color: var(--text-tertiary);
       font-weight: 400;
     }
@@ -948,9 +1066,9 @@
     }
 
     .arch-pillar-desc {
-      font-size: 11.5px;
+      font-size: 14px;
       color: var(--text-secondary);
-      line-height: 1.45;
+      line-height: 1.5;
     }
 
     .block-header {
@@ -1175,7 +1293,7 @@
     }
 
     .flow-step-item.stalled {
-      border-color: rgba(166, 62, 27, 0.35);
+      border-color: rgba(240, 98, 77, 0.35);
       background: rgba(26, 39, 48, 0.65);
     }
 
@@ -1191,7 +1309,7 @@
     }
 
     .flow-step-action {
-      font-size: 12.5px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-primary);
       white-space: nowrap;
@@ -1216,9 +1334,9 @@
     }
 
     .flow-step-badge.stalled {
-      background: rgba(166, 62, 27, 0.2);
-      color: #ff8a65;
-      border: 1px solid rgba(166, 62, 27, 0.4);
+      background: rgba(240, 98, 77, 0.18);
+      color: var(--color-miss);
+      border: 1px solid rgba(240, 98, 77, 0.4);
     }
 
     .flow-step-badge.cold {
@@ -1228,25 +1346,25 @@
     }
 
     .flow-step-badge.hit {
-      background: rgba(233, 93, 44, 0.15);
-      color: #e95d2c;
-      border: 1px solid rgba(233, 93, 44, 0.35);
+      background: rgba(176, 206, 226, 0.15);
+      color: var(--color-hit);
+      border: 1px solid rgba(176, 206, 226, 0.35);
     }
 
     .flow-step-metric {
       font-family: var(--font-mono);
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-secondary);
       white-space: nowrap;
     }
 
     .flow-step-metric.red {
-      color: #ff8a65;
+      color: var(--color-miss);
       font-weight: 600;
     }
 
     .flow-step-metric.green {
-      color: var(--accent-emerald);
+      color: var(--color-hit);
       font-weight: 600;
     }
 
@@ -1261,7 +1379,7 @@
     }
 
     .metric-col-title {
-      font-size: 11.5px;
+      font-size: 12px;
       color: var(--text-tertiary);
       text-transform: uppercase;
       font-weight: 600;
@@ -1274,11 +1392,11 @@
     }
 
     .metric-col-number.red {
-      color: #ff7043;
+      color: var(--color-miss);
     }
 
     .metric-col-number.green {
-      color: #e95d2c;
+      color: var(--color-hit);
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1336,9 +1454,10 @@
       transition: stroke-dashoffset 1s ease;
     }
 
-    .radial-bar.orange, .radial-bar.emerald { stroke: #e95d2c; }
-    .radial-bar.ice, .radial-bar.cyan { stroke: #b0cee2; }
-    .radial-bar.terracotta, .radial-bar.violet { stroke: #a63e1b; }
+    .radial-bar.orange { stroke: var(--color-brand); }
+    .radial-bar.emerald, .radial-bar.ice, .radial-bar.cyan { stroke: var(--color-hit); }
+    .radial-bar.terracotta, .radial-bar.violet { stroke: var(--color-terracotta); }
+    .radial-bar.red { stroke: var(--color-miss); }
 
     .radial-center-text {
       position: absolute;
@@ -1359,9 +1478,9 @@
     }
 
     .gauge-details p {
-      font-size: 12.5px;
+      font-size: 14px;
       color: var(--text-secondary);
-      line-height: 1.4;
+      line-height: 1.5;
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1454,7 +1573,7 @@
     .stage-item .stage-num {
       display: block;
       color: var(--text-muted);
-      font-size: 9.5px;
+      font-size: 12px;
       font-weight: 700;
       margin-bottom: 2px;
     }
@@ -1525,7 +1644,7 @@
     }
 
     .probe-stat-title {
-      font-size: 10.5px;
+      font-size: 12px;
       color: var(--text-tertiary);
       text-transform: uppercase;
       font-weight: 600;
@@ -1537,8 +1656,12 @@
       color: var(--text-primary);
     }
 
-    .probe-stat-value.emerald, .probe-stat-value.orange {
-      color: var(--accent-orange);
+    .probe-stat-value.emerald {
+      color: var(--color-hit);
+    }
+
+    .probe-stat-value.orange {
+      color: var(--color-brand);
     }
 
     .probe-json-view {
@@ -1697,7 +1820,7 @@
       }
 
       .arch-card-desc {
-        font-size: 12px;
+        font-size: 14px;
       }
 
       .arch-icon-orb {
@@ -1720,6 +1843,10 @@
     @media (max-width: 640px) {
       .nav-items {
         display: none;
+      }
+
+      .mobile-nav-toggle {
+        display: flex;
       }
 
       .stages-track {
@@ -1756,6 +1883,158 @@
         justify-content: center;
       }
     }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       CLOSING CTA & TWO-STEP INSTALL SYSTEM
+       ───────────────────────────────────────────────────────────────────────── */
+    .closing-cta-section {
+      padding: clamp(64px, 8vw, 104px) 0;
+      background: radial-gradient(circle at 50% 50%, rgba(233, 93, 44, 0.08) 0%, transparent 70%);
+      border-top: 1px solid var(--border-subtle);
+      position: relative;
+      z-index: 2;
+    }
+
+    .closing-cta-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-lg);
+      padding: clamp(28px, 5vw, 56px);
+      box-shadow: var(--shadow-card);
+      text-align: center;
+      max-width: 960px;
+      margin: 0 auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .closing-cta-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, var(--color-brand) 50%, transparent 100%);
+    }
+
+    .closing-cta-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-full);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+    }
+
+    .closing-cta-badge .chip {
+      background: rgba(233, 93, 44, 0.15);
+      color: var(--color-brand);
+      border: 1px solid rgba(233, 93, 44, 0.35);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+
+    .closing-cta-title {
+      font-size: clamp(1.8rem, 3.5vw, 2.7rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--text-primary);
+      margin-bottom: 12px;
+      line-height: 1.2;
+    }
+
+    .closing-cta-sub {
+      font-size: clamp(1rem, 1.6vw, 1.15rem);
+      color: var(--text-secondary);
+      max-width: 680px;
+      margin: 0 auto 36px;
+      line-height: 1.6;
+    }
+
+    .install-flow-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      text-align: left;
+      margin-bottom: 36px;
+    }
+
+    @media (max-width: 768px) {
+      .install-flow-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .install-step-card {
+      background: var(--bg-base);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .install-step-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .install-step-badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-brand);
+      background: rgba(233, 93, 44, 0.15);
+      border: 1px solid rgba(233, 93, 44, 0.35);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+    }
+
+    .install-step-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .todo-badge {
+      font-size: 10.5px;
+      color: var(--color-miss);
+      font-weight: 600;
+      margin-left: 4px;
+    }
+
+    .closing-actions-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .closing-secondary-link {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-hit);
+      text-decoration: none;
+      transition: color 150ms ease;
+    }
+
+    .closing-secondary-link:hover {
+      color: var(--text-primary);
+    }
   </style>
 </head>
 <body>
@@ -1773,7 +2052,7 @@
         </div>
         <span class="brand-name">omnicache</span>
         <div class="brand-pill">
-          <span>0.08ms P50</span>
+          <span>Local Proxy</span>
         </div>
       </a>
 
@@ -1792,7 +2071,25 @@
           </svg>
           GitHub
         </a>
+        <button id="mobile-nav-toggle" class="mobile-nav-toggle" aria-expanded="false" aria-controls="mobile-nav-panel" aria-label="Toggle navigation menu">
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+          <span class="hamburger-bar"></span>
+        </button>
       </div>
+    </div>
+
+    <!-- Mobile Nav Panel Dropdown -->
+    <div id="mobile-nav-panel" class="mobile-nav-panel" hidden>
+      <nav aria-label="Mobile Navigation">
+        <ul class="mobile-nav-items">
+          <li><a href="#comparison" class="mobile-nav-link">Before / After</a></li>
+          <li><a href="#architecture-flow" class="mobile-nav-link">Architecture Flow</a></li>
+          <li><a href="#sandbox" class="mobile-nav-link">Replay Sandbox</a></li>
+          <li><a href="#security" class="mobile-nav-link">Security</a></li>
+          <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener" class="mobile-nav-link">GitHub ↗</a></li>
+        </ul>
+      </nav>
     </div>
   </header>
 
@@ -2420,6 +2717,88 @@
     </div>
   </section>
 
+  <!-- Closing CTA Section -->
+  <section class="closing-cta-section" id="get-started">
+    <div class="container">
+      <div class="closing-cta-card">
+        <div class="closing-cta-badge">
+          <span class="chip">Zero Configuration</span>
+          <span>Works with your existing agent setup</span>
+        </div>
+        <h2 class="closing-cta-title">Ready to stop paying your coding agent for redundant file reads?</h2>
+        <p class="closing-cta-sub">
+          Install the lightweight proxy in seconds. Intercepts repeat tool executions and verifies Git commit deltas locally with zero cloud token burn.
+        </p>
+
+        <div class="install-flow-grid">
+          <!-- Step 1: Install & Start Proxy -->
+          <div class="install-step-card">
+            <div class="install-step-header">
+              <span class="install-step-badge">STEP 1</span>
+              <span class="install-step-title">Install and start the proxy</span>
+            </div>
+            <div class="cli-box" style="margin-bottom: 0; border: none; border-radius: 0;">
+              <div class="cli-tabs" role="tablist" aria-label="Closing package manager">
+                <button class="cli-tab closing-cli-tab active" role="tab" aria-selected="true" onclick="setClosingCliTab('pip', this)">pip</button>
+                <button class="cli-tab closing-cli-tab" role="tab" aria-selected="false" onclick="setClosingCliTab('uv', this)">uv</button>
+                <button class="cli-tab closing-cli-tab" role="tab" aria-selected="false" onclick="setClosingCliTab('docker', this)">docker <span class="todo-badge">[TODO: verify ghcr.io/13manmayarai-hash/omnicache:latest is published]</span></button>
+              </div>
+              <div class="cli-command-row">
+                <div class="cli-code" id="closing-cli-display">
+                  <span class="cli-prompt">❯</span>pip install omnicache-proxy && omnicache run claude
+                </div>
+                <button class="btn-copy" onclick="copyClosingCli()" aria-label="Copy Step 1 installation command">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <span id="closing-cli-btn-txt">Copy</span>
+                  <span id="closing-cli-live" style="position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); border: 0;" aria-live="polite"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Route Claude Code -->
+          <div class="install-step-card">
+            <div class="install-step-header">
+              <span class="install-step-badge">STEP 2</span>
+              <span class="install-step-title">Point Claude Code at localhost proxy</span>
+            </div>
+            <div class="cli-box" style="margin-bottom: 0; border: none; border-radius: 0;">
+              <div class="cli-tabs" style="height: 38px; visibility: hidden;" aria-hidden="true">
+                <span class="cli-tab">placeholder</span>
+              </div>
+              <div class="cli-command-row">
+                <div class="cli-code" id="closing-step2-display">
+                  <span class="cli-prompt">❯</span>export ANTHROPIC_BASE_URL="http://127.0.0.1:8000" && claude
+                </div>
+                <button class="btn-copy" onclick="copyClosingStep2Cli()" aria-label="Copy Step 2 route command">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                  <span id="closing-step2-btn-txt">Copy</span>
+                  <span id="closing-step2-live" style="position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); border: 0;" aria-live="polite"></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="closing-actions-row">
+          <a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener" class="btn btn-gh">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+            Star on GitHub
+          </a>
+          <a href="#comparison" class="closing-secondary-link">Compare Before &amp; After Benchmarks →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Footer -->
   <footer class="site-footer">
     <div class="container footer-inner">
@@ -2484,6 +2863,124 @@
           if (btn) btn.innerText = 'Copy';
           if (live) live.innerText = '';
         }, 2000);
+      });
+    }
+
+    // Closing CTA command tabs
+    const closingCommands = {
+      pip: 'pip install omnicache-proxy && omnicache run claude',
+      uv: 'uv pip install omnicache-proxy && omnicache run claude',
+      docker: 'docker run -d -p 8000:8000 ghcr.io/13manmayarai-hash/omnicache:latest'
+    };
+
+    function setClosingCliTab(key, el) {
+      document.querySelectorAll('.closing-cli-tab').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      el.classList.add('active');
+      el.setAttribute('aria-selected', 'true');
+      const box = document.getElementById('closing-cli-display');
+      if (box) box.innerHTML = `<span class="cli-prompt">❯</span>${closingCommands[key]}`;
+    }
+
+    function copyClosingCli() {
+      const box = document.getElementById('closing-cli-display');
+      if (!box) return;
+      const text = box.innerText.replace('❯', '').trim();
+      const btn = document.getElementById('closing-cli-btn-txt');
+      const live = document.getElementById('closing-cli-live');
+      navigator.clipboard.writeText(text).then(() => {
+        if (btn) btn.innerText = 'Copied!';
+        if (live) live.innerText = 'Copied to clipboard';
+        setTimeout(() => {
+          if (btn) btn.innerText = 'Copy';
+          if (live) live.innerText = '';
+        }, 2000);
+      }).catch(() => {
+        if (btn) btn.innerText = 'Copy failed';
+        if (live) live.innerText = 'Copy failed';
+        setTimeout(() => {
+          if (btn) btn.innerText = 'Copy';
+          if (live) live.innerText = '';
+        }, 2000);
+      });
+    }
+
+    function copyClosingStep2Cli() {
+      const box = document.getElementById('closing-step2-display');
+      if (!box) return;
+      const text = box.innerText.replace('❯', '').trim();
+      const btn = document.getElementById('closing-step2-btn-txt');
+      const live = document.getElementById('closing-step2-live');
+      navigator.clipboard.writeText(text).then(() => {
+        if (btn) btn.innerText = 'Copied!';
+        if (live) live.innerText = 'Copied to clipboard';
+        setTimeout(() => {
+          if (btn) btn.innerText = 'Copy';
+          if (live) live.innerText = '';
+        }, 2000);
+      }).catch(() => {
+        if (btn) btn.innerText = 'Copy failed';
+        if (live) live.innerText = 'Copy failed';
+        setTimeout(() => {
+          if (btn) btn.innerText = 'Copy';
+          if (live) live.innerText = '';
+        }, 2000);
+      });
+    }
+
+    // Accessible Mobile Navigation
+    const mobileToggle = document.getElementById('mobile-nav-toggle');
+    const mobilePanel = document.getElementById('mobile-nav-panel');
+
+    function toggleMobileNav(force) {
+      if (!mobileToggle || !mobilePanel) return;
+      const isOpen = force !== undefined ? !force : (mobileToggle.getAttribute('aria-expanded') === 'true');
+      const shouldOpen = !isOpen;
+
+      mobileToggle.setAttribute('aria-expanded', String(shouldOpen));
+      if (shouldOpen) {
+        mobilePanel.removeAttribute('hidden');
+        const firstLink = mobilePanel.querySelector('a');
+        if (firstLink) firstLink.focus();
+      } else {
+        mobilePanel.setAttribute('hidden', '');
+      }
+    }
+
+    if (mobileToggle) {
+      mobileToggle.addEventListener('click', () => toggleMobileNav());
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mobileToggle && mobileToggle.getAttribute('aria-expanded') === 'true') {
+        toggleMobileNav(false);
+        mobileToggle.focus();
+      }
+    });
+
+    if (mobilePanel) {
+      mobilePanel.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', () => {
+          toggleMobileNav(false);
+        });
+      });
+
+      mobilePanel.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const focusable = mobilePanel.querySelectorAll('a, button');
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       });
     }
 
@@ -2566,7 +3063,11 @@
         }
       });
 
-      renderScrollProgress(currentScrollProgress);
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        renderScrollProgress(1);
+      } else {
+        renderScrollProgress(currentScrollProgress);
+      }
     }
 
     function renderScrollProgress(p) {
@@ -2649,6 +3150,10 @@
     }
 
     function onScrollFlow() {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        renderScrollProgress(1);
+        return;
+      }
       if (isManualAnimationPlaying) return;
       const section = document.getElementById('architecture-flow');
       if (!section) return;
@@ -2667,6 +3172,10 @@
     }
 
     function fireSnakingPacket() {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        renderScrollProgress(1);
+        return;
+      }
       if (isManualAnimationPlaying) return;
       isManualAnimationPlaying = true;
       const btnLabel = document.getElementById('fire-btn-label');

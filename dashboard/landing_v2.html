@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>OmniCache — Git-Aware Caching Sidecar for Coding Agents</title>
   <meta name="description" content="Sub-millisecond local proxy sidecar that intercepts tool calls, verifies Git workspace deltas, and replays unchanged agent operations with zero cloud tokens.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="OmniCache — Git-Aware Caching Sidecar for Coding Agents">
+  <meta property="og:description" content="Sub-millisecond local proxy sidecar that intercepts tool calls, verifies Git workspace deltas, and replays unchanged agent operations with zero cloud tokens.">
+  <meta property="og:url" content="https://github.com/13manmayarai-hash/omnicache-proxy">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="OmniCache — Git-Aware Caching Sidecar for Coding Agents">
+  <meta name="twitter:description" content="Sub-millisecond local proxy sidecar that intercepts tool calls, verifies Git workspace deltas, and replays unchanged agent operations with zero cloud tokens.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E95D2C'%3E%3Cpolygon points='13 2 3 14 12 14 11 22 21 10 12 10 13 2'/%3E%3C/svg%3E">
 
   <!-- Google Sans / Inter typography + JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -954,6 +962,7 @@
       padding-bottom: 20px;
     }
 
+    .block-title-group h2,
     .block-title-group h3 {
       font-size: 22px;
       font-weight: 700;
@@ -1542,6 +1551,66 @@
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
+       SECURITY & TRUST
+       ───────────────────────────────────────────────────────────────────────── */
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 14px;
+    }
+
+    .security-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-lg);
+      padding: clamp(22px, 3.5vw, 30px);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .security-icon-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-sm);
+      background: rgba(233, 93, 44, 0.12);
+      border: 1px solid rgba(233, 93, 44, 0.35);
+      color: var(--accent-orange);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .security-card h4 {
+      font-size: 16.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .security-card p {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .security-card code {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--accent-orange);
+      background: rgba(233, 93, 44, 0.1);
+      padding: 2px 5px;
+      border-radius: 4px;
+    }
+
+    @media (max-width: 860px) {
+      .security-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
        FOOTER
        ───────────────────────────────────────────────────────────────────────── */
     footer.site-footer {
@@ -1710,6 +1779,7 @@
         <li><a href="#comparison" class="nav-link">Before / After</a></li>
         <li><a href="#architecture-flow" class="nav-link">Architecture Flow</a></li>
         <li><a href="#sandbox" class="nav-link">Replay Sandbox</a></li>
+        <li><a href="#security" class="nav-link">Security</a></li>
         <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener" class="nav-link">GitHub ↗</a></li>
       </ul>
 
@@ -1753,12 +1823,13 @@
           <div class="cli-code" id="cli-display">
             <span class="cli-prompt">❯</span>pip install omnicache-proxy && omnicache run claude
           </div>
-          <button class="btn-copy" onclick="copyCli()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <button class="btn-copy" onclick="copyCli()" aria-label="Copy terminal install command">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
             </svg>
             <span id="cli-btn-txt">Copy</span>
+            <span id="cli-live-region" style="position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); border: 0;" aria-live="polite"></span>
           </button>
         </div>
       </div>
@@ -1768,7 +1839,7 @@
   <!-- GLIDING CONTINUOUS MARQUEES (Left & Right Animations) -->
   <section class="marquee-section">
     <div class="marquee-mask">
-      <!-- Row 1: Left-to-Right Stream -->
+      <!-- Row 1: Left-to-Right Stream (6 unique + 6 duplicates for seamless -50% loop) -->
       <div class="marquee-track glide-right">
         <div class="marquee-pill"><span class="pill-dot"></span>Claude Code CLI <span class="pill-metric">100% Replay</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>Cursor Agent Mode <span class="pill-metric">Zero Overhead</span></div>
@@ -1776,14 +1847,16 @@
         <div class="marquee-pill"><span class="pill-dot"></span>SQLite WAL Engine <span class="pill-metric">0.08ms P50</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>Int8 Quantized Embeddings <span class="pill-metric">ARM/x86 AVX2</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>SingleFlight Request Coalescing <span class="pill-metric">Active</span></div>
-        <!-- Duplicate for loop -->
+        <!-- Exact Duplicate Set -->
         <div class="marquee-pill"><span class="pill-dot"></span>Claude Code CLI <span class="pill-metric">100% Replay</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>Cursor Agent Mode <span class="pill-metric">Zero Overhead</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>Git Merkle Tree Cache <span class="pill-metric">SHA Verified</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>SQLite WAL Engine <span class="pill-metric">0.08ms P50</span></div>
+        <div class="marquee-pill"><span class="pill-dot"></span>Int8 Quantized Embeddings <span class="pill-metric">ARM/x86 AVX2</span></div>
+        <div class="marquee-pill"><span class="pill-dot"></span>SingleFlight Request Coalescing <span class="pill-metric">Active</span></div>
       </div>
 
-      <!-- Row 2: Right-to-Left Stream -->
+      <!-- Row 2: Right-to-Left Stream (6 unique + 6 duplicates for seamless -50% loop) -->
       <div class="marquee-track glide-left">
         <div class="marquee-pill"><span class="pill-dot"></span>read_file("package.json") <span class="pill-metric">0.08ms HIT</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>list_dir("tests/") <span class="pill-metric">0.06ms HIT</span></div>
@@ -1791,10 +1864,13 @@
         <div class="marquee-pill"><span class="pill-dot"></span>pytest inspection <span class="pill-metric">0.11ms HIT</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>npm test runner <span class="pill-metric">0.09ms HIT</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>cargo clippy check <span class="pill-metric">0.08ms HIT</span></div>
-        <!-- Duplicate for loop -->
+        <!-- Exact Duplicate Set -->
         <div class="marquee-pill"><span class="pill-dot"></span>read_file("package.json") <span class="pill-metric">0.08ms HIT</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>list_dir("tests/") <span class="pill-metric">0.06ms HIT</span></div>
         <div class="marquee-pill"><span class="pill-dot"></span>git status subpath <span class="pill-metric">0.04ms HIT</span></div>
+        <div class="marquee-pill"><span class="pill-dot"></span>pytest inspection <span class="pill-metric">0.11ms HIT</span></div>
+        <div class="marquee-pill"><span class="pill-dot"></span>npm test runner <span class="pill-metric">0.09ms HIT</span></div>
+        <div class="marquee-pill"><span class="pill-dot"></span>cargo clippy check <span class="pill-metric">0.08ms HIT</span></div>
       </div>
     </div>
   </section>
@@ -1869,7 +1945,7 @@
             </div>
             <div>
               <div class="metric-col-title">Redundant Tokens</div>
-              <div class="metric-col-number red">3,280 tokens</div>
+              <div class="metric-col-number red">2,600 tokens <span style="font-size: 11px; opacity: 0.85;">(3,280 total)</span></div>
             </div>
           </div>
         </div>
@@ -1887,13 +1963,13 @@
           <h4>Instant Git-Delta Memory Replay</h4>
 
           <div class="flow-visual-stack">
-            <div class="flow-step-item bypassed">
+            <div class="flow-step-item cold">
               <div class="flow-step-main">
                 <span class="flow-step-action">Turn 1: read_file("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
                 <span class="flow-step-badge cold">Cold Cache to WAL</span>
-                <span class="flow-step-metric">1,450 ms (Cached)</span>
+                <span class="flow-step-metric">1,450 ms (Initial Cache)</span>
               </div>
             </div>
             <div class="flow-step-item bypassed">
@@ -1932,10 +2008,14 @@
             </div>
             <div>
               <div class="metric-col-title">Tokens Saved</div>
-              <div class="metric-col-number green">2,600 tokens ($0.0078)</div>
+              <div class="metric-col-number green">2,600 tokens <span style="font-size: 11px; opacity: 0.85;">($0.0078)*</span></div>
             </div>
           </div>
         </div>
+      </div>
+
+      <div style="font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); margin-top: 14px; text-align: center;">
+        *Assumes Claude 3.5 Sonnet @ $3.00/1M prompt tokens (2,600 / 3,280 tokens eliminated = 79.3% reduction).
       </div>
 
       <!-- VISUAL BLOCK 3: RADIAL TELEMETRY GAUGES -->
@@ -1958,13 +2038,13 @@
           <div class="radial-wrap">
             <svg class="radial-svg" viewBox="0 0 72 72">
               <circle class="radial-bg" cx="36" cy="36" r="30"></circle>
-              <circle class="radial-bar ice" cx="36" cy="36" r="30" style="stroke-dashoffset: 36;"></circle>
+              <circle class="radial-bar ice" cx="36" cy="36" r="30" style="stroke-dashoffset: 39;"></circle>
             </svg>
-            <div class="radial-center-text">81.2%</div>
+            <div class="radial-center-text">79.3%</div>
           </div>
           <div class="gauge-details">
             <h5>Context Token Savings</h5>
-            <p>Eliminates repeat file payloads from re-entering LLM input context.</p>
+            <p>Eliminated 2,600 / 3,280 repeat file tokens from re-entering LLM context.</p>
           </div>
         </div>
 
@@ -1978,7 +2058,7 @@
           </div>
           <div class="gauge-details">
             <h5>P50 Exact Latency</h5>
-            <p>SQLite WAL index hit verified across 206 automated benchmark suites.</p>
+            <p>SQLite WAL index hit verified across automated benchmark test suite.</p>
           </div>
         </div>
       </div>
@@ -1991,7 +2071,7 @@
       <div class="block-header">
         <div class="block-title-group">
           <div class="section-tag">ARCHITECTURE MAP</div>
-          <h3>From Tool Call to Zero-Token Replay</h3>
+          <h2>From Tool Call to Zero-Token Replay</h2>
           <p>How OmniCache intercepts coding agent operations and verifies Git tree deltas through local high-speed memory.</p>
         </div>
         <button id="packet-fire-btn" class="btn btn-gh" onclick="fireSnakingPacket()" style="border-color: var(--accent-orange); color: var(--accent-orange);">
@@ -2291,6 +2371,53 @@
     </div>
   </section>
 
+  <!-- VISUAL BLOCK 5: SECURITY, PRIVACY & LOCALHOST TRUST -->
+  <section class="section-pad" id="security" style="border-top: 1px solid var(--border-subtle);">
+    <div class="container">
+      <div class="section-intro">
+        <div class="section-tag">SECURITY & TRANSPARENCY</div>
+        <h2 class="section-heading">Localhost First: How Your Traffic is Handled</h2>
+        <p class="section-lead">
+          OmniCache is an air-gapped local daemon designed with zero remote telemetry, local-only WAL persistence, and direct cryptographic key pass-through.
+        </p>
+      </div>
+
+      <div class="security-grid">
+        <div class="security-card">
+          <div class="security-icon-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <h4>Zero External Telemetry</h4>
+          <p>The proxy operates entirely on <code>127.0.0.1</code>. No request payloads, repository files, git diffs, or prompts ever leave your machine or phone home to any SaaS analytics.</p>
+        </div>
+
+        <div class="security-card">
+          <div class="security-icon-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <h4>Direct API Key Pass-Through</h4>
+          <p>Your <code>ANTHROPIC_API_KEY</code> and provider credentials are never cached, stored to disk, or logged. On cache misses, HTTPS headers pass directly to official provider endpoints.</p>
+        </div>
+
+        <div class="security-card">
+          <div class="security-icon-wrap">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+            </svg>
+          </div>
+          <h4>Ephemeral & Git-Aware Eviction</h4>
+          <p>Local SQLite WAL index can be configured in ephemeral in-memory mode. Stale cache entries are automatically evicted immediately whenever Git commits or file mtimes advance.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Footer -->
   <footer class="site-footer">
     <div class="container footer-inner">
@@ -2308,6 +2435,7 @@
           <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener">GitHub</a></li>
           <li><a href="https://pypi.org/project/omnicache-proxy/" target="_blank" rel="noopener">PyPI</a></li>
           <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/AGENT_INTEGRATIONS.md" target="_blank" rel="noopener">Docs</a></li>
+          <li><a href="#security">Security & Privacy</a></li>
           <li><a href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE" target="_blank" rel="noopener">License (FSL-1.1-MIT)</a></li>
         </ul>
       </div>
@@ -2340,8 +2468,13 @@
       const text = box.innerText.replace('❯', '').trim();
       navigator.clipboard.writeText(text).then(() => {
         const btn = document.getElementById('cli-btn-txt');
+        const live = document.getElementById('cli-live-region');
         btn.innerText = 'Copied!';
-        setTimeout(() => { btn.innerText = 'Copy'; }, 2000);
+        if (live) live.innerText = 'Command copied to clipboard';
+        setTimeout(() => {
+          btn.innerText = 'Copy';
+          if (live) live.innerText = '';
+        }, 2000);
       });
     }
 
@@ -2689,15 +2822,26 @@
       }
     }
 
-    // Scroll & Resize Handlers
+    // Scroll & Resize Handlers (rAF-batched & debounced)
+    let scrollTicking = false;
     window.addEventListener('scroll', () => {
-      handleScrollBlur();
-      onScrollFlow();
+      if (!scrollTicking) {
+        requestAnimationFrame(() => {
+          handleScrollBlur();
+          onScrollFlow();
+          scrollTicking = false;
+        });
+        scrollTicking = true;
+      }
     }, { passive: true });
 
+    let resizeTimer = null;
     window.addEventListener('resize', () => {
-      buildCircuitGeometry();
-      onScrollFlow();
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        buildCircuitGeometry();
+        onScrollFlow();
+      }, 60);
     });
 
     window.addEventListener('orientationchange', () => {
@@ -2717,12 +2861,20 @@
       }
     }
 
-    // Initial setup on load
+    // Initial setup on load + font loading race resolution
     handleScrollBlur();
     window.addEventListener('DOMContentLoaded', () => {
       buildCircuitGeometry();
       onScrollFlow();
     });
+
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        buildCircuitGeometry();
+        onScrollFlow();
+      });
+    }
+
     setTimeout(() => {
       buildCircuitGeometry();
       onScrollFlow();

@@ -917,18 +917,22 @@
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      background: radial-gradient(circle at 50% 88%, rgba(255, 45, 20, 0.45) 0%, rgba(233, 93, 44, 0.2) 32%, #223440 68%, #1a2730 100%);
-      border: 2px solid #e95d2c;
-      border-bottom: 2.5px solid #ff2b18;
-      box-shadow: 0 0 24px rgba(233, 93, 44, 0.45), 0 8px 18px -2px rgba(255, 45, 20, 0.75);
+      background: radial-gradient(circle at 50% 50%, #223440 0%, #1a2730 100%);
+      border: 2px solid var(--border-medium);
+      border-bottom: 2.5px solid var(--border-medium);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #e95d2c;
+      color: var(--text-secondary);
       margin-bottom: 48px; /* Distinct vertical distance between bolt orb and title for hourglass sand trickle */
       position: relative;
       z-index: 10; /* strictly above the canvas so falling particles are behind the bolt logo */
-      transition: all 400ms ease;
+      transition: background 600ms cubic-bezier(0.16, 1, 0.3, 1),
+                  border-color 600ms cubic-bezier(0.16, 1, 0.3, 1),
+                  box-shadow 600ms cubic-bezier(0.16, 1, 0.3, 1),
+                  color 400ms ease,
+                  transform 400ms ease;
     }
 
     .arch-dest-orb::after {
@@ -944,13 +948,24 @@
       pointer-events: none;
       border-radius: 50%;
       z-index: 1;
+      opacity: 0; /* completely off before waterfall */
+      transition: opacity 600ms ease;
     }
 
-    .arch-destination-node.active-dest .arch-dest-orb {
-      background: radial-gradient(circle at 50% 88%, rgba(255, 55, 20, 0.95) 0%, #e95d2c 45%, #a63e1b 100%);
+    /* Glow in the bottom of the bolt sphere starts glowing ONLY once the fall begins, at 20% intensity */
+    .arch-dest-orb.glowing-base,
+    .arch-destination-node.active-dest .arch-dest-orb.glowing-base {
+      background: radial-gradient(circle at 50% 88%, rgba(255, 55, 20, 0.18) 0%, rgba(233, 93, 44, 0.08) 28%, #1f2e3a 65%, #1a2730 100%);
+      border-color: rgba(233, 93, 44, 0.65);
+      border-bottom-color: rgba(255, 45, 20, 0.38);
+      box-shadow: 0 0 16px rgba(233, 93, 44, 0.18), 0 6px 14px -2px rgba(255, 45, 20, 0.20);
       color: #ffffff;
-      box-shadow: 0 0 44px rgba(233, 93, 44, 0.85), 0 10px 24px rgba(255, 40, 15, 0.9);
-      transform: scale(1.06);
+      transform: scale(1.03);
+    }
+
+    .arch-dest-orb.glowing-base::after,
+    .arch-destination-node.active-dest .arch-dest-orb.glowing-base::after {
+      opacity: 0.20; /* strictly 20% intensity */
     }
 
     .arch-dest-title {
@@ -3346,16 +3361,15 @@
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id="bolt-heated-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stop-color="#ff8a50" />
-                  <stop offset="55%" stop-color="#e95d2c" />
-                  <stop offset="80%" stop-color="#ff3b20" />
-                  <stop offset="100%" stop-color="#ff1a10" />
+                  <stop offset="0%" stop-color="#ff9d68" />
+                  <stop offset="60%" stop-color="#e95d2c" />
+                  <stop offset="100%" stop-color="#ff3b20" />
                 </linearGradient>
                 <filter id="bolt-heated-filter" x="-20%" y="-20%" width="140%" height="140%">
-                  <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#ff2610" flood-opacity="0.95" />
+                  <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#ff2610" flood-opacity="0.20" />
                 </filter>
               </defs>
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="url(#bolt-heated-grad)" stroke-width="2.4" filter="url(#bolt-heated-filter)" fill="rgba(255, 35, 15, 0.08)"></polygon>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="url(#bolt-heated-grad)" stroke-width="2.4" filter="url(#bolt-heated-filter)" fill="rgba(255, 35, 15, 0.03)"></polygon>
             </svg>
           </div>
           <div class="arch-dest-title">Instant Tool Replay Delivered</div>
@@ -4149,23 +4163,30 @@
       const p4 = Math.min(1, Math.max(0, (p - 0.70) / 0.18));
       if (wAct4 && pathLengths[3]) wAct4.style.strokeDashoffset = pathLengths[3] * (1 - p4);
 
+      // Has the glowing dot from the fourth step reached the bolt circle?
+      const dotReachedBolt = (p >= 0.88);
+
+      // Fire waterfall: ONLY starts when glow dot reaches bolt circle!
+      if (window.setFireWaterfallActive) {
+        window.setFireWaterfallActive(dotReachedBolt);
+      }
+
       // Destination Node & Telemetry Drawer
-      const isComplete = p >= 0.88;
       if (dest) {
-        dest.classList.toggle('revealed', isComplete);
-        dest.classList.toggle('active-dest', isComplete);
+        dest.classList.toggle('revealed', dotReachedBolt);
+        dest.classList.toggle('active-dest', dotReachedBolt);
       }
       if (drawer) {
-        drawer.classList.toggle('revealed', isComplete);
-        drawer.classList.toggle('visible', isComplete);
-        drawer.classList.toggle('active-glow', isComplete);
+        drawer.classList.toggle('revealed', dotReachedBolt);
+        drawer.classList.toggle('visible', dotReachedBolt);
+        drawer.classList.toggle('active-glow', dotReachedBolt);
       }
 
       // Moving packet dot along current active wire
       if (!dot) return;
-      if (p < 0.02 || p >= 0.88) {
+      if (p < 0.02) {
         dot.style.opacity = '0';
-      } else {
+      } else if (p < 0.88) {
         dot.style.opacity = '1';
         let activeEl = null;
         let subP = 0;
@@ -4187,6 +4208,18 @@
             dot.setAttribute('cy', pt.y);
           }
         }
+      } else {
+        // Dot reached the bolt circle (p >= 0.88)
+        if (wAct4) {
+          const len = wAct4.getTotalLength();
+          if (len > 0) {
+            const pt = wAct4.getPointAtLength(len);
+            dot.setAttribute('cx', pt.x);
+            dot.setAttribute('cy', pt.y);
+          }
+        }
+        // As the waterfall starts, dot absorbs cleanly into the bolt circle
+        dot.style.opacity = p > 0.94 ? '0' : '1';
       }
     }
 
@@ -4556,10 +4589,52 @@
       const ctx = canvas.getContext('2d');
       let animationFrameId = null;
       let isVisible = false;
+      let isWaterfallRunning = false;
+      let glowTimer = null;
       let isHovered = false;
       let width = 0;
       let height = 0;
       let dpr = window.devicePixelRatio || 1;
+
+      function startWaterfall() {
+        if (isWaterfallRunning) return;
+        isWaterfallRunning = true;
+
+        // "only then, once the fall begins then the glow in the bottom of the bolt sphere starts glowing"
+        // Once the waterfall drops begin falling from behind the bolt, warm up the bottom base with 20% glow
+        clearTimeout(glowTimer);
+        glowTimer = setTimeout(() => {
+          if (isWaterfallRunning && orb) {
+            orb.classList.add('glowing-base');
+          }
+        }, 180);
+
+        if (isVisible && !animationFrameId) {
+          animationFrameId = requestAnimationFrame(step);
+        }
+      }
+
+      function stopWaterfall() {
+        if (!isWaterfallRunning && sandParticles.length === 0 && sparkParticles.length === 0) return;
+        isWaterfallRunning = false;
+        clearTimeout(glowTimer);
+        if (orb) {
+          orb.classList.remove('glowing-base');
+        }
+        sandParticles.length = 0;
+        sparkParticles.length = 0;
+        if (ctx && width && height) {
+          ctx.clearRect(0, 0, width, height);
+        }
+      }
+
+      window.setFireWaterfallActive = function(active) {
+        if (active) {
+          startWaterfall();
+        } else {
+          stopWaterfall();
+        }
+      };
 
       // Particle pools
       const sandParticles = [];
@@ -4714,16 +4789,23 @@
           return;
         }
 
-        const dest = document.getElementById('arch-dest');
-        const isSurge = isHovered || (dest && dest.classList.contains('active-dest'));
-        const isMobileDevice = window.innerWidth <= 640;
-        // Lush continuous waterfall stream (calibrated for desktop and mobile 60fps)
-        const spawnCount = isMobileDevice
-          ? (isSurge ? (Math.random() < 0.8 ? 4 : 3) : (Math.random() < 0.7 ? 3 : 2))
-          : (isSurge ? (Math.random() < 0.8 ? 6 : 5) : (Math.random() < 0.7 ? 4 : 3));
+        // ONLY spawn waterfall drops if waterfall has been triggered by the glow dot reaching the bolt circle
+        if (isWaterfallRunning) {
+          const dest = document.getElementById('arch-dest');
+          const isSurge = isHovered || (dest && dest.classList.contains('active-dest'));
+          const isMobileDevice = window.innerWidth <= 640;
+          // Lush continuous waterfall stream (calibrated for desktop and mobile 60fps)
+          const spawnCount = isMobileDevice
+            ? (isSurge ? (Math.random() < 0.8 ? 4 : 3) : (Math.random() < 0.7 ? 3 : 2))
+            : (isSurge ? (Math.random() < 0.8 ? 6 : 5) : (Math.random() < 0.7 ? 4 : 3));
 
-        for (let i = 0; i < spawnCount; i++) {
-          spawnSand(isSurge);
+          for (let i = 0; i < spawnCount; i++) {
+            spawnSand(isSurge);
+          }
+        } else if (sandParticles.length === 0 && sparkParticles.length === 0) {
+          ctx.clearRect(0, 0, width, height);
+          animationFrameId = null;
+          return;
         }
 
         ctx.clearRect(0, 0, width, height);
@@ -4910,7 +4992,12 @@
       orb.addEventListener('click', () => {
         // Generous spark burst!
         spawnSparks(emitter.x, emitter.y, 30, 0, 0);
-        for (let k = 0; k < 16; k++) spawnSand(true);
+        if (isWaterfallRunning) {
+          for (let k = 0; k < 16; k++) spawnSand(true);
+        }
+        if (!animationFrameId && isVisible) {
+          animationFrameId = requestAnimationFrame(step);
+        }
       });
 
       // IntersectionObserver for 0% CPU consumption off-screen
@@ -4919,7 +5006,7 @@
           isVisible = entry.isIntersecting;
           if (isVisible) {
             updateGeometry();
-            if (!animationFrameId) {
+            if (isWaterfallRunning && !animationFrameId) {
               animationFrameId = requestAnimationFrame(step);
             }
           } else {
@@ -4954,6 +5041,11 @@
       }
 
       updateGeometry();
+
+      // Synchronize with current scroll progress if already past threshold
+      if (typeof currentScrollProgress !== 'undefined') {
+        window.setFireWaterfallActive(currentScrollProgress >= 0.88);
+      }
     })();
   </script>
 </body>

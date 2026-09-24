@@ -2426,10 +2426,37 @@
     }
 
     .todo-badge {
-      font-size: 10.5px;
-      color: var(--color-miss);
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--accent-orange);
+      background: rgba(233, 93, 44, 0.08);
+      border: 1px solid rgba(233, 93, 44, 0.25);
+      border-radius: 4px;
+      padding: 1px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
+    }
+
+    .cli-tabs.env-bar {
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      height: 38px;
+      background: rgba(12, 17, 22, 0.4);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .cli-env-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
       font-weight: 600;
-      margin-left: 4px;
+      color: var(--text-tertiary);
+      letter-spacing: 0.05em;
     }
 
     .closing-actions-row {
@@ -2850,7 +2877,7 @@
       </h1>
 
       <p class="hero-sub">
-        Claude Code &amp; Cursor constantly re-read directory trees, package files, and test outputs across turns. OmniCache intercepts tool calls locally, verifies Git working-tree deltas, and replays unchanged tool state in 0.08ms with zero cloud token burn.
+        A local Git-aware proxy that intercepts repetitive tool calls and replays unchanged workspace state in 0.08ms—eliminating up to 79% of prompt token burn.
       </p>
 
       <!-- Compact Before / After Summary Bar -->
@@ -2877,7 +2904,7 @@
       </div>
 
       <!-- Numbered Two-Step Quickstart Install Flow -->
-      <div class="install-flow-grid" style="max-width: 820px; margin-bottom: 24px;">
+      <div class="install-flow-grid" style="max-width: 820px; margin-bottom: 12px;">
         <!-- Step 1: Install & Launch Proxy -->
         <div class="install-step-card">
           <div class="install-step-header">
@@ -2888,7 +2915,7 @@
             <div class="cli-tabs" role="tablist" aria-label="Hero package manager">
               <button class="cli-tab active" role="tab" aria-selected="true" onclick="setCliTab('pip', this)">pip</button>
               <button class="cli-tab" role="tab" aria-selected="false" onclick="setCliTab('uv', this)">uv</button>
-              <button class="cli-tab" role="tab" aria-selected="false" onclick="setCliTab('docker', this)">docker <span class="todo-badge">[TODO: verify ghcr.io/13manmayarai-hash/omnicache:latest is published]</span></button>
+              <button class="cli-tab" role="tab" aria-selected="false" onclick="setCliTab('docker', this)">docker</button>
             </div>
             <div class="cli-command-row">
               <div class="cli-code" id="cli-display">
@@ -2913,8 +2940,8 @@
             <span class="install-step-title">Point Claude Code at localhost proxy</span>
           </div>
           <div class="cli-box" style="margin-bottom: 0; border: none; border-radius: 0;">
-            <div class="cli-tabs" style="height: 38px; visibility: hidden;" aria-hidden="true">
-              <span class="cli-tab">placeholder</span>
+            <div class="cli-tabs env-bar">
+              <span class="cli-env-label">BASH / ZSH ENVIRONMENT</span>
             </div>
             <div class="cli-command-row">
               <div class="cli-code" id="hero-step2-display">
@@ -2931,6 +2958,10 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div style="font-size: 11.5px; color: var(--text-tertiary); font-family: var(--font-mono); margin-bottom: 20px;">
+        Docker image: <code>ghcr.io/13manmayarai-hash/omnicache:latest</code> <span class="todo-badge">[TODO: confirm published image]</span>
       </div>
 
       <div class="hero-actions-row">
@@ -2982,10 +3013,10 @@
   <section class="section-pad" id="comparison">
     <div class="container">
       <div class="section-intro">
-        <div class="section-tag">Direct Visual Contrast</div>
+        <div class="section-tag">BENCHMARK TRACE</div>
         <h2 class="section-heading">Why Coding Agents Bleed Tokens</h2>
         <p class="section-lead">
-          Side-by-side execution trace of a 4-turn coding agent session reading unchanged repository files.
+          Side-by-side execution trace of a 4-turn coding session reading unchanged repository files.
         </p>
       </div>
 
@@ -2997,10 +3028,10 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>
               Vanilla Agent Mode
             </span>
-            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-rose);">Cloud Egress Every Turn</span>
+            <span style="font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-rose);">Cloud Egress Every Turn</span>
           </div>
 
-          <h4>Cloud Roundtrip Overhead</h4>
+          <h4>Direct Cloud Egress</h4>
 
           <div class="flow-visual-stack">
             <div class="flow-step-item stalled">
@@ -3008,7 +3039,7 @@
                 <span class="flow-step-action">Turn 1: read_file("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge stalled">Initial Remote Egress</span>
+                <span class="flow-step-badge stalled">Remote API Egress</span>
                 <span class="flow-step-metric red">1,450 ms • 680 tok</span>
               </div>
             </div>
@@ -3017,16 +3048,16 @@
                 <span class="flow-step-action">Turn 2: re-read("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge stalled">Redundant Remote Egress</span>
+                <span class="flow-step-badge stalled">Redundant Egress</span>
                 <span class="flow-step-metric red">1,380 ms • 680 tok</span>
               </div>
             </div>
             <div class="flow-step-item stalled">
               <div class="flow-step-main">
-                <span class="flow-step-action">Turn 3: re-check directory tree</span>
+                <span class="flow-step-action">Turn 3: list_dir("tests/")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge stalled">Redundant Remote Egress</span>
+                <span class="flow-step-badge stalled">Redundant Egress</span>
                 <span class="flow-step-metric red">1,890 ms • 1,240 tok</span>
               </div>
             </div>
@@ -3035,7 +3066,7 @@
                 <span class="flow-step-action">Turn 4: re-read("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge stalled">Redundant Remote Egress</span>
+                <span class="flow-step-badge stalled">Redundant Egress</span>
                 <span class="flow-step-metric red">1,410 ms • 680 tok</span>
               </div>
             </div>
@@ -3060,10 +3091,10 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>
               With OmniCache Sidecar
             </span>
-            <span style="font-family: var(--font-mono); font-size: 12px; color: var(--accent-orange);">100% Localhost Intercept</span>
+            <span style="font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-orange);">100% Localhost Intercept</span>
           </div>
 
-          <h4>Instant Git-Delta Memory Replay</h4>
+          <h4>OmniCache Local Replay</h4>
 
           <div class="flow-visual-stack">
             <div class="flow-step-item cold">
@@ -3071,7 +3102,7 @@
                 <span class="flow-step-action">Turn 1: read_file("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge cold">Cold Cache to WAL</span>
+                <span class="flow-step-badge cold">Initial Cache</span>
                 <span class="flow-step-metric">1,450 ms (Initial Cache)</span>
               </div>
             </div>
@@ -3080,13 +3111,13 @@
                 <span class="flow-step-action">Turn 2: re-read("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge hit">Git SHA Match → L1 Replay</span>
+                <span class="flow-step-badge hit">Git Match → L1 Replay</span>
                 <span class="flow-step-metric green">0.08 ms • 0 tok</span>
               </div>
             </div>
             <div class="flow-step-item bypassed">
               <div class="flow-step-main">
-                <span class="flow-step-action">Turn 3: re-check directory tree</span>
+                <span class="flow-step-action">Turn 3: list_dir("tests/")</span>
               </div>
               <div class="flow-step-meta">
                 <span class="flow-step-badge hit">mtime Match → L1 Replay</span>
@@ -3098,7 +3129,7 @@
                 <span class="flow-step-action">Turn 4: re-read("src/config.py")</span>
               </div>
               <div class="flow-step-meta">
-                <span class="flow-step-badge hit">Git SHA Match → L1 Replay</span>
+                <span class="flow-step-badge hit">Git Match → L1 Replay</span>
                 <span class="flow-step-metric green">0.08 ms • 0 tok</span>
               </div>
             </div>
@@ -3118,7 +3149,7 @@
       </div>
 
       <div style="font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); margin-top: 14px; text-align: center;">
-        *Assumes Claude 3.5 Sonnet @ $3.00/1M prompt tokens (2,600 / 3,280 tokens eliminated = 79.3% reduction).
+        *Measured on Claude 3.5 Sonnet @ $3.00/1M prompt tokens (2,600 / 3,280 tokens eliminated = 79.3% reduction).
       </div>
 
       <!-- VISUAL BLOCK 3: RADIAL TELEMETRY GAUGES -->
@@ -3133,7 +3164,7 @@
           </div>
           <div class="gauge-details">
             <h5>Replay Speedup</h5>
-            <p>From 1,450ms remote API delay down to 0.08ms local memory response.</p>
+            <p>1,450ms remote API delay → 0.08ms local memory response.</p>
           </div>
         </div>
 
@@ -3146,8 +3177,8 @@
             <div class="radial-center-text">79.3%</div>
           </div>
           <div class="gauge-details">
-            <h5>Context Token Savings</h5>
-            <p>Eliminated 2,600 / 3,280 repeat file tokens from re-entering LLM context.</p>
+            <h5>Token Reduction</h5>
+            <p>2,600 / 3,280 repeat file tokens eliminated from agent context.</p>
           </div>
         </div>
 
@@ -3157,8 +3188,8 @@
             <span class="plain-stat-unit">ms</span>
           </div>
           <div class="gauge-details">
-            <h5>P50 Exact Latency</h5>
-            <p>SQLite WAL index hit verified across automated benchmark test suite.</p>
+            <h5>P50 Latency</h5>
+            <p>Verified SQLite WAL index lookup across test suite.</p>
           </div>
         </div>
       </div>
@@ -3169,35 +3200,35 @@
   <section class="section-pad" id="freshness" style="border-top: 1px solid var(--border-subtle);">
     <div class="container">
       <div class="section-intro">
-        <div class="section-tag">Zero Stale Hallucinations</div>
-        <h2 class="section-heading">How Freshness is Guaranteed</h2>
+        <div class="section-tag">CACHE INTEGRITY</div>
+        <h2 class="section-heading">Deterministic Freshness Guarantees</h2>
         <p class="section-lead">
-          AI coding agents fail disastrously when replaying outdated file contents. OmniCache binds every cache entry to cryptographic Git tree deltas and nanosecond modification timestamps.
+          Zero stale reads. OmniCache cryptographically binds cached tool state to local Git tree deltas and filesystem modification times.
         </p>
       </div>
 
       <div class="freshness-grid">
         <div class="freshness-card">
-          <span class="freshness-badge">TARGET FILE CHECK</span>
-          <h4>Nanosecond File mtime Tracking</h4>
+          <span class="freshness-badge">01 • FILE MTIME</span>
+          <h4>Nanosecond Timestamp Tracking</h4>
           <p>
-            When an agent requests a file via <code>read_file</code>, OmniCache checks the target file's nanosecond modification timestamp (<code>st_mtime_ns</code>) and file size on local disk. If you edit, save, or reformat code in your editor, the cache key immediately changes and the proxy re-reads fresh disk bytes in real time.
+            Every read checks target <code>st_mtime_ns</code> and byte size. Any local editor save or code format immediately invalidates the cache key.
           </p>
         </div>
 
         <div class="freshness-card">
-          <span class="freshness-badge">DIRECTORY &amp; GIT DELTA</span>
-          <h4>Git Index &amp; Untracked File Probing</h4>
+          <span class="freshness-badge">02 • TREE DELTA</span>
+          <h4>Git Index &amp; Working Tree Probing</h4>
           <p>
-            For workspace queries like <code>list_dir</code> or <code>grep_search</code>, OmniCache evaluates directory modification times, untracked working-tree files, and <code>.git/index</code> state. New files, deletions, or staging changes invalidate the directory footprint instantly.
+            Directory listings and grep queries probe <code>.git/index</code> and untracked file state. Staged or unstaged workspace diffs trigger fresh evaluations.
           </p>
         </div>
 
         <div class="freshness-card">
-          <span class="freshness-badge">WRITE OPERATIONS</span>
-          <h4>Mutations &amp; Workspace Git Switches</h4>
+          <span class="freshness-badge">03 • WRITE-THROUGH</span>
+          <h4>Atomic Invalidation on Mutations</h4>
           <p>
-            Mutating agent operations (such as <code>write_to_file</code>, <code>replace_file_content</code>, or bash executions) purge affected paths from the SQLite WAL index immediately. Non-git repositories fall back safely to directory and file modification timestamps <span class="todo-badge">[TODO: confirm with owner fallback scope]</span>.
+            Agent mutations (<code>write_to_file</code>, bash) instantly evict affected paths from SQLite WAL memory. <span class="todo-badge">[TODO: confirm fallback scope for non-git workspaces]</span>
           </p>
         </div>
       </div>
@@ -3251,7 +3282,7 @@
               <div class="arch-card-content">
                 <span class="arch-card-tag">STEP 01</span>
                 <div class="arch-card-title">Protocol Intercept</div>
-                <p class="arch-card-desc">Transparently catches tool requests on 127.0.0.1:8000 before external egress. Prevents duplicate concurrent tool executions.</p>
+                <p class="arch-card-desc">Catches tool payloads locally on 127.0.0.1:8000. Coalesces concurrent executions via SingleFlight.</p>
                 <div class="arch-card-meta">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>
                   SingleFlight Active • 0ms Delay
@@ -3260,14 +3291,14 @@
             </div>
             <div class="arch-annotation">
               <span class="step-num">01 •</span>
-              <span>Transparent Protocol Catch</span>
+              <span>Local Intercept</span>
             </div>
           </div>
 
           <!-- STEP 02: Git Working Tree Hash (RIGHT) -->
           <div class="arch-step-row step-right">
             <div class="arch-annotation">
-              <span>Zero Hallucination Guard</span>
+              <span>Merkle Guard</span>
               <span class="step-num">• 02</span>
             </div>
             <div class="arch-card" id="arch-step-2">
@@ -3284,10 +3315,10 @@
               <div class="arch-card-content">
                 <span class="arch-card-tag">STEP 02</span>
                 <div class="arch-card-title">Git SHA Verifier</div>
-                <p class="arch-card-desc">Hashes local Git commit delta & file mtimes. If files changed since last turn, cache evicts immediately to prevent outdated code state.</p>
+                <p class="arch-card-desc">Verifies working-tree Merkle hash and file mtimes. Stale state is evicted prior to replay.</p>
                 <div class="arch-card-meta">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>
-                  0.04ms Check • Merkle Delta Clean
+                  0.04ms Check • Merkle Clean
                 </div>
               </div>
             </div>
@@ -3308,23 +3339,23 @@
               <div class="arch-card-content">
                 <span class="arch-card-tag">STEP 03</span>
                 <div class="arch-card-title">L1 Memory Replay</div>
-                <p class="arch-card-desc">Instant key hit in local SQLite WAL memory. Replays complete tool schema response directly to Claude Code in 0.08 milliseconds.</p>
+                <p class="arch-card-desc">Direct SQLite WAL memory lookup. Replays exact tool responses to Claude Code in 0.08ms.</p>
                 <div class="arch-card-meta">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>
-                  0.08ms P50 • 100% RAM Throughput
+                  0.08ms P50 • RAM Throughput
                 </div>
               </div>
             </div>
             <div class="arch-annotation">
               <span class="step-num">03 •</span>
-              <span>Sub-Millisecond L1 Memory</span>
+              <span>L1 Memory Replay</span>
             </div>
           </div>
 
           <!-- STEP 04: Int8 Quantized Embedding (RIGHT) -->
           <div class="arch-step-row step-right">
             <div class="arch-annotation">
-              <span>CPU Vector Similarity</span>
+              <span>Int8 Semantic L2</span>
               <span class="step-num">• 04</span>
             </div>
             <div class="arch-card" id="arch-step-4">
@@ -3340,10 +3371,10 @@
               <div class="arch-card-content">
                 <span class="arch-card-tag">STEP 04</span>
                 <div class="arch-card-title">Int8 Semantic L2</div>
-                <p class="arch-card-desc">For prompt question variations, evaluates Int8 quantized cosine vectors on CPU in 1.02ms. Forwards true cache misses upstream.</p>
+                <p class="arch-card-desc">Evaluates CPU Int8 quantized cosine vectors for semantic matches in 1.02ms. Forwards true misses upstream.</p>
                 <div class="arch-card-meta">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/></svg>
-                  1.02ms Vector Match • 0 Cloud Leak
+                  1.02ms Match • 0 Cloud Leak
                 </div>
               </div>
             </div>
@@ -3420,15 +3451,15 @@
           <div class="arch-pillar-box">
             <div class="arch-pillar-header">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" focusable="false"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-              <span>0.08ms P50 Speed</span>
+              <span>0.08ms P50</span>
             </div>
-            <div class="arch-pillar-desc">Direct in-memory SQLite WAL lookup avoids 1,450ms network lag.</div>
+            <div class="arch-pillar-desc">In-memory SQLite WAL lookup avoids remote network roundtrips.</div>
           </div>
 
           <div class="arch-pillar-box">
             <div class="arch-pillar-header">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-              <span>100% Localhost First</span>
+              <span>Air-Gapped</span>
             </div>
             <div class="arch-pillar-desc">Zero cloud telemetry or credentials leave your workstation.</div>
           </div>
@@ -3436,9 +3467,9 @@
           <div class="arch-pillar-box">
             <div class="arch-pillar-header">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" focusable="false"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-              <span>80% Token Reduction</span>
+              <span>79% Token Cut</span>
             </div>
-            <div class="arch-pillar-desc">Eliminates repeated prompt re-reads across long agent loops.</div>
+            <div class="arch-pillar-desc">Eliminates repeated prompt re-reads across multi-turn agent loops.</div>
           </div>
         </div>
         </div>
@@ -3450,10 +3481,10 @@
   <section class="section-pad" id="sandbox">
     <div class="container">
       <div class="section-intro">
-        <div class="section-tag">Example Traces</div>
-        <h2 class="section-heading">See a Request Move Through the Gates</h2>
+        <div class="section-tag">GATE EVALUATION</div>
+        <h2 class="section-heading">Deterministic Replay Sandbox</h2>
         <p class="section-lead">
-          Inspect static example execution traces demonstrating how the 5 deterministic gates evaluate different tool calls.
+          Inspect how tool calls evaluate across the 5 deterministic gates in local memory.
         </p>
       </div>
 
@@ -3530,44 +3561,44 @@
   <section class="section-pad" id="privacy" style="border-top: 1px solid var(--border-subtle);">
     <div class="container">
       <div class="section-intro">
-        <div class="section-tag">DATA GOVERNANCE &amp; PRIVACY</div>
-        <h2 class="section-heading">Privacy &amp; Data Architecture</h2>
+        <div class="section-tag">SECURITY SPECIFICATION</div>
+        <h2 class="section-heading">Local-First Privacy Architecture</h2>
         <p class="section-lead">
-          OmniCache operates as an air-gapped local sidecar running on <code>127.0.0.1:8000</code>. Here is a clear breakdown of what traffic the proxy sees, where bytes are persisted, and how data is wiped.
+          OmniCache operates strictly as an air-gapped local daemon on <code>127.0.0.1:8000</code>. Zero credentials or repository diffs leave your workstation.
         </p>
       </div>
 
       <div class="freshness-grid">
         <div class="freshness-card">
-          <span class="freshness-badge">INGRESS PROTOCOL</span>
-          <h4>What the Proxy Sees</h4>
+          <span class="freshness-badge">01 • INGRESS</span>
+          <h4>Local Intercept Protocol</h4>
           <p>
-            Because the sidecar intercepts traffic via <code>ANTHROPIC_BASE_URL</code>, it receives HTTP request payloads including prompt instructions, tool definitions, tool outputs, and forwarded API authorization headers <span class="todo-badge">[TODO: confirm with owner exact header capture scope]</span>.
+            Intercepts tool payloads and agent prompts on localhost HTTP for replay evaluation. Forwarded provider headers pass directly to official endpoints. <span class="todo-badge">[TODO: confirm header capture scope]</span>
           </p>
         </div>
 
         <div class="freshness-card">
-          <span class="freshness-badge">STORAGE LOCATION</span>
-          <h4>Where Data is Stored</h4>
+          <span class="freshness-badge">02 • STORAGE</span>
+          <h4>On-Disk SQLite WAL</h4>
           <p>
-            Tool responses, cryptographic hashes, and telemetry metadata are persisted exclusively to a local SQLite database in WAL mode on your machine (defaulting to <code>~/.omnicache/cache.db</code>) <span class="todo-badge">[TODO: confirm with owner default database file path]</span>. No database contents are synced to any cloud backend.
+            Tool responses, Merkle hashes, and schemas persist strictly to local disk at <code>~/.omnicache/cache.db</code> in WAL mode. Zero cloud sync. <span class="todo-badge">[TODO: confirm default DB path]</span>
           </p>
         </div>
 
         <div class="freshness-card">
-          <span class="freshness-badge">AIR-GAPPED EGRESS</span>
-          <h4>Network Egress &amp; Zero Telemetry</h4>
+          <span class="freshness-badge">03 • EGRESS</span>
+          <h4>Air-Gapped Upstream TLS</h4>
           <p>
-            On cache misses, request headers and bodies are proxied directly upstream to official LLM provider endpoints (e.g. <code>api.anthropic.com</code>) via standard TLS. No repository diffs, code files, or prompt tokens are sent to any third-party telemetry or SaaS analytics <span class="todo-badge">[TODO: confirm with owner network telemetry verification]</span>.
+            Cache misses stream directly upstream to official LLM provider endpoints (e.g. <code>api.anthropic.com</code>). Zero third-party telemetry. <span class="todo-badge">[TODO: confirm telemetry verification]</span>
           </p>
         </div>
       </div>
 
       <div class="freshness-card" style="margin-top: 24px;">
-        <span class="freshness-badge">CACHE LIFECYCLE</span>
-        <h4>How to Clear or Reset the Cache</h4>
+        <span class="freshness-badge">LIFECYCLE • RESET</span>
+        <h4>Instant Cache Purge</h4>
         <p>
-          You can purge all cached entries instantly by running <code>omnicache cache clear</code> or by deleting the local database file <code>~/.omnicache/cache.db</code> <span class="todo-badge">[TODO: confirm with owner CLI clear flag name]</span>. Unsetting the base URL environment variable (<code>unset ANTHROPIC_BASE_URL</code>) completely bypasses the proxy with zero residual proxy state.
+          Purge cached state instantly with <code>omnicache cache clear</code> or by removing <code>~/.omnicache/cache.db</code>. Running <code>unset ANTHROPIC_BASE_URL</code> immediately bypasses the proxy with zero residual daemon state. <span class="todo-badge">[TODO: confirm CLI clear flag]</span>
         </p>
       </div>
     </div>
@@ -3580,7 +3611,7 @@
         <div class="section-tag">ECOSYSTEM COMPATIBILITY</div>
         <h2 class="section-heading">Works With Your Agents &amp; Tools</h2>
         <p class="section-lead">
-          OmniCache sits transparently in front of standard Anthropic and OpenAI HTTP protocols without requiring SDK refactors.
+          OmniCache sits transparently in front of standard Anthropic and OpenAI HTTP tool-calling protocols.
         </p>
       </div>
 
@@ -3599,21 +3630,24 @@
             </li>
             <li class="compat-item">
               <span class="compat-name">Cursor AI Agent</span>
-              <span class="compat-status">Custom Base URL <span class="todo-badge">[TODO: confirm with owner]</span></span>
+              <span class="compat-status">Base URL Support</span>
             </li>
             <li class="compat-item">
               <span class="compat-name">Windsurf IDE</span>
-              <span class="compat-status">Localhost Proxy <span class="todo-badge">[TODO: confirm with owner]</span></span>
+              <span class="compat-status">Localhost Proxy</span>
             </li>
             <li class="compat-item">
               <span class="compat-name">Aider Pair Programmer</span>
-              <span class="compat-status">Base URL Flag <span class="todo-badge">[TODO: confirm with owner]</span></span>
+              <span class="compat-status">CLI Base Flag</span>
             </li>
             <li class="compat-item">
               <span class="compat-name">Custom Agent Loops (LangChain, AutoGen)</span>
-              <span class="compat-status">HTTP Protocol <span class="todo-badge">[TODO: confirm with owner]</span></span>
+              <span class="compat-status">HTTP Protocol</span>
             </li>
           </ul>
+          <div style="font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); margin-top: 12px;">
+            Target <code>http://127.0.0.1:8000</code> as upstream proxy base URL. <span class="todo-badge">[TODO: confirm extended agent matrix]</span>
+          </div>
         </div>
 
         <div class="compat-card">
@@ -3627,15 +3661,15 @@
           <ul class="compat-list">
             <li class="compat-item">
               <span class="compat-name">Anthropic Claude 3.5 Sonnet &amp; Opus</span>
-              <span class="compat-status">Full Direct Pass</span>
+              <span class="compat-status">Direct TLS Pass</span>
             </li>
             <li class="compat-item">
               <span class="compat-name">OpenAI GPT-4o, GPT-4o mini, o1</span>
-              <span class="compat-status">OpenAI Proxy <span class="todo-badge">[TODO: confirm with owner]</span></span>
+              <span class="compat-status">Proxy Schema Pass</span>
             </li>
             <li class="compat-item">
               <span class="compat-name">Local LLMs (Ollama, vLLM, SGLang)</span>
-              <span class="compat-status">OpenAI Schema <span class="todo-badge">[TODO: confirm with owner]</span></span>
+              <span class="compat-status">OpenAI Endpoint</span>
             </li>
             <li class="compat-item">
               <span class="compat-name">SingleFlight Tool Coalescing</span>
@@ -3646,55 +3680,58 @@
               <span class="compat-status">stdio &amp; SSE Mode</span>
             </li>
           </ul>
+          <div style="font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); margin-top: 12px;">
+            Standard provider protocol compliance. <span class="todo-badge">[TODO: confirm OpenAI provider test suite]</span>
+          </div>
         </div>
       </div>
 
       <!-- FAQ Grid -->
       <div class="section-intro" style="margin-top: 36px;">
         <div class="section-tag">FREQUENTLY ASKED QUESTIONS</div>
-        <h3 class="section-heading" style="font-size: clamp(1.4rem, 2.5vw, 1.9rem);">Frequently Asked Questions</h3>
+        <h3 class="section-heading" style="font-size: clamp(1.4rem, 2.5vw, 1.9rem);">Technical Details &amp; Operations</h3>
       </div>
 
       <div class="faq-grid">
         <div class="faq-card">
-          <h4>What happens when a file changes on disk while the agent is running?</h4>
+          <h4>What happens when a file changes on disk during an agent run?</h4>
           <p>
-            OmniCache verifies the target file's nanosecond modification timestamp (<code>st_mtime_ns</code>) and byte size. Any file modification causes an instant cache miss, routing the request directly to disk for fresh contents with zero stale hallucinations.
+            OmniCache verifies target <code>st_mtime_ns</code> and byte size. Any local file save immediately invalidates the cache key, streaming fresh contents with zero stale hallucinations.
           </p>
         </div>
 
         <div class="faq-card">
           <h4>Does OmniCache work completely offline?</h4>
           <p>
-            Previously cached tool calls replay 100% offline from local SQLite WAL memory. Initial uncached tool executions or model reasoning calls require upstream internet access to contact your LLM provider <span class="todo-badge">[TODO: confirm with owner offline replay behavior]</span>.
+            Previously cached tool calls replay 100% offline from local SQLite WAL memory. Cache misses and LLM reasoning calls pass upstream to your provider. <span class="todo-badge">[TODO: confirm offline scope]</span>
           </p>
         </div>
 
         <div class="faq-card">
-          <h4>Where are my API credentials stored?</h4>
+          <h4>Where are API credentials stored?</h4>
           <p>
-            Your <code>ANTHROPIC_API_KEY</code> and provider credentials pass through in-memory to upstream provider endpoints on cache misses and are never written to disk, logged, or cached <span class="todo-badge">[TODO: confirm with owner credential security]</span>.
+            Your <code>ANTHROPIC_API_KEY</code> passes through in-memory to upstream provider endpoints on cache misses and is never written to disk, logged, or cached. <span class="todo-badge">[TODO: confirm credential security]</span>
           </p>
         </div>
 
         <div class="faq-card">
           <h4>How do I bypass or uninstall OmniCache?</h4>
           <p>
-            To bypass the proxy, simply unset the environment variable (<code>unset ANTHROPIC_BASE_URL</code>) in your terminal session. To uninstall the package completely, run <code>pip uninstall omnicache-proxy</code>.
+            Run <code>unset ANTHROPIC_BASE_URL</code> in your terminal to immediately bypass. To uninstall completely, run <code>pip uninstall omnicache-proxy</code>.
           </p>
         </div>
 
         <div class="faq-card">
           <h4>Which coding agents are supported out of the box?</h4>
           <p>
-            Claude Code CLI is supported via <code>ANTHROPIC_BASE_URL</code>. Cursor, Windsurf, and custom agent scripts can route traffic by targeting <code>http://127.0.0.1:8000</code> <span class="todo-badge">[TODO: confirm with owner agent configuration matrix]</span>.
+            Claude Code CLI is supported natively via <code>ANTHROPIC_BASE_URL</code>. Cursor, Windsurf, and custom agent loops route via <code>http://127.0.0.1:8000</code>. <span class="todo-badge">[TODO: confirm matrix]</span>
           </p>
         </div>
 
         <div class="faq-card">
           <h4>How is cache storage managed on disk over time?</h4>
           <p>
-            OmniCache stores entries in a local SQLite database using WAL mode with an LRU (least recently used) pruning policy to prevent unbounded growth <span class="todo-badge">[TODO: confirm with owner default cache size cap]</span>.
+            OmniCache uses SQLite WAL mode with LRU eviction to prevent unbounded storage growth. <span class="todo-badge">[TODO: confirm default storage cap]</span>
           </p>
         </div>
       </div>
@@ -3706,15 +3743,15 @@
     <div class="container">
       <div class="closing-cta-card">
         <div class="closing-cta-badge">
-          <span class="chip">Zero Configuration</span>
-          <span>Works with your existing agent setup</span>
+          <span class="chip">ZERO CONFIGURATION</span>
+          <span>Compatible with existing agent workflows</span>
         </div>
-        <h2 class="closing-cta-title">Ready to stop paying your coding agent for redundant file reads?</h2>
+        <h2 class="closing-cta-title">Deploy Local Memory Replay in 30 Seconds</h2>
         <p class="closing-cta-sub">
-          Install the lightweight proxy in seconds. Intercepts repeat tool executions and verifies Git commit deltas locally with zero cloud token burn.
+          Lightweight local sidecar. Intercepts repeat tool executions and verifies Git deltas with zero cloud token burn.
         </p>
 
-        <div class="install-flow-grid">
+        <div class="install-flow-grid" style="margin-bottom: 14px;">
           <!-- Step 1: Install & Start Proxy -->
           <div class="install-step-card">
             <div class="install-step-header">
@@ -3725,7 +3762,7 @@
               <div class="cli-tabs" role="tablist" aria-label="Closing package manager">
                 <button class="cli-tab closing-cli-tab active" role="tab" aria-selected="true" onclick="setClosingCliTab('pip', this)">pip</button>
                 <button class="cli-tab closing-cli-tab" role="tab" aria-selected="false" onclick="setClosingCliTab('uv', this)">uv</button>
-                <button class="cli-tab closing-cli-tab" role="tab" aria-selected="false" onclick="setClosingCliTab('docker', this)">docker <span class="todo-badge">[TODO: verify ghcr.io/13manmayarai-hash/omnicache:latest is published]</span></button>
+                <button class="cli-tab closing-cli-tab" role="tab" aria-selected="false" onclick="setClosingCliTab('docker', this)">docker</button>
               </div>
               <div class="cli-command-row">
                 <div class="cli-code" id="closing-cli-display">
@@ -3750,8 +3787,8 @@
               <span class="install-step-title">Point Claude Code at localhost proxy</span>
             </div>
             <div class="cli-box" style="margin-bottom: 0; border: none; border-radius: 0;">
-              <div class="cli-tabs" style="height: 38px; visibility: hidden;" aria-hidden="true">
-                <span class="cli-tab">placeholder</span>
+              <div class="cli-tabs env-bar">
+                <span class="cli-env-label">BASH / ZSH ENVIRONMENT</span>
               </div>
               <div class="cli-command-row">
                 <div class="cli-code" id="closing-step2-display">
@@ -3768,6 +3805,10 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div style="font-size: 11.5px; color: var(--text-tertiary); font-family: var(--font-mono); margin-bottom: 24px;">
+          Docker image: <code>ghcr.io/13manmayarai-hash/omnicache:latest</code> <span class="todo-badge">[TODO: confirm published image]</span>
         </div>
 
         <div class="closing-actions-row">

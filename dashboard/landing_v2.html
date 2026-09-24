@@ -98,6 +98,9 @@
       font-size: 16px;
       -webkit-font-smoothing: antialiased;
       scroll-behavior: smooth;
+      overflow-x: hidden;
+      width: 100%;
+      max-width: 100vw;
     }
 
     body {
@@ -106,6 +109,8 @@
       font-family: var(--font-sans);
       line-height: 1.5;
       overflow-x: hidden;
+      width: 100%;
+      max-width: 100vw;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -527,6 +532,8 @@
       margin-bottom: 54px;
       box-shadow: var(--shadow-card);
       overflow: hidden;
+      min-width: 0;
+      width: 100%;
     }
 
     .cli-tabs {
@@ -534,6 +541,15 @@
       border-bottom: 1px solid var(--border-subtle);
       background: rgba(255, 255, 255, 0.02);
       padding: 0 10px;
+      overflow-x: auto;
+      white-space: nowrap;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      max-width: 100%;
+    }
+
+    .cli-tabs::-webkit-scrollbar {
+      display: none;
     }
 
     .cli-tab {
@@ -547,6 +563,8 @@
       cursor: pointer;
       position: relative;
       transition: color 150ms ease;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
 
     .cli-tab.active {
@@ -574,12 +592,17 @@
       font-size: 13.5px;
       color: var(--text-primary);
       gap: 16px;
+      min-width: 0;
+      max-width: 100%;
     }
 
     .cli-code {
       overflow-x: auto;
       white-space: nowrap;
       scrollbar-width: none;
+      min-width: 0;
+      max-width: 100%;
+      -webkit-overflow-scrolling: touch;
     }
 
     .cli-prompt {
@@ -1852,17 +1875,6 @@
       }
     }
 
-    @media (max-width: 520px) {
-      .telemetry-stats-grid {
-        grid-template-columns: 1fr;
-        gap: 10px;
-      }
-
-      .arch-pills-row {
-        grid-template-columns: 1fr;
-      }
-    }
-
     @media (max-width: 640px) {
       .nav-items {
         display: none;
@@ -1894,58 +1906,141 @@
       }
 
       .hero-title {
+        font-size: clamp(1.8rem, 6.5vw, 2.5rem);
         letter-spacing: -0.025em;
+      }
+
+      .hero-stats-bar {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 12px 14px;
+      }
+
+      .hero-stat-col {
+        width: 100%;
+        justify-content: space-between;
       }
 
       .cli-command-row {
         flex-direction: column;
         align-items: stretch;
+        padding: 12px 14px;
+      }
+
+      .cli-code {
+        font-size: 12px;
+        padding-bottom: 6px;
       }
 
       .btn-copy {
         justify-content: center;
       }
 
-      /* Straight vertical stack circuit for phones */
+      /* Clean centered vertical spine circuit for phones */
       .arch-flow-wrapper {
-        padding-left: 20px;
+        padding-left: 0;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
 
       .arch-step-row.step-left,
       .arch-step-row.step-right {
-        justify-content: flex-end;
+        justify-content: center;
+        width: 100%;
       }
 
       .arch-card {
-        width: calc(100% - 24px) !important;
-        max-width: 100% !important;
-        margin-left: 24px;
+        width: 100% !important;
+        max-width: 440px !important;
+        margin: 0 auto !important;
+        box-sizing: border-box;
+        padding: 16px 14px;
       }
 
-      .card-connector-pin.pin-bottom,
-      .card-connector-pin.pin-left,
-      .card-connector-pin.pin-right {
-        left: -17px !important;
+      /* On mobile, circuit pins are centered along the vertical spine */
+      .card-connector-pin {
+        left: 50% !important;
         right: auto !important;
-        top: 50% !important;
+        transform: translateX(-50%) !important;
+      }
+
+      /* Card input pins at top center */
+      #pin-2-in,
+      #pin-3-in,
+      #pin-4-in {
+        top: -6px !important;
         bottom: auto !important;
-        transform: translateY(-50%) !important;
       }
 
-      .card-connector-pin.pin-top {
-        left: -17px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
+      /* Card output pins at bottom center */
+      #pin-1-out,
+      #pin-2-out,
+      #pin-3-out,
+      #pin-4-out {
+        bottom: -6px !important;
+        top: auto !important;
       }
 
+      /* Destination node centered directly on the vertical spine */
       .arch-destination-node {
-        align-items: flex-start;
-        text-align: left;
-        padding-left: 44px;
+        align-items: center;
+        text-align: center;
+        padding-left: 0;
+        margin-top: 48px;
+        width: 100%;
       }
 
-      .arch-destination-node .card-connector-pin {
-        left: 20px !important;
+      /* Destination pin resting right above the bolt orb */
+      #pin-dest-in {
+        top: -6px !important;
+        bottom: auto !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+      }
+
+      .arch-telemetry-drawer {
+        width: 100%;
+        max-width: 100%;
+        padding: 16px 14px;
+        box-sizing: border-box;
+        margin: 28px auto 0;
+      }
+
+      .telemetry-top-bar {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .telemetry-status-badge {
+        font-size: 11px;
+      }
+
+      .telemetry-stats-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .arch-pills-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-top: 32px;
+        width: 100%;
+        box-sizing: border-box;
+      }
+
+      .probe-top-row {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .compat-item {
+        flex-wrap: wrap;
+        gap: 6px;
       }
     }
 
@@ -2031,6 +2126,8 @@
       gap: 20px;
       text-align: left;
       margin-bottom: 36px;
+      min-width: 0;
+      max-width: 100%;
     }
 
     @media (max-width: 768px) {
@@ -2046,6 +2143,8 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      max-width: 100%;
     }
 
     .install-step-header {
@@ -3663,6 +3762,19 @@
 
       const isMobile = window.innerWidth <= 640;
 
+      if (isMobile) {
+        // Enforce exact vertical spine alignment down the center on mobile screens
+        const centerX = wRect.width / 2;
+        p1.x = centerX;
+        p2.x = centerX;
+        p3.x = centerX;
+        p4.x = centerX;
+        p5.x = centerX;
+        p6.x = centerX;
+        p7.x = centerX;
+        p8.x = centerX;
+      }
+
       // Segment 1: p1 -> p2 (down then right)
       const dx1 = p2.x - p1.x;
       const dy1 = p2.y - p1.y;
@@ -4325,8 +4437,11 @@
 
         const dest = document.getElementById('arch-dest');
         const isSurge = isHovered || (dest && dest.classList.contains('active-dest'));
-        // Lush continuous waterfall stream
-        const spawnCount = isSurge ? (Math.random() < 0.8 ? 6 : 5) : (Math.random() < 0.7 ? 4 : 3);
+        const isMobileDevice = window.innerWidth <= 640;
+        // Lush continuous waterfall stream (calibrated for desktop and mobile 60fps)
+        const spawnCount = isMobileDevice
+          ? (isSurge ? (Math.random() < 0.8 ? 4 : 3) : (Math.random() < 0.7 ? 3 : 2))
+          : (isSurge ? (Math.random() < 0.8 ? 6 : 5) : (Math.random() < 0.7 ? 4 : 3));
 
         for (let i = 0; i < spawnCount; i++) {
           spawnSand(isSurge);
@@ -4543,6 +4658,14 @@
       window.addEventListener('resize', () => {
         if (isVisible) updateGeometry();
       }, { passive: true });
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => { if (isVisible) updateGeometry(); }, 120);
+      });
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          if (isVisible) updateGeometry();
+        });
+      }
 
       const flowWrap = document.getElementById('arch-flow-wrapper');
       if (flowWrap && window.ResizeObserver) {

@@ -170,6 +170,13 @@ class ProxyConfig:
     TEMPERATURE_BYPASS_THRESHOLD: float = 0.85
     STREAM_REPLAY_TOKENS_PER_SEC: float = 65.0
     SINGLEFLIGHT_TIMEOUT_SECONDS: float = 30.0
+
+    # AST-Guided Code Invalidation & Structural Parity
+    AST_INVALIDATION_ENABLED: bool = os.getenv("OMNICACHE_AST_INVALIDATION_ENABLED", "true").lower() in ("true", "1")
+
+    # Shannon-Entropy Secret Detection in PrivacyShield
+    ENTROPY_SECRET_DETECTION_ENABLED: bool = os.getenv("OMNICACHE_ENTROPY_SECRET_DETECTION_ENABLED", "true").lower() in ("true", "1")
+    MIN_SECRET_ENTROPY: float = float(os.getenv("OMNICACHE_MIN_SECRET_ENTROPY", "4.2"))
     
     HTTP_POOL_MAX_CONNECTIONS: int = 100
     HTTP_POOL_MAX_KEEPALIVE: int = 20

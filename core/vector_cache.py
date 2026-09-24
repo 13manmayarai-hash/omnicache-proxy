@@ -11,6 +11,7 @@ from .embeddings import FastSemanticEmbedder
 from .hasher import RequestHasher
 from .storage import BaseCacheStorage, InMemoryCacheStorage, RedisCacheStorage
 from .ann_index import ANNIndexFactory, BaseANNIndex
+from .ast_validator import ASTValidator
 
 def get_model_family(model: str) -> str:
     """
@@ -365,6 +366,17 @@ class DualTierCache:
                 best_entry = entry
 
         if best_entry and best_score >= effective_threshold:
+            # AST-Guided Invalidation: Verify code syntax structure when code intent is detected
+            if getattr(config, "AST_INVALIDATION_ENABLED", True) and (
+                intent in ("code_generation", "sql_database_query")
+                or ASTValidator.contains_code_patterns(user_prompt)
+                or ASTValidator.contains_code_patterns(best_entry.user_prompt)
+            ):
+                is_ast_valid, ast_reason = ASTValidator.validate_structural_parity(user_prompt, best_entry.user_prompt)
+                if not is_ast_valid:
+                    self.total_bypasses += 1
+                    return "BYPASS", None, best_score, f"BYPASS_AST_DIVERGENCE: {ast_reason}"
+
             best_entry.touch()
             self.storage.add_semantic_entry(org_id, best_entry, ttl_seconds=best_entry.ttl_remaining(), max_entries=config.MAX_CACHE_ENTRIES_PER_TENANT)
             self.total_semantic_hits += 1

@@ -857,6 +857,28 @@
       font-size: 13px;
     }
 
+    /* Glowing Sand & Welder Sparks Physics Overlay */
+    .arch-dest-sand-zone {
+      position: relative;
+      display: flow-root;
+      width: 100%;
+    }
+
+    .sand-sparks-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 10;
+      overflow: visible;
+    }
+
+    .arch-dest-orb {
+      cursor: pointer;
+    }
+
     /* Final Destination Hero Node */
     .arch-destination-node {
       display: flex;
@@ -2975,6 +2997,10 @@
           </div>
         </div>
 
+        <!-- Destination Node & Live Telemetry Section with Glowing Sand & Welder Sparks Simulation -->
+        <div class="arch-dest-sand-zone" id="arch-dest-sand-zone">
+          <canvas id="sand-sparks-canvas" class="sand-sparks-canvas" aria-hidden="true"></canvas>
+
         <!-- Destination Node (Centered at Bottom) -->
         <div class="arch-destination-node" id="arch-dest">
           <div class="card-connector-pin pin-top" id="pin-dest-in"></div>
@@ -3016,6 +3042,7 @@
               <div class="telemetry-stat-value gray">HEAD 80e1080 • Clean</div>
             </div>
           </div>
+        </div>
         </div>
 
         <!-- Bottom 4-Pill Feature Row (Spacious & Responsive) -->
@@ -4125,6 +4152,361 @@
       buildCircuitGeometry();
       onScrollFlow();
     }, 200);
+    // ─────────────────────────────────────────────────────────────────────────
+    // GLOWING SAND & WELDER SPARKS ENGINE
+    // Hourglass sand trickle pouring from the bolt icon, cascading over
+    // destination title, subhead, and telemetry drawer with dynamic bounce sparks
+    // ─────────────────────────────────────────────────────────────────────────
+    (function initSandSparks() {
+      const canvas = document.getElementById('sand-sparks-canvas');
+      const zone = document.getElementById('arch-dest-sand-zone');
+      const orb = document.querySelector('.arch-dest-orb');
+      if (!canvas || !zone || !orb) return;
+
+      const ctx = canvas.getContext('2d');
+      let animationFrameId = null;
+      let isVisible = false;
+      let isHovered = false;
+      let width = 0;
+      let height = 0;
+      let dpr = window.devicePixelRatio || 1;
+
+      // Particle pools
+      const sandParticles = [];
+      const sparkParticles = [];
+      const maxSand = 260;
+      const maxSparks = 90;
+
+      // Obstacle ledges cache
+      let obstacles = [];
+      let emitter = { x: 0, y: 0 };
+
+      function updateGeometry() {
+        const zoneRect = zone.getBoundingClientRect();
+        width = zoneRect.width;
+        height = zoneRect.height;
+        dpr = window.devicePixelRatio || 1;
+
+        if (width === 0 || height === 0) return;
+
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        // Emitter position: bottom tip of the bolt icon inside .arch-dest-orb
+        const orbRect = orb.getBoundingClientRect();
+        emitter.x = (orbRect.left - zoneRect.left) + orbRect.width / 2;
+        emitter.y = (orbRect.bottom - zoneRect.top) - 10;
+
+        // Build collision ledges
+        obstacles = [];
+
+        function addLedge(el, insetX = 0, offsetY = 0, isFloor = false) {
+          if (!el) return;
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 || r.height === 0) return;
+          obstacles.push({
+            x1: (r.left - zoneRect.left) + insetX,
+            x2: (r.right - zoneRect.left) - insetX,
+            y: (r.top - zoneRect.top) + offsetY,
+            isFloor: isFloor
+          });
+        }
+
+        // 1. Destination Title: "Instant Tool Replay Delivered"
+        addLedge(document.querySelector('.arch-dest-title'), 6, 2);
+
+        // 2. Subhead: "0.08ms P50 Latency • 0 Cloud Tokens • $0.00 Cost"
+        addLedge(document.querySelector('.arch-dest-sub'), 8, 2);
+
+        // 3. Telemetry Drawer
+        const drawer = document.getElementById('telemetry-drawer');
+        if (drawer) {
+          const dr = drawer.getBoundingClientRect();
+          // Drawer top outer rim
+          addLedge(drawer, 4, 1);
+
+          // Top bar (AUTO-PROBE INTERCEPT EXECUTED / HTTP/1.1 200 OK)
+          addLedge(drawer.querySelector('.telemetry-top-bar'), 6, 2);
+
+          // Intercepted op box (read_file("package.json"))
+          addLedge(drawer.querySelector('.telemetry-op-box'), 6, 2);
+
+          // The 3 stat cards: Replay Latency, Tokens Saved, Workspace Guard
+          drawer.querySelectorAll('.telemetry-stat-cell').forEach(cell => {
+            addLedge(cell, 4, 2);
+          });
+
+          // Drawer bottom inside shelf (floor)
+          obstacles.push({
+            x1: (dr.left - zoneRect.left) + 8,
+            x2: (dr.right - zoneRect.left) - 8,
+            y: (dr.bottom - zoneRect.top) - 6,
+            isFloor: true
+          });
+        }
+      }
+
+      // Spawn glowing sand grains
+      function spawnSand(surge = false) {
+        if (sandParticles.length >= maxSand) return;
+
+        // Hourglass narrow aperture with subtle flutter
+        const angle = (Math.random() - 0.5) * 0.22;
+        const speed = 1.1 + Math.random() * 1.5 + (surge ? 0.7 : 0);
+
+        // Incandescent color gradient: hot white -> brilliant gold -> electric orange
+        const tempChoice = Math.random();
+        let colorCore, colorGlow;
+        if (tempChoice < 0.35) {
+          colorCore = '#ffffff';
+          colorGlow = 'rgba(255, 235, 170, ';
+        } else if (tempChoice < 0.75) {
+          colorCore = '#ffe082';
+          colorGlow = 'rgba(255, 150, 40, ';
+        } else {
+          colorCore = '#ff9e43';
+          colorGlow = 'rgba(233, 93, 44, ';
+        }
+
+        sandParticles.push({
+          x: emitter.x + (Math.random() - 0.5) * 5,
+          y: emitter.y + Math.random() * 2,
+          prevX: emitter.x,
+          prevY: emitter.y,
+          vx: Math.sin(angle) * speed,
+          vy: Math.cos(angle) * speed,
+          radius: 0.85 + Math.random() * 1.25,
+          life: 0,
+          maxLife: 200 + Math.random() * 120,
+          colorCore: colorCore,
+          colorGlow: colorGlow,
+          bounces: 0,
+          rolling: false
+        });
+      }
+
+      // Spawn welder sparks on impact
+      function spawnSparks(x, y, count, baseVx, baseVy) {
+        for (let i = 0; i < count; i++) {
+          if (sparkParticles.length >= maxSparks) break;
+          // Spray upward and outward away from collision point
+          const angle = -Math.PI * 0.15 - Math.random() * Math.PI * 0.7;
+          const speed = 1.6 + Math.random() * 3.8;
+          sparkParticles.push({
+            x: x,
+            y: y,
+            prevX: x,
+            prevY: y,
+            vx: Math.cos(angle) * speed + baseVx * 0.25,
+            vy: Math.sin(angle) * speed + baseVy * 0.1,
+            life: 0,
+            maxLife: 10 + Math.random() * 16,
+            size: 0.8 + Math.random() * 0.8,
+            color: Math.random() > 0.4 ? '#fff4c2' : '#ff9d3a'
+          });
+        }
+      }
+
+      function step() {
+        if (!isVisible) return;
+
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          ctx.clearRect(0, 0, width, height);
+          return;
+        }
+
+        const dest = document.getElementById('arch-dest');
+        const isSurge = isHovered || (dest && dest.classList.contains('active-dest'));
+        const spawnCount = isSurge ? (Math.random() < 0.75 ? 5 : 4) : (Math.random() < 0.65 ? 3 : 2);
+
+        for (let i = 0; i < spawnCount; i++) {
+          spawnSand(isSurge);
+        }
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+
+        const gravity = 0.15;
+
+        // Update & render sand particles
+        for (let i = sandParticles.length - 1; i >= 0; i--) {
+          const p = sandParticles[i];
+          p.life++;
+
+          if (p.life >= p.maxLife) {
+            sandParticles.splice(i, 1);
+            continue;
+          }
+
+          p.prevX = p.x;
+          p.prevY = p.y;
+
+          if (!p.rolling) {
+            p.vy += gravity;
+            p.vx *= 0.993;
+            p.vy = Math.min(p.vy, 8.5);
+          } else {
+            p.vx *= 0.93; // Rolling friction on ledge
+            p.vy = 0;
+          }
+
+          p.x += p.vx;
+          p.y += p.vy;
+
+          // Check collisions with ledges
+          let hitLedge = null;
+          for (let j = 0; j < obstacles.length; j++) {
+            const obs = obstacles[j];
+            if (p.prevY <= obs.y && p.y >= obs.y && p.x >= obs.x1 && p.x <= obs.x2) {
+              hitLedge = obs;
+              break;
+            }
+          }
+
+          if (hitLedge) {
+            p.y = hitLedge.y - 0.5;
+            p.bounces++;
+
+            const impactSpeed = Math.abs(p.vy);
+            if (impactSpeed > 1.8 && p.bounces <= 4) {
+              // Welder spark bounce!
+              p.vy = -impactSpeed * (0.33 + Math.random() * 0.25);
+              p.vx = p.vx * 0.5 + (Math.random() - 0.5) * (2.2 + impactSpeed * 0.4);
+              spawnSparks(p.x, p.y, Math.min(3, Math.floor(impactSpeed)), p.vx, p.vy);
+            } else if (impactSpeed > 0.6 && p.bounces <= 6) {
+              p.vy = -impactSpeed * 0.25;
+              p.vx = p.vx * 0.6 + (Math.random() - 0.5) * 1.3;
+            } else {
+              // Particle settles and rolls along ledge
+              p.rolling = true;
+              p.vy = 0;
+              if (Math.abs(p.vx) < 0.12) {
+                p.vx = (Math.random() - 0.5) * 0.7;
+              }
+            }
+
+            if (hitLedge.isFloor) {
+              p.maxLife = Math.min(p.maxLife, p.life + 35);
+            }
+          } else if (p.rolling) {
+            // Check if particle rolled off the current ledge
+            let stillOnAny = false;
+            for (let j = 0; j < obstacles.length; j++) {
+              const obs = obstacles[j];
+              if (Math.abs(p.y - (obs.y - 0.5)) < 2.5 && p.x >= obs.x1 && p.x <= obs.x2) {
+                stillOnAny = true;
+                break;
+              }
+            }
+            if (!stillOnAny) {
+              // Tumble off edge and fall!
+              p.rolling = false;
+              p.vy = 0.6;
+            }
+          }
+
+          // Cull out of bounds
+          if (p.y > height + 25 || p.x < -25 || p.x > width + 25) {
+            sandParticles.splice(i, 1);
+            continue;
+          }
+
+          // Fade calculation
+          const lifeRatio = p.life / p.maxLife;
+          let alpha = 1;
+          if (lifeRatio > 0.75) {
+            alpha = (1 - lifeRatio) / 0.25;
+          }
+
+          // Render glowing sand grain
+          const r = p.radius;
+          // Outer aura glow
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r * 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = p.colorGlow + (alpha * 0.35).toFixed(2) + ')';
+          ctx.fill();
+
+          // Inner bright crystalline grain
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = p.colorCore;
+          ctx.fill();
+        }
+
+        // Update & render welder micro-sparks
+        for (let i = sparkParticles.length - 1; i >= 0; i--) {
+          const sp = sparkParticles[i];
+          sp.life++;
+          if (sp.life >= sp.maxLife) {
+            sparkParticles.splice(i, 1);
+            continue;
+          }
+
+          sp.prevX = sp.x;
+          sp.prevY = sp.y;
+          sp.vy += gravity * 1.25;
+          sp.vx *= 0.96;
+          sp.x += sp.vx;
+          sp.y += sp.vy;
+
+          ctx.lineWidth = sp.size;
+          ctx.strokeStyle = sp.color;
+          ctx.beginPath();
+          ctx.moveTo(sp.prevX, sp.prevY);
+          ctx.lineTo(sp.x, sp.y);
+          ctx.stroke();
+        }
+
+        ctx.restore();
+        animationFrameId = requestAnimationFrame(step);
+      }
+
+      // Interactive hover & click bursts on orb
+      orb.addEventListener('mouseenter', () => { isHovered = true; });
+      orb.addEventListener('mouseleave', () => { isHovered = false; });
+      orb.addEventListener('click', () => {
+        // Generous spark burst!
+        spawnSparks(emitter.x, emitter.y, 25, 0, 0);
+        for (let k = 0; k < 12; k++) spawnSand(true);
+      });
+
+      // IntersectionObserver for 0% CPU consumption off-screen
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          isVisible = entry.isIntersecting;
+          if (isVisible) {
+            updateGeometry();
+            if (!animationFrameId) {
+              animationFrameId = requestAnimationFrame(step);
+            }
+          } else {
+            if (animationFrameId) {
+              cancelAnimationFrame(animationFrameId);
+              animationFrameId = null;
+            }
+          }
+        });
+      }, { threshold: 0.05 });
+
+      observer.observe(zone);
+
+      // Responsive updates
+      window.addEventListener('resize', () => {
+        if (isVisible) updateGeometry();
+      }, { passive: true });
+
+      const flowWrap = document.getElementById('arch-flow-wrapper');
+      if (flowWrap && window.ResizeObserver) {
+        new ResizeObserver(() => {
+          if (isVisible) updateGeometry();
+        }).observe(flowWrap);
+      }
+
+      updateGeometry();
+    })();
+
   </script>
 </body>
 </html>

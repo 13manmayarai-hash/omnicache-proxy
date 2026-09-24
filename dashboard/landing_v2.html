@@ -894,7 +894,7 @@
       width: 100%;
       height: 100%;
       pointer-events: none;
-      z-index: 10;
+      z-index: 5; /* falling particles are behind the bolt logo */
       overflow: visible;
     }
 
@@ -910,29 +910,46 @@
       text-align: center;
       margin-top: 48px;
       position: relative;
-      z-index: 2;
+      z-index: 8;
     }
 
     .arch-dest-orb {
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      background: radial-gradient(circle, #223440 0%, #1a2730 100%);
+      background: radial-gradient(circle at 50% 88%, rgba(255, 45, 20, 0.45) 0%, rgba(233, 93, 44, 0.2) 32%, #223440 68%, #1a2730 100%);
       border: 2px solid #e95d2c;
-      box-shadow: 0 0 28px rgba(233, 93, 44, 0.45);
+      border-bottom: 2.5px solid #ff2b18;
+      box-shadow: 0 0 24px rgba(233, 93, 44, 0.45), 0 8px 18px -2px rgba(255, 45, 20, 0.75);
       display: flex;
       align-items: center;
       justify-content: center;
       color: #e95d2c;
       margin-bottom: 48px; /* Distinct vertical distance between bolt orb and title for hourglass sand trickle */
       position: relative;
+      z-index: 10; /* strictly above the canvas so falling particles are behind the bolt logo */
       transition: all 400ms ease;
     }
 
+    .arch-dest-orb::after {
+      content: '';
+      position: absolute;
+      bottom: -3px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 36px;
+      height: 14px;
+      background: radial-gradient(ellipse at 50% 100%, rgba(255, 40, 15, 0.95) 0%, rgba(255, 80, 30, 0.45) 45%, transparent 100%);
+      filter: blur(4px);
+      pointer-events: none;
+      border-radius: 50%;
+      z-index: 1;
+    }
+
     .arch-destination-node.active-dest .arch-dest-orb {
-      background: #e95d2c;
+      background: radial-gradient(circle at 50% 88%, rgba(255, 55, 20, 0.95) 0%, #e95d2c 45%, #a63e1b 100%);
       color: #ffffff;
-      box-shadow: 0 0 44px rgba(233, 93, 44, 0.85);
+      box-shadow: 0 0 44px rgba(233, 93, 44, 0.85), 0 10px 24px rgba(255, 40, 15, 0.9);
       transform: scale(1.06);
     }
 
@@ -1940,97 +1957,317 @@
         justify-content: center;
       }
 
-      /* Clean centered vertical spine circuit for phones */
+      /* Mobile Sticky Scrollytelling Container */
+      .arch-map-section {
+        height: 240vh; /* gives ample scroll runway for sequential reveals */
+        position: relative;
+        padding: 0 !important;
+      }
+
+      .arch-map-section .container {
+        position: sticky;
+        top: 66px; /* sits directly under sticky navbar */
+        height: calc(100vh - 66px);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        box-sizing: border-box;
+        overflow: hidden;
+      }
+
+      .block-header {
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        flex-wrap: nowrap;
+        gap: 8px;
+      }
+
+      .block-title-group h2 {
+        font-size: 15px;
+        margin-bottom: 2px;
+      }
+
+      .block-title-group p {
+        display: none; /* keep clean to maximize frame viewport */
+      }
+
+      #packet-fire-btn {
+        padding: 4px 10px;
+        font-size: 11px;
+        min-height: 28px;
+        flex-shrink: 0;
+      }
+
       .arch-flow-wrapper {
         padding-left: 0;
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
+        position: relative;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      /* Steps 1 to 4: 2 by 2 Layout on Mobile */
+      .arch-steps-container {
+        display: grid !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 12px 10px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+
+      .arch-step-row {
+        display: contents !important;
       }
 
       .arch-step-row.step-left,
       .arch-step-row.step-right {
-        justify-content: center;
-        width: 100%;
+        justify-content: stretch;
+        width: auto;
       }
 
+      .arch-annotation {
+        display: none !important;
+      }
+
+      /* All 4 cards fit within mobile frame, start dimmed and reveal with scroll */
       .arch-card {
         width: 100% !important;
-        max-width: 440px !important;
-        margin: 0 auto !important;
+        max-width: 100% !important;
+        margin: 0 !important;
         box-sizing: border-box;
-        padding: 16px 14px;
+        padding: 8px 10px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+        opacity: 0.28;
+        filter: grayscale(0.85);
+        transform: scale(0.97);
+        transition: opacity 350ms cubic-bezier(0.16, 1, 0.3, 1),
+                    filter 350ms cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 350ms cubic-bezier(0.16, 1, 0.3, 1),
+                    border-color 300ms ease,
+                    box-shadow 300ms ease;
       }
 
-      /* On mobile, circuit pins are centered along the vertical spine */
-      .card-connector-pin {
+      .arch-card.revealed,
+      .arch-card.active-glow {
+        opacity: 1 !important;
+        filter: grayscale(0) !important;
+        transform: scale(1) !important;
+        border-color: rgba(233, 93, 44, 0.85);
+        box-shadow: 0 0 16px -2px rgba(233, 93, 44, 0.4);
+      }
+
+      .arch-card .arch-icon-orb {
+        width: 26px;
+        height: 26px;
+      }
+
+      .arch-card .arch-icon-orb svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      .arch-card-tag {
+        font-size: 9px;
+      }
+
+      .arch-card-title {
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .arch-card-desc {
+        font-size: 9.5px;
+        line-height: 1.35;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      .arch-card-meta {
+        font-size: 8.5px;
+        margin-top: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      /* Dedicated Pin Anchors in 2x2 Mobile Layout */
+      /* Card 1 (Top-Left): pin-1-out on RIGHT edge */
+      #pin-1-out {
+        right: -5px !important;
+        left: auto !important;
+        top: 50% !important;
+        bottom: auto !important;
+        transform: translateY(-50%) !important;
+      }
+
+      /* Card 2 (Top-Right): pin-2-in on LEFT edge, pin-2-out on BOTTOM edge */
+      #pin-2-in {
+        left: -5px !important;
+        right: auto !important;
+        top: 50% !important;
+        bottom: auto !important;
+        transform: translateY(-50%) !important;
+      }
+      #pin-2-out {
+        bottom: -5px !important;
+        top: auto !important;
         left: 50% !important;
         right: auto !important;
         transform: translateX(-50%) !important;
       }
 
-      /* Card input pins at top center */
-      #pin-2-in,
-      #pin-3-in,
-      #pin-4-in {
-        top: -6px !important;
+      /* Card 3 (Bottom-Left): pin-3-in on TOP edge, pin-3-out on RIGHT edge */
+      #pin-3-in {
+        top: -5px !important;
         bottom: auto !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
+      }
+      #pin-3-out {
+        right: -5px !important;
+        left: auto !important;
+        top: 50% !important;
+        bottom: auto !important;
+        transform: translateY(-50%) !important;
       }
 
-      /* Card output pins at bottom center */
-      #pin-1-out,
-      #pin-2-out,
-      #pin-3-out,
+      /* Card 4 (Bottom-Right): pin-4-in on LEFT edge, pin-4-out on BOTTOM edge */
+      #pin-4-in {
+        left: -5px !important;
+        right: auto !important;
+        top: 50% !important;
+        bottom: auto !important;
+        transform: translateY(-50%) !important;
+      }
       #pin-4-out {
-        bottom: -6px !important;
+        bottom: -5px !important;
         top: auto !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%) !important;
       }
 
-      /* Destination node centered directly on the vertical spine */
+      /* Destination Node (Centered Below): pin-dest-in on TOP edge of Bolt Orb */
       .arch-destination-node {
+        opacity: 0.28;
+        transform: scale(0.97);
+        transition: opacity 400ms ease, transform 400ms ease;
+        margin-top: 14px;
         align-items: center;
         text-align: center;
         padding-left: 0;
-        margin-top: 48px;
         width: 100%;
       }
 
-      /* Destination pin resting right above the bolt orb */
+      .arch-destination-node.revealed,
+      .arch-destination-node.active-dest {
+        opacity: 1 !important;
+        transform: scale(1) !important;
+      }
+
+      .arch-dest-orb {
+        width: 44px;
+        height: 44px;
+        margin-bottom: 10px;
+      }
+
+      .arch-dest-orb svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .arch-dest-orb::after {
+        width: 26px;
+        height: 10px;
+        filter: blur(3px);
+      }
+
       #pin-dest-in {
-        top: -6px !important;
+        top: -5px !important;
         bottom: auto !important;
         left: 50% !important;
+        right: auto !important;
         transform: translateX(-50%) !important;
+      }
+
+      .arch-dest-title {
+        font-size: 13.5px;
+        margin-bottom: 2px;
+      }
+
+      .arch-dest-sub {
+        font-size: 10px;
       }
 
       .arch-telemetry-drawer {
         width: 100%;
         max-width: 100%;
-        padding: 16px 14px;
+        padding: 8px 12px;
         box-sizing: border-box;
-        margin: 28px auto 0;
+        margin: 10px auto 0;
+        opacity: 0.28;
+        transform: scale(0.97);
+        transition: opacity 400ms ease, transform 400ms ease;
+      }
+
+      .arch-telemetry-drawer.visible,
+      .arch-telemetry-drawer.revealed {
+        opacity: 1 !important;
+        transform: scale(1) !important;
       }
 
       .telemetry-top-bar {
         flex-wrap: wrap;
-        gap: 6px;
+        gap: 4px;
+        padding-bottom: 4px;
+        margin-bottom: 6px;
       }
 
       .telemetry-status-badge {
-        font-size: 11px;
+        font-size: 10px;
+      }
+
+      .telemetry-http-code {
+        font-size: 9.5px;
+      }
+
+      .telemetry-op-box {
+        padding: 5px 8px;
+        margin-bottom: 6px;
+        font-size: 10.5px;
       }
 
       .telemetry-stats-grid {
-        grid-template-columns: 1fr;
-        gap: 10px;
+        grid-template-columns: repeat(3, 1fr) !important;
+        gap: 6px;
+      }
+
+      .telemetry-stat-cell {
+        font-size: 9.5px;
+      }
+
+      .telemetry-stat-title {
+        font-size: 9.5px;
+      }
+
+      .telemetry-stat-value {
+        font-size: 11px;
       }
 
       .arch-pills-row {
-        grid-template-columns: 1fr;
-        gap: 12px;
-        margin-top: 32px;
-        width: 100%;
-        box-sizing: border-box;
+        display: none !important; /* Supplementary pills hidden on mobile so all 4 steps and destination fit in the frame at once */
       }
 
       .probe-top-row {
@@ -2988,6 +3225,7 @@
           <!-- STEP 01: Protocol Intercept (LEFT) -->
           <div class="arch-step-row step-left">
             <div class="arch-card" id="arch-step-1">
+              <div class="card-connector-pin pin-top" id="pin-1-in" style="display:none;" aria-hidden="true"></div>
               <div class="card-connector-pin pin-bottom" id="pin-1-out" style="left: 43px;"></div>
               <div class="arch-icon-orb">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true" focusable="false">
@@ -3105,8 +3343,19 @@
         <div class="arch-destination-node" id="arch-dest">
           <div class="card-connector-pin pin-top" id="pin-dest-in"></div>
           <div class="arch-dest-orb">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true" focusable="false">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id="bolt-heated-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#ff8a50" />
+                  <stop offset="55%" stop-color="#e95d2c" />
+                  <stop offset="80%" stop-color="#ff3b20" />
+                  <stop offset="100%" stop-color="#ff1a10" />
+                </linearGradient>
+                <filter id="bolt-heated-filter" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#ff2610" flood-opacity="0.95" />
+                </filter>
+              </defs>
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="url(#bolt-heated-grad)" stroke-width="2.4" filter="url(#bolt-heated-filter)" fill="rgba(255, 35, 15, 0.08)"></polygon>
             </svg>
           </div>
           <div class="arch-dest-title">Instant Tool Replay Delivered</div>
@@ -3762,61 +4011,56 @@
 
       const isMobile = window.innerWidth <= 640;
 
+      let d1, d2, d3, d4;
+
       if (isMobile) {
-        // Enforce exact vertical spine alignment down the center on mobile screens
-        const centerX = wRect.width / 2;
-        p1.x = centerX;
-        p2.x = centerX;
-        p3.x = centerX;
-        p4.x = centerX;
-        p5.x = centerX;
-        p6.x = centerX;
-        p7.x = centerX;
-        p8.x = centerX;
-      }
-
-      // Segment 1: p1 -> p2 (down then right)
-      const dx1 = p2.x - p1.x;
-      const dy1 = p2.y - p1.y;
-      let d1;
-      if (isMobile || Math.abs(dx1) < 8) {
+        // 2x2 Grid Layout Connections:
+        // Segment 1: Card 1 right -> Card 2 left (Horizontal bridge across Row 1)
         d1 = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
-      } else {
-        const r1 = Math.max(2, Math.min(18, dy1 / 2, Math.abs(dx1) / 2));
-        const s1 = dx1 >= 0 ? 1 : -1;
-        d1 = `M ${p1.x} ${p1.y} L ${p1.x} ${p2.y - r1} Q ${p1.x} ${p2.y} ${p1.x + s1 * r1} ${p2.y} L ${p2.x} ${p2.y}`;
-      }
 
-      // Segment 2: p3 -> p4 (down then left)
-      const dx2 = p4.x - p3.x;
-      const dy2 = p4.y - p3.y;
-      let d2;
-      if (isMobile || Math.abs(dx2) < 8) {
-        d2 = `M ${p3.x} ${p3.y} L ${p4.x} ${p4.y}`;
-      } else {
-        const r2 = Math.max(2, Math.min(18, dy2 / 2, Math.abs(dx2) / 2));
-        const s2 = dx2 <= 0 ? -1 : 1;
-        d2 = `M ${p3.x} ${p3.y} L ${p3.x} ${p4.y - r2} Q ${p3.x} ${p4.y} ${p3.x + s2 * r2} ${p4.y} L ${p4.x} ${p4.y}`;
-      }
+        // Segment 2: Card 2 bottom -> Card 3 top (Smooth S-curve through center gap)
+        const midY2 = (p3.y + p4.y) / 2;
+        d2 = `M ${p3.x} ${p3.y} C ${p3.x} ${midY2}, ${p4.x} ${midY2}, ${p4.x} ${p4.y}`;
 
-      // Segment 3: p5 -> p6 (down then right)
-      const dx3 = p6.x - p5.x;
-      const dy3 = p6.y - p5.y;
-      let d3;
-      if (isMobile || Math.abs(dx3) < 8) {
+        // Segment 3: Card 3 right -> Card 4 left (Horizontal bridge across Row 2)
         d3 = `M ${p5.x} ${p5.y} L ${p6.x} ${p6.y}`;
-      } else {
-        const r3 = Math.max(2, Math.min(18, dy3 / 2, Math.abs(dx3) / 2));
-        const s3 = dx3 >= 0 ? 1 : -1;
-        d3 = `M ${p5.x} ${p5.y} L ${p5.x} ${p6.y - r3} Q ${p5.x} ${p6.y} ${p5.x + s3 * r3} ${p6.y} L ${p6.x} ${p6.y}`;
-      }
 
-      // Segment 4: p7 -> p8 (down, curve toward center p8.x, curve down into Destination pin)
-      const dx4 = p8.x - p7.x;
-      let d4;
-      if (isMobile || Math.abs(dx4) < 8) {
-        d4 = `M ${p7.x} ${p7.y} L ${p8.x} ${p8.y}`;
+        // Segment 4: Card 4 bottom -> Destination top (Smooth curve into centered Bolt Orb)
+        const midY4 = (p7.y + p8.y) / 2;
+        d4 = `M ${p7.x} ${p7.y} C ${p7.x} ${midY4}, ${p8.x} ${midY4}, ${p8.x} ${p8.y}`;
       } else {
+        // Desktop snaking circuit geometry
+        const dx1 = p2.x - p1.x;
+        const dy1 = p2.y - p1.y;
+        if (Math.abs(dx1) < 8) {
+          d1 = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+        } else {
+          const r1 = Math.max(2, Math.min(18, dy1 / 2, Math.abs(dx1) / 2));
+          const s1 = dx1 >= 0 ? 1 : -1;
+          d1 = `M ${p1.x} ${p1.y} L ${p1.x} ${p2.y - r1} Q ${p1.x} ${p2.y} ${p1.x + s1 * r1} ${p2.y} L ${p2.x} ${p2.y}`;
+        }
+
+        const dx2 = p4.x - p3.x;
+        const dy2 = p4.y - p3.y;
+        if (Math.abs(dx2) < 8) {
+          d2 = `M ${p3.x} ${p3.y} L ${p4.x} ${p4.y}`;
+        } else {
+          const r2 = Math.max(2, Math.min(18, dy2 / 2, Math.abs(dx2) / 2));
+          const s2 = dx2 <= 0 ? -1 : 1;
+          d2 = `M ${p3.x} ${p3.y} L ${p3.x} ${p4.y - r2} Q ${p3.x} ${p4.y} ${p3.x + s2 * r2} ${p4.y} L ${p4.x} ${p4.y}`;
+        }
+
+        const dx3 = p6.x - p5.x;
+        const dy3 = p6.y - p5.y;
+        if (Math.abs(dx3) < 8) {
+          d3 = `M ${p5.x} ${p5.y} L ${p6.x} ${p6.y}`;
+        } else {
+          const r3 = Math.max(2, Math.min(18, dy3 / 2, Math.abs(dx3) / 2));
+          const s3 = dx3 >= 0 ? 1 : -1;
+          d3 = `M ${p5.x} ${p5.y} L ${p5.x} ${p6.y - r3} Q ${p5.x} ${p6.y} ${p5.x + s3 * r3} ${p6.y} L ${p6.x} ${p6.y}`;
+        }
+
+        const dx4 = p8.x - p7.x;
         const midY = (p7.y + p8.y) / 2;
         const r4 = Math.max(2, Math.min(18, (midY - p7.y) / 2, Math.abs(dx4) / 2));
         const s4 = dx4 <= 0 ? -1 : 1;
@@ -3865,53 +4109,71 @@
       const wAct3 = document.getElementById('wire-active-3');
       const wAct4 = document.getElementById('wire-active-4');
 
-      // Stage 1 activation
-      if (s1) s1.classList.toggle('active-glow', p >= 0.03);
+      // Stage 1 activation & reveal
+      if (s1) {
+        s1.classList.toggle('revealed', p >= 0.02);
+        s1.classList.toggle('active-glow', p >= 0.02);
+      }
 
-      // Wire 1 progress [0.03, 0.25]
-      const p1 = Math.min(1, Math.max(0, (p - 0.03) / 0.22));
+      // Wire 1 progress [0.02, 0.24]
+      const p1 = Math.min(1, Math.max(0, (p - 0.02) / 0.22));
       if (wAct1 && pathLengths[0]) wAct1.style.strokeDashoffset = pathLengths[0] * (1 - p1);
 
-      // Stage 2 activation
-      if (s2) s2.classList.toggle('active-glow', p >= 0.25);
+      // Stage 2 activation & reveal
+      if (s2) {
+        s2.classList.toggle('revealed', p >= 0.24);
+        s2.classList.toggle('active-glow', p >= 0.24);
+      }
 
-      // Wire 2 progress [0.25, 0.47]
-      const p2 = Math.min(1, Math.max(0, (p - 0.25) / 0.22));
+      // Wire 2 progress [0.24, 0.48]
+      const p2 = Math.min(1, Math.max(0, (p - 0.24) / 0.24));
       if (wAct2 && pathLengths[1]) wAct2.style.strokeDashoffset = pathLengths[1] * (1 - p2);
 
-      // Stage 3 activation
-      if (s3) s3.classList.toggle('active-glow', p >= 0.47);
+      // Stage 3 activation & reveal
+      if (s3) {
+        s3.classList.toggle('revealed', p >= 0.48);
+        s3.classList.toggle('active-glow', p >= 0.48);
+      }
 
-      // Wire 3 progress [0.47, 0.69]
-      const p3 = Math.min(1, Math.max(0, (p - 0.47) / 0.22));
+      // Wire 3 progress [0.48, 0.70]
+      const p3 = Math.min(1, Math.max(0, (p - 0.48) / 0.22));
       if (wAct3 && pathLengths[2]) wAct3.style.strokeDashoffset = pathLengths[2] * (1 - p3);
 
-      // Stage 4 activation
-      if (s4) s4.classList.toggle('active-glow', p >= 0.69);
+      // Stage 4 activation & reveal
+      if (s4) {
+        s4.classList.toggle('revealed', p >= 0.70);
+        s4.classList.toggle('active-glow', p >= 0.70);
+      }
 
-      // Wire 4 progress [0.69, 0.85]
-      const p4 = Math.min(1, Math.max(0, (p - 0.69) / 0.16));
+      // Wire 4 progress [0.70, 0.88]
+      const p4 = Math.min(1, Math.max(0, (p - 0.70) / 0.18));
       if (wAct4 && pathLengths[3]) wAct4.style.strokeDashoffset = pathLengths[3] * (1 - p4);
 
       // Destination Node & Telemetry Drawer
-      const isComplete = p >= 0.85;
-      if (dest) dest.classList.toggle('active-dest', isComplete);
-      if (drawer) drawer.classList.toggle('visible', isComplete);
-      if (drawer) drawer.classList.toggle('active-glow', isComplete);
+      const isComplete = p >= 0.88;
+      if (dest) {
+        dest.classList.toggle('revealed', isComplete);
+        dest.classList.toggle('active-dest', isComplete);
+      }
+      if (drawer) {
+        drawer.classList.toggle('revealed', isComplete);
+        drawer.classList.toggle('visible', isComplete);
+        drawer.classList.toggle('active-glow', isComplete);
+      }
 
       // Moving packet dot along current active wire
       if (!dot) return;
-      if (p < 0.03 || p >= 0.85) {
+      if (p < 0.02 || p >= 0.88) {
         dot.style.opacity = '0';
       } else {
         dot.style.opacity = '1';
         let activeEl = null;
         let subP = 0;
-        if (p < 0.25) {
+        if (p < 0.24) {
           activeEl = wAct1; subP = p1;
-        } else if (p < 0.47) {
+        } else if (p < 0.48) {
           activeEl = wAct2; subP = p2;
-        } else if (p < 0.69) {
+        } else if (p < 0.70) {
           activeEl = wAct3; subP = p3;
         } else {
           activeEl = wAct4; subP = p4;
@@ -3940,6 +4202,7 @@
       if (!section) return;
       const rect = section.getBoundingClientRect();
       const vh = window.innerHeight;
+      const isMobile = window.innerWidth <= 640;
 
       // If user has fired manual packet, hold completed state until they scroll completely away
       if (hasFiredPacket) {
@@ -3951,14 +4214,27 @@
         }
       }
 
-      // Start when section top reaches 60% of viewport, finish when bottom reaches 85%
-      const startY = vh * 0.60;
-      const endY = vh * 0.85;
-      const totalDistance = (rect.height - (endY - startY)) || rect.height;
-      const currentDistance = startY - rect.top;
+      let p = 0;
+      if (isMobile) {
+        // Pinned sticky scroll progression on mobile:
+        // Section pinned at top: 66px until rect.bottom <= vh
+        const pinTop = 66;
+        const totalPinScroll = rect.height - vh;
+        if (totalPinScroll > 0) {
+          const currentPinScroll = pinTop - rect.top;
+          p = currentPinScroll / (totalPinScroll * 0.88);
+          p = Math.min(1, Math.max(0, p));
+        }
+      } else {
+        // Desktop: start when section top reaches 60% of viewport, finish when bottom reaches 85%
+        const startY = vh * 0.60;
+        const endY = vh * 0.85;
+        const totalDistance = (rect.height - (endY - startY)) || rect.height;
+        const currentDistance = startY - rect.top;
+        p = currentDistance / totalDistance;
+        p = Math.min(1, Math.max(0, p));
+      }
 
-      let p = currentDistance / totalDistance;
-      p = Math.min(1, Math.max(0, p));
       renderScrollProgress(p);
     }
 
@@ -4307,10 +4583,12 @@
         canvas.height = Math.round(height * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        // Emitter position: bottom tip of the bolt icon inside .arch-dest-orb
+        // Emitter position: middle/lower-back of the bolt icon inside .arch-dest-orb
+        // Since .arch-dest-orb has z-index: 10 and canvas has z-index: 5,
+        // particles start behind the bolt logo and stream out from underneath it!
         const orbRect = orb.getBoundingClientRect();
         emitter.x = (orbRect.left - zoneRect.left) + orbRect.width / 2;
-        emitter.y = (orbRect.bottom - zoneRect.top) - 10;
+        emitter.y = (orbRect.top - zoneRect.top) + orbRect.height * 0.65;
 
         // Build collision ledges
         obstacles = [];
@@ -4361,7 +4639,7 @@
         });
       }
 
-      // Spawn glowing sand flare grains
+      // Spawn glowing sand flare grains (the size of sparks flying)
       function spawnSand(surge = false) {
         if (sandParticles.length >= maxSand) return;
 
@@ -4383,11 +4661,12 @@
           colorGlow = 'rgba(233, 93, 44, ';
         }
 
-        const radius = 0.9 + Math.random() * 1.35;
+        // Waterfall drops the size of sparks flying
+        const radius = 0.55 + Math.random() * 0.45;
         const hasGlint = Math.random() < 0.15; // 15% have crystal starflare glints
 
         sandParticles.push({
-          x: emitter.x + (Math.random() - 0.5) * 6,
+          x: emitter.x + (Math.random() - 0.5) * 5,
           y: emitter.y + Math.random() * 2,
           prevX: emitter.x,
           prevY: emitter.y,
@@ -4405,7 +4684,7 @@
         });
       }
 
-      // Spawn welder sparks on impact
+      // Spawn welder sparks on impact (slightly smaller than original size)
       function spawnSparks(x, y, count, baseVx, baseVy) {
         for (let i = 0; i < count; i++) {
           if (sparkParticles.length >= maxSparks) break;
@@ -4421,7 +4700,7 @@
             vy: Math.sin(angle) * speed + baseVy * 0.1,
             life: 0,
             maxLife: 10 + Math.random() * 18,
-            size: 0.85 + Math.random() * 0.85,
+            size: 0.65 + Math.random() * 0.65, // slightly smaller than original 0.85-1.7
             color: Math.random() > 0.4 ? '#fff6c8' : '#ff9e3c'
           });
         }
@@ -4554,27 +4833,27 @@
           const speed = Math.sqrt(motionDx * motionDx + motionDy * motionDy);
 
           // 1. Motion flare streak (waterfall tail)
-          if (speed > 1.2) {
+          if (speed > 1.0) {
             ctx.beginPath();
             ctx.moveTo(p.prevX, p.prevY);
             ctx.lineTo(p.x, p.y);
-            ctx.lineWidth = r * 1.8;
-            ctx.strokeStyle = p.colorGlow + (alpha * 0.45).toFixed(2) + ')';
+            ctx.lineWidth = r * 1.4;
+            ctx.strokeStyle = p.colorGlow + (alpha * 0.40).toFixed(2) + ')';
             ctx.stroke();
 
             // Hot inner streak
             ctx.beginPath();
             ctx.moveTo(p.prevX * 0.35 + p.x * 0.65, p.prevY * 0.35 + p.y * 0.65);
             ctx.lineTo(p.x, p.y);
-            ctx.lineWidth = r * 0.9;
+            ctx.lineWidth = r * 0.75;
             ctx.strokeStyle = p.colorCore;
             ctx.stroke();
           }
 
           // 2. Radiant aura glow
           ctx.beginPath();
-          ctx.arc(p.x, p.y, r * 2.8, 0, Math.PI * 2);
-          ctx.fillStyle = p.colorGlow + (alpha * 0.35).toFixed(2) + ')';
+          ctx.arc(p.x, p.y, r * 2.0, 0, Math.PI * 2);
+          ctx.fillStyle = p.colorGlow + (alpha * 0.30).toFixed(2) + ')';
           ctx.fill();
 
           // 3. Incandescent grain core

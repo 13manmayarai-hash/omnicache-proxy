@@ -930,6 +930,11 @@ class ToolExecutionCache:
             self.clear()
         return evicted
 
+    def invalidate(self, resource_pattern: Optional[str] = None, workspace_dir: Optional[str] = None) -> int:
+        """Invalidates tool cache entries matching a workspace directory or resource pattern."""
+        target = workspace_dir or resource_pattern
+        return self.invalidate_workspace(target)
+
     def clear(self) -> None:
         """Clears all in-memory and durable SQLite tool records and debounced git state."""
         invalidate_git_state_cache()

@@ -243,17 +243,26 @@ class SwarmBus:
 
     def invalidate_on_mutation(
         self,
-        swarm_id: str,
+        swarm_id: Optional[str] = None,
         mutating_agent_id: Optional[str] = None,
         mutated_resource: Optional[str] = None,
         agent_id: Optional[str] = None
     ) -> int:
         """
-        Invalidates cached read/view/grep tool results in the swarm when any agent
-        performs a mutative change (file edit, write, commit, delete).
+        Invalidates cached read/view/grep tool results in the swarm (or across all swarms if swarm_id is None or '*')
+        when any agent performs a mutative change (file edit, write, commit, delete).
         """
-        if not swarm_id:
-            return 0
+        if not swarm_id or swarm_id in ("*", "all"):
+            with self._lock:
+                total_inv = 0
+                for sid in list(self._swarm_store.keys()):
+                    total_inv += self.invalidate_on_mutation(
+                        swarm_id=sid,
+                        mutating_agent_id=mutating_agent_id,
+                        mutated_resource=mutated_resource,
+                        agent_id=agent_id
+                    )
+                return total_inv
 
         effective_agent = mutating_agent_id or agent_id or "mutating_agent"
 
@@ -364,6 +373,14 @@ class SwarmBus:
             self.cross_agent_hits = 0
             self.swarm_tokens_saved = 0
             self.mutations_propagated = 0
+
+    def clear(self) -> None:
+        """Clears all swarm cache entries, graphs, and ledgers."""
+        self.reset_stats()
+
+    def clear_all(self) -> None:
+        """Alias for clear()."""
+        self.reset_stats()
 
 
 # Global singleton instance

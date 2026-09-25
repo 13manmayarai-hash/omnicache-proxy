@@ -211,24 +211,27 @@ class DualTierCache:
         if temperature > config.TEMPERATURE_BYPASS_THRESHOLD:
             return "creative_bypass", 1.01, f"BYPASS_HIGH_TEMPERATURE: Temperature {temperature:.2f} > {config.TEMPERATURE_BYPASS_THRESHOLD:.2f} requires non-deterministic execution"
 
+        # AI-01: Strip invisible/zero-width unicode characters to prevent regex evasion
+        cleaned_prompt = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\ufeff]", "", prompt or "")
+
         code_patterns = [r"```", r"def\s+\w+\(", r"function\s+\w+\(", r"class\s+\w+:", r"SELECT\s+.+\s+FROM", r"import\s+\w+"]
         for pat in code_patterns:
-            if re.search(pat, prompt, re.IGNORECASE):
+            if re.search(pat, cleaned_prompt, re.IGNORECASE):
                 return "code_generation", 0.98, "INTENT_CODE_GENERATION: Strict 0.98 threshold applied for syntax fidelity"
 
-        if re.search(r"(\d+\s*[\+\-\*\/\^]\s*\d+|\bcalculate\b|\bsolve\b|\bevaluate\b)", prompt, re.IGNORECASE):
+        if re.search(r"(\d+\s*[\+\-\*\/\^]\s*\d+|\bcalculate\b|\bsolve\b|\bevaluate\b)", cleaned_prompt, re.IGNORECASE):
             return "math_calculation", 0.98, "INTENT_MATH_CALCULATION: Strict 0.98 threshold applied for arithmetic accuracy"
 
-        if re.search(r"\b(reason\s+step\s+by\s+step|think\s+deeply|chain\s+of\s+thought|prove\s+that|derive\b|mathematical\s+proof)\b", prompt, re.IGNORECASE):
+        if re.search(r"\b(reason\s+step\s+by\s+step|think\s+deeply|chain\s+of\s+thought|prove\s+that|derive\b|mathematical\s+proof)\b", cleaned_prompt, re.IGNORECASE):
             return "deep_reasoning", 0.98, "INTENT_DEEP_REASONING: Strict 0.98 threshold applied for multi-step reasoning accuracy"
 
-        if re.search(r"\b(CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+TABLE)\b", prompt, re.IGNORECASE):
+        if re.search(r"\b(CREATE\s+TABLE|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE\s+(?:TABLE\s+)?|DROP\s+(?:DATABASE|SCHEMA|VIEW|INDEX)|GRANT\s+|REVOKE\s+|MERGE\s+INTO)\b", cleaned_prompt, re.IGNORECASE):
             return "sql_database_query", 0.98, "INTENT_SQL_DATABASE: Strict 0.98 threshold applied for schema/data mutation fidelity"
 
-        if re.search(r"\b(format\s+as\s+json|output\s+valid\s+json|parse\s+into\s+json|return\s+json)\b", prompt, re.IGNORECASE):
+        if re.search(r"\b(format\s+as\s+json|output\s+valid\s+json|parse\s+into\s+json|return\s+json)\b", cleaned_prompt, re.IGNORECASE):
             return "structured_json", 0.95, "INTENT_STRUCTURED_JSON: Strict 0.95 threshold applied for JSON format conformity"
 
-        if re.search(r"\b\d+\b", prompt):
+        if re.search(r"\b\d+\b", cleaned_prompt):
             return "numeric_indexed_query", 0.90, "INTENT_NUMERIC_INDEXED_QUERY: Strict 0.90 threshold applied for numerical/index precision"
 
         return "conversational_qa", config.DEFAULT_SIMILARITY_THRESHOLD, f"INTENT_CONVERSATIONAL_QA: Standard threshold {config.DEFAULT_SIMILARITY_THRESHOLD:.2f} applied"
@@ -252,6 +255,8 @@ class DualTierCache:
         query_family = get_model_family(model)
         response_format = payload.get("response_format", None)
         tools = payload.get("tools", None)
+        tool_choice = payload.get("tool_choice", None)
+        functions = payload.get("functions", None)
         schema_hash = RequestHasher.compute_schema_hash(response_format)
         tools_hash = RequestHasher.compute_tools_hash(tools)
         
@@ -273,7 +278,7 @@ class DualTierCache:
             self.total_bypasses += 1
             return "BYPASS", None, 0.0, "BYPASS_MULTIMODAL: Vision/multimodal payload requires deterministic L1 exact match"
 
-        if tools or tools_hash != "no_tools":
+        if tools or tools_hash != "no_tools" or (tool_choice and tool_choice != "none") or functions:
             self.total_bypasses += 1
             return "BYPASS", None, 0.0, "BYPASS_AGENT_TOOLS: Tool/function execution present; fuzzy semantic matching bypassed"
 

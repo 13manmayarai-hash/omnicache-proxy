@@ -113,6 +113,7 @@ def _handle_mesh_tombstone(resource_id: str, reason: str, metadata: Dict[str, An
         cache_instance.purge()
         radix_tree.clear()
         swarm_bus.clear_all()
+        tool_cache.clear()
     elif resource_id.startswith("tag:"):
         tag = resource_id[4:]
         cache_instance.invalidate_tag(tag)
@@ -121,9 +122,7 @@ def _handle_mesh_tombstone(resource_id: str, reason: str, metadata: Dict[str, An
         swarm_bus.invalidate_on_mutation(mutated_resource=f_path)
         tool_cache.invalidate(resource_pattern=f_path)
     else:
-        for org_dict in list(cache_instance.l1_exact_cache.values()):
-            if isinstance(org_dict, dict):
-                org_dict.pop(resource_id, None)
+        cache_instance.delete_entry(resource_id)
         tool_cache.invalidate(resource_pattern=resource_id)
 
 mesh_bus.register_invalidation_handler(_handle_mesh_tombstone)
@@ -659,7 +658,8 @@ async def handle_chat_completions(request: Request) -> Response:
     cache_tag = headers.get("x-cache-tag", None)
     auth_header = headers.get("authorization", None)
 
-    swarm_id = (headers.get("x-omnicache-swarm-id") or payload.get("swarm_id") or "").strip()
+    raw_swarm_id = (headers.get("x-omnicache-swarm-id") or payload.get("swarm_id") or "").strip()
+    swarm_id = f"{org_id}:{raw_swarm_id}" if raw_swarm_id else ""
     agent_id = (headers.get("x-omnicache-agent-id") or headers.get("x-omnicache-subagent-id") or payload.get("agent_id") or "lead").strip()
     parent_agent = (headers.get("x-omnicache-parent-agent") or payload.get("parent_agent") or "").strip()
 
@@ -812,7 +812,7 @@ async def handle_chat_completions(request: Request) -> Response:
                     "X-Cascade-Applied": "false",
                     "X-OmniCache-Swarm-Hit": "true",
                     "X-OmniCache-Origin-Agent": str(s_meta.get("origin_agent_id")),
-                    "X-OmniCache-Swarm-ID": swarm_id,
+                    "X-OmniCache-Swarm-ID": raw_swarm_id,
                     **cors_headers
                 }
                 if is_stream:
@@ -1533,7 +1533,8 @@ async def handle_anthropic_messages(request: Request) -> Response:
         "tools": anthropic_payload.get("tools", None)
     }
 
-    swarm_id = (headers.get("x-omnicache-swarm-id") or anthropic_payload.get("swarm_id") or "").strip()
+    raw_swarm_id = (headers.get("x-omnicache-swarm-id") or anthropic_payload.get("swarm_id") or "").strip()
+    swarm_id = f"{org_id}:{raw_swarm_id}" if raw_swarm_id else ""
     agent_id = (headers.get("x-omnicache-agent-id") or headers.get("x-omnicache-subagent-id") or anthropic_payload.get("agent_id") or "lead").strip()
     parent_agent = (headers.get("x-omnicache-parent-agent") or anthropic_payload.get("parent_agent") or "").strip()
 
@@ -1579,7 +1580,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
                     "X-Cascade-Applied": "false",
                     "X-OmniCache-Swarm-Hit": "true",
                     "X-OmniCache-Origin-Agent": str(s_meta.get("origin_agent_id")),
-                    "X-OmniCache-Swarm-ID": swarm_id,
+                    "X-OmniCache-Swarm-ID": raw_swarm_id,
                     **cors_headers
                 }
                 if is_stream:
@@ -2177,7 +2178,8 @@ async def handle_tool_replay(request: Request) -> Response:
         ttl_seconds = body.get("ttl_seconds", None)
         env_fp = f"{org_id}:{raw_fp}"
 
-        swarm_id = (request.headers.get("x-omnicache-swarm-id") or body.get("swarm_id") or "").strip()
+        raw_swarm_id = (request.headers.get("x-omnicache-swarm-id") or body.get("swarm_id") or "").strip()
+        swarm_id = f"{org_id}:{raw_swarm_id}" if raw_swarm_id else ""
         agent_id = (request.headers.get("x-omnicache-agent-id") or request.headers.get("x-omnicache-subagent-id") or body.get("agent_id") or "lead").strip()
         parent_agent = (request.headers.get("x-omnicache-parent-agent") or body.get("parent_agent") or "").strip()
 
@@ -2327,7 +2329,7 @@ async def handle_tool_replay(request: Request) -> Response:
         if swarm_hit:
             resp_headers["X-OmniCache-Swarm-Hit"] = "true"
             resp_headers["X-OmniCache-Origin-Agent"] = str(origin_agent or "peer")
-            resp_headers["X-OmniCache-Swarm-ID"] = swarm_id
+            resp_headers["X-OmniCache-Swarm-ID"] = raw_swarm_id
 
         return JSONResponse({
             "status": "HIT",
@@ -3063,13 +3065,16 @@ async def handle_swarm_topology(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
-    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    auth_ok, auth_err, _, org_id = authenticate_tenant(request)
     if not auth_ok:
         return auth_err
     swarm_id = request.query_params.get("swarm_id", "").strip()
     if not swarm_id:
         return JSONResponse({"error": "Query parameter 'swarm_id' is required"}, status_code=400, headers=cors_headers)
-    topology = swarm_bus.get_swarm_topology(swarm_id)
+    effective_swarm_id = f"{org_id}:{swarm_id}" if org_id and not swarm_id.startswith(f"{org_id}:") else swarm_id
+    topology = swarm_bus.get_swarm_topology(effective_swarm_id)
+    if "swarm_id" in topology and topology["swarm_id"].startswith(f"{org_id}:"):
+        topology["swarm_id"] = topology["swarm_id"][len(f"{org_id}:"):]
     return JSONResponse(topology, headers=cors_headers)
 
 
@@ -3099,21 +3104,22 @@ async def handle_swarm_delegate(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
-    auth_ok, auth_err, _, _ = authenticate_tenant(request)
+    auth_ok, auth_err, _, org_id = authenticate_tenant(request)
     if not auth_ok:
         return auth_err
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON payload"}, status_code=400, headers=cors_headers)
-    swarm_id = (body.get("swarm_id") or "").strip()
+    raw_swarm_id = (body.get("swarm_id") or "").strip()
     parent_agent = (body.get("parent_agent") or "").strip()
     subagent_id = (body.get("subagent_id") or body.get("agent_id") or "").strip()
     task_prompt = body.get("task_prompt", "")
     metadata = body.get("metadata", {})
-    if not swarm_id or not parent_agent or not subagent_id:
+    if not raw_swarm_id or not parent_agent or not subagent_id:
         return JSONResponse({"error": "swarm_id, parent_agent, and subagent_id/agent_id are required"}, status_code=400, headers=cors_headers)
-    node = swarm_bus.record_delegation(swarm_id, parent_agent, subagent_id, task_prompt=task_prompt, metadata=metadata)
+    effective_swarm_id = f"{org_id}:{raw_swarm_id}" if org_id and not raw_swarm_id.startswith(f"{org_id}:") else raw_swarm_id
+    node = swarm_bus.record_delegation(effective_swarm_id, parent_agent, subagent_id, task_prompt=task_prompt, metadata=metadata)
     return JSONResponse({
         "status": "success",
         "message": f"Delegation recorded: {parent_agent} -> {subagent_id}",
@@ -3742,12 +3748,13 @@ async def handle_signup(request: Request) -> Response:
         synchronous=True
     )
 
-    print(f"👤 [OmniCache Signup] Registered free tenant: email={email}, org_id={org_id}, team='{team_name}', ip={client_ip}", file=sys.stderr)
+    masked_email = f"{email[:2]}***@{email.split('@')[-1]}" if "@" in email else "***"
+    print(f"👤 [OmniCache Signup] Registered free tenant: email={masked_email}, org_id={org_id}, team='{team_name}'", file=sys.stderr)
     emit_telemetry_event("user_signup", {
-        "email": email,
+        "email": masked_email,
         "org_id": org_id,
         "team_name": team_name,
-        "ip": client_ip,
+        "ip": "[REDACTED]",
         "timestamp": now
     })
     asyncio.create_task(broadcast_ws_event("new_signup", {
@@ -5059,13 +5066,14 @@ async def handle_google_callback(request: Request) -> Response:
             created_at=time.time(),
             synchronous=True
         )
-        print(f"👤 [OmniCache Google Auth] Auto-provisioned free tenant: email={email}, org_id={org_id}, team='{team_name}', ip={client_ip}", file=sys.stderr)
+        masked_email = f"{email[:2]}***@{email.split('@')[-1]}" if "@" in email else "***"
+        print(f"👤 [OmniCache Google Auth] Auto-provisioned free tenant: email={masked_email}, org_id={org_id}, team='{team_name}'", file=sys.stderr)
         emit_telemetry_event("user_signup", {
-            "email": email,
+            "email": masked_email,
             "org_id": org_id,
             "team_name": team_name,
             "provider": "google",
-            "ip": client_ip,
+            "ip": "[REDACTED]",
             "timestamp": time.time()
         })
         asyncio.create_task(broadcast_ws_event("new_signup", {
@@ -5181,16 +5189,29 @@ async def handle_mcp(request: Request) -> Response:
     client_proto_version = request.headers.get("mcp-protocol-version", "2024-11-05")
     proto_version = "2024-11-05" if "2024-11-05" in client_proto_version else client_proto_version
 
+    now = time.time()
+    # Evict expired MCP sessions (> 3600 seconds)
+    expired_sessions = [sid for sid, sdata in list(MCP_ACTIVE_SESSIONS.items()) if now - sdata.get("created_at", 0) > 3600]
+    for sid in expired_sessions:
+        MCP_ACTIVE_SESSIONS.pop(sid, None)
+
     # Session ID negotiation
     session_id = request.headers.get("mcp-session-id") or request.query_params.get("sessionId") or str(uuid.uuid4())
-    if session_id not in MCP_ACTIVE_SESSIONS:
+    if session_id in MCP_ACTIVE_SESSIONS:
+        session_data = MCP_ACTIVE_SESSIONS[session_id]
+        if session_data.get("org_id") != org_id:
+            return JSONResponse(
+                {"error": "Forbidden: MCP session belongs to another tenant"},
+                status_code=403,
+                headers=cors_headers
+            )
+    else:
         MCP_ACTIVE_SESSIONS[session_id] = {
-            "created_at": time.time(),
+            "created_at": now,
             "org_id": org_id,
             "queue": asyncio.Queue()
         }
-
-    session_data = MCP_ACTIVE_SESSIONS[session_id]
+        session_data = MCP_ACTIVE_SESSIONS[session_id]
 
     base_headers = dict(cors_headers)
     base_headers["Mcp-Session-Id"] = session_id
@@ -5315,6 +5336,18 @@ async def handle_ws_http(request: Request) -> Response:
 
 async def handle_ws(websocket: WebSocket):
     """Native WebSocket endpoint for client connections, live streaming, and real-time activity ticker."""
+    if getattr(config, "REQUIRE_AUTH", False):
+        key = websocket.query_params.get("api_key") or websocket.query_params.get("key")
+        if not key:
+            key = websocket.headers.get("x-api-key") or websocket.headers.get("authorization", "").replace("Bearer ", "").strip()
+        if not key:
+            await websocket.close(code=1008, reason="Unauthorized: Valid API key required")
+            return
+        allowed, auth_reason, key_info = quota_manager.check_authorization(key)
+        if not allowed:
+            await websocket.close(code=1008, reason=f"Forbidden: {auth_reason}")
+            return
+
     await websocket.accept()
     ACTIVE_WS_CLIENTS.add(websocket)
     try:

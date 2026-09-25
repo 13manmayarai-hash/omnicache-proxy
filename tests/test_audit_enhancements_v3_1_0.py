@@ -103,11 +103,12 @@ def test_mcp_sse_session_queue_forwarding():
     client = TestClient(app)
     session_id = "test_sse_forwarding_session_42"
 
+    import time
     # Initialize active session
     queue = asyncio.Queue()
     MCP_ACTIVE_SESSIONS[session_id] = {
-        "created_at": 1000.0,
-        "org_id": "test_mcp_org",
+        "created_at": time.time(),
+        "org_id": "default",
         "queue": queue
     }
 

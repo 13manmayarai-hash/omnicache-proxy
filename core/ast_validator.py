@@ -22,6 +22,15 @@ class ASTStructureVisitor(ast.NodeVisitor):
     def __init__(self):
         self.signature: List[str] = []
 
+    def _extract_decorator_name(self, dec_node: ast.AST) -> str:
+        if isinstance(dec_node, ast.Name):
+            return dec_node.id
+        elif isinstance(dec_node, ast.Attribute):
+            return f"{self._extract_decorator_name(dec_node.value)}.{dec_node.attr}"
+        elif isinstance(dec_node, ast.Call):
+            return self._extract_decorator_name(dec_node.func)
+        return type(dec_node).__name__
+
     def generic_visit(self, node: ast.AST):
         node_name = type(node).__name__
         
@@ -54,11 +63,20 @@ class ASTStructureVisitor(ast.NodeVisitor):
             elif isinstance(node.func, ast.Attribute):
                 call_id = node.func.attr
             self.signature.append(f"Call:{call_id}" if call_id else "Call")
-        # 8. Function and Class Definitions
+        # 8. Function and Class Definitions (with decorator tracking)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for dec in getattr(node, "decorator_list", []):
+                dec_name = self._extract_decorator_name(dec)
+                self.signature.append(f"Decorator:{dec_name}")
             self.signature.append(f"Def:{node.name}")
         elif isinstance(node, ast.ClassDef):
+            for dec in getattr(node, "decorator_list", []):
+                dec_name = self._extract_decorator_name(dec)
+                self.signature.append(f"Decorator:{dec_name}")
             self.signature.append(f"Class:{node.name}")
+        # 9. Asynchronous Await expressions
+        elif isinstance(node, ast.Await):
+            self.signature.append("Await")
 
         super().generic_visit(node)
 
@@ -102,7 +120,7 @@ class ASTValidator:
             tree = ast.parse(text)
             if tree.body and not all(isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) for stmt in tree.body):
                 return True
-        except (SyntaxError, ValueError):
+        except (SyntaxError, ValueError, MemoryError, RecursionError):
             pass
         return False
 
@@ -141,7 +159,7 @@ class ASTValidator:
             visitor = ASTStructureVisitor()
             visitor.visit(tree)
             return True, visitor.signature
-        except (SyntaxError, ValueError):
+        except (SyntaxError, ValueError, MemoryError, RecursionError):
             return False, []
 
     @classmethod
@@ -153,16 +171,18 @@ class ASTValidator:
         """
         # Strip line comments (// and #)
         code = re.sub(r"//.*", "", code_str)
-        # Only strip # comments if not inside python string or preprocessor
-        code = re.sub(r"(?m)^\s*#.*$", "", code)
+        # Strip trailing and inline # comments
+        code = re.sub(r"(?m)#.*$", "", code)
         # Strip block comments (/* ... */)
         code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)
 
         # Structural operators and control tokens
         token_pattern = re.compile(
-            r"(===|!==|==|!=|<=|>=|&&|\|\||<<|>>|\+\+|--|=>|->|[<>+\-*/%!=&|^~]|\b(?:if|else|while|for|return|break|continue|and|or|not|true|false|True|False|null|nil|None)\b)"
+            r"(===|!==|==|!=|<=|>=|&&|\|\||<<|>>|\+\+|--|=>|->|[<>+\-*/%!=&|^~]|\b(?:if|else|while|for|return|break|continue|and|or|not|true|false|null|nil|none)\b)",
+            re.IGNORECASE
         )
-        tokens = token_pattern.findall(code)
+        raw_tokens = token_pattern.findall(code)
+        tokens = [t.lower() if t.isalpha() else t for t in raw_tokens]
         return tokens
 
     @classmethod
@@ -244,7 +264,16 @@ class ASTValidator:
             if diff & arith_indicators:
                 return False, f"AST_ARITHMETIC_DIVERGENCE: Operator mismatch in block {idx + 1} ({sig_a} vs {sig_b})"
 
-            # 5. General structural / call ordering mismatch
+            # 5. Decorator divergence
+            dec_indicators = {t for t in diff if t.startswith("Decorator:")}
+            if dec_indicators:
+                return False, f"AST_DECORATOR_DIVERGENCE: Function/class decorator mismatch in block {idx + 1} ({sig_a} vs {sig_b})"
+
+            # 6. Concurrency / Await divergence
+            if "Await" in diff:
+                return False, f"AST_CONCURRENCY_DIVERGENCE: Async/await execution mismatch in block {idx + 1} ({sig_a} vs {sig_b})"
+
+            # 7. General structural / call ordering mismatch
             return False, f"AST_STRUCTURAL_DIVERGENCE: Code syntax structure mismatch in block {idx + 1} ({sig_a} vs {sig_b})"
 
         return True, "AST_STRUCTURAL_MATCH: Code syntax structures verified identical"

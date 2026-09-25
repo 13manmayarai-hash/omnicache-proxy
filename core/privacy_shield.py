@@ -4,6 +4,7 @@ Automatically scrubs SSNs, Credit Cards, Emails, API Keys, and PHI before sendin
 and seamlessly rehydrates original data on response delivery with cryptographic token isolation.
 """
 
+import json
 import re
 import copy
 import hashlib
@@ -58,7 +59,11 @@ class PrivacyShield:
 
         for match in candidate_regex.finditer(text):
             cand = match.group(1)
-            if cand in seen or cand.startswith("[REDACTED_") or "/" in cand or "\\" in cand:
+            if cand in seen or cand.startswith("[REDACTED_"):
+                continue
+
+            # Skip filesystem paths, URLs, and directory traversal
+            if cand.startswith("/") or cand.startswith("\\") or cand.startswith("http://") or cand.startswith("https://") or "/root" in cand or "/home" in cand or "/usr" in cand or "/etc" in cand or cand.count("/") > 2:
                 continue
 
             # Skip common file extensions
@@ -79,7 +84,8 @@ class PrivacyShield:
 
             is_secret = False
             pii_label = "ENTROPY_SECRET"
-            if has_keyword and ent >= 3.7 and classes >= 2 and len(cand) >= 20:
+            is_hex = (len(cand) >= 32 and all(c in "0123456789abcdefABCDEF" for c in cand))
+            if has_keyword and ((ent >= 3.5 and classes >= 2) or is_hex) and len(cand) >= 20:
                 is_secret = True
                 pii_label = "BEARER_SECRET" if "bearer" in prefix_window.lower() else "KEYWORD_SECRET"
             elif not has_keyword and ent >= min_entropy and classes >= 3 and len(cand) >= 24:
@@ -141,9 +147,36 @@ class PrivacyShield:
         return sanitized, token_map, total_redactions
 
     @classmethod
+    def _sanitize_obj(cls, obj: Any, salt: Optional[str] = None) -> Tuple[Any, Dict[str, str], int]:
+        """Recursively sanitizes nested strings, dictionaries, or lists."""
+        if isinstance(obj, str):
+            return cls.sanitize_text(obj, salt=salt)
+        elif isinstance(obj, dict):
+            new_dict = {}
+            t_map = {}
+            redactions = 0
+            for k, v in obj.items():
+                s_v, sub_map, count = cls._sanitize_obj(v, salt=salt)
+                new_dict[k] = s_v
+                t_map.update(sub_map)
+                redactions += count
+            return new_dict, t_map, redactions
+        elif isinstance(obj, list):
+            new_list = []
+            t_map = {}
+            redactions = 0
+            for item in obj:
+                s_item, sub_map, count = cls._sanitize_obj(item, salt=salt)
+                new_list.append(s_item)
+                t_map.update(sub_map)
+                redactions += count
+            return new_list, t_map, redactions
+        return obj, {}, 0
+
+    @classmethod
     def sanitize_payload(cls, payload: Dict[str, Any], salt: Optional[str] = None) -> Tuple[Dict[str, Any], Dict[str, str], int]:
         """
-        Recursively sanitizes all message contents, system prompts, and tool payloads in an OpenAI / Claude payload.
+        Recursively sanitizes all message contents, system prompts, tool_calls, and tool execution results.
         """
         sanitized_payload = dict(payload)
         master_token_map: Dict[str, str] = {}
@@ -185,6 +218,8 @@ class PrivacyShield:
             m_copy = dict(m)
             role = m_copy.get("role", "user")
             content = m_copy.get("content", "")
+
+            # 2a. Sanitize content (string, tool_result, or structured blocks)
             if isinstance(content, str):
                 s_text, t_map, count = cls.sanitize_text(content, salt=salt)
                 m_copy["content"] = s_text
@@ -196,29 +231,88 @@ class PrivacyShield:
             elif isinstance(content, list):
                 new_content_blocks = []
                 for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+                    if isinstance(block, dict):
                         b_copy = dict(block)
-                        s_text, t_map, count = cls.sanitize_text(b_copy["text"], salt=salt)
-                        b_copy["text"] = s_text
-                        master_token_map.update(t_map)
-                        if role == "system":
-                            system_scrubbed += count
-                        else:
+                        b_type = b_copy.get("type")
+                        if b_type == "text" and isinstance(b_copy.get("text"), str):
+                            s_text, t_map, count = cls.sanitize_text(b_copy["text"], salt=salt)
+                            b_copy["text"] = s_text
+                            master_token_map.update(t_map)
+                            if role == "system":
+                                system_scrubbed += count
+                            else:
+                                user_scrubbed += count
+                        elif b_type == "tool_result" and "content" in b_copy:
+                            s_res, t_map, count = cls._sanitize_obj(b_copy["content"], salt=salt)
+                            b_copy["content"] = s_res
+                            master_token_map.update(t_map)
                             user_scrubbed += count
+                        elif b_type == "tool_use" and "input" in b_copy:
+                            s_inp, t_map, count = cls._sanitize_obj(b_copy["input"], salt=salt)
+                            b_copy["input"] = s_inp
+                            master_token_map.update(t_map)
+                            user_scrubbed += count
+                        else:
+                            # General block sanitization
+                            for b_k in ("text", "content", "data"):
+                                if b_k in b_copy and isinstance(b_copy[b_k], str):
+                                    s_b, t_map, count = cls.sanitize_text(b_copy[b_k], salt=salt)
+                                    b_copy[b_k] = s_b
+                                    master_token_map.update(t_map)
+                                    user_scrubbed += count
                         new_content_blocks.append(b_copy)
+                    elif isinstance(block, str):
+                        s_text, t_map, count = cls.sanitize_text(block, salt=salt)
+                        master_token_map.update(t_map)
+                        user_scrubbed += count
+                        new_content_blocks.append(s_text)
                     else:
                         new_content_blocks.append(block)
                 m_copy["content"] = new_content_blocks
+
+            # 2b. Sanitize OpenAI tool_calls
+            if "tool_calls" in m_copy and isinstance(m_copy["tool_calls"], list):
+                new_tool_calls = []
+                for tc in m_copy["tool_calls"]:
+                    if isinstance(tc, dict):
+                        tc_copy = copy.deepcopy(tc)
+                        fn = tc_copy.get("function", {})
+                        if isinstance(fn, dict) and "arguments" in fn:
+                            raw_args = fn["arguments"]
+                            if isinstance(raw_args, str):
+                                s_args, t_map, count = cls.sanitize_text(raw_args, salt=salt)
+                                fn["arguments"] = s_args
+                                master_token_map.update(t_map)
+                                user_scrubbed += count
+                            elif isinstance(raw_args, (dict, list)):
+                                s_args, t_map, count = cls._sanitize_obj(raw_args, salt=salt)
+                                fn["arguments"] = s_args
+                                master_token_map.update(t_map)
+                                user_scrubbed += count
+                        new_tool_calls.append(tc_copy)
+                    else:
+                        new_tool_calls.append(tc)
+                m_copy["tool_calls"] = new_tool_calls
+
+            # 2c. Sanitize legacy function_call
+            if "function_call" in m_copy and isinstance(m_copy["function_call"], dict):
+                fc = copy.deepcopy(m_copy["function_call"])
+                if "arguments" in fc and isinstance(fc["arguments"], str):
+                    s_args, t_map, count = cls.sanitize_text(fc["arguments"], salt=salt)
+                    fc["arguments"] = s_args
+                    master_token_map.update(t_map)
+                    user_scrubbed += count
+                m_copy["function_call"] = fc
+
             new_messages.append(m_copy)
 
         sanitized_payload["messages"] = new_messages
-        # Return user_scrubbed to prevent static agent system prompt boilerplate (git email, paths) from inflating KPI telemetry
         return sanitized_payload, master_token_map, user_scrubbed
 
     @classmethod
     def rehydrate_response(cls, response_payload: Dict[str, Any], token_map: Dict[str, str]) -> Dict[str, Any]:
         """
-        Restores original sensitive values into the assistant response text.
+        Restores original sensitive values into the assistant response text, tool calls, and structured blocks.
         Always operates on an isolated deep copy to prevent in-place mutation of cached entries.
         """
         if not token_map:
@@ -233,13 +327,39 @@ class PrivacyShield:
             if "content" in msg and isinstance(msg["content"], str):
                 for token, original in token_map.items():
                     msg["content"] = msg["content"].replace(token, original)
+            if "tool_calls" in msg and isinstance(msg["tool_calls"], list):
+                for tc in msg["tool_calls"]:
+                    fn = tc.get("function", {})
+                    if "arguments" in fn and isinstance(fn["arguments"], str):
+                        for token, original in token_map.items():
+                            fn["arguments"] = fn["arguments"].replace(token, original)
+            if "function_call" in msg and isinstance(msg.get("function_call"), dict):
+                fc = msg["function_call"]
+                if "arguments" in fc and isinstance(fc["arguments"], str):
+                    for token, original in token_map.items():
+                        fc["arguments"] = fc["arguments"].replace(token, original)
 
         # Anthropic response format
         if "content" in resp_copy and isinstance(resp_copy["content"], list):
             for block in resp_copy["content"]:
-                if isinstance(block, dict) and "text" in block and isinstance(block["text"], str):
-                    for token, original in token_map.items():
-                        block["text"] = block["text"].replace(token, original)
+                if isinstance(block, dict):
+                    if block.get("type") == "text" and isinstance(block.get("text"), str):
+                        for token, original in token_map.items():
+                            block["text"] = block["text"].replace(token, original)
+                    elif block.get("type") == "tool_use" and "input" in block:
+                        inp = block["input"]
+                        if isinstance(inp, str):
+                            for token, original in token_map.items():
+                                inp = inp.replace(token, original)
+                            block["input"] = inp
+                        elif isinstance(inp, dict):
+                            raw_json = json.dumps(inp)
+                            for token, original in token_map.items():
+                                raw_json = raw_json.replace(token, original)
+                            try:
+                                block["input"] = json.loads(raw_json)
+                            except Exception:
+                                pass
 
         return resp_copy
 

@@ -22,6 +22,7 @@ import threading
 import html
 import sqlite3
 import logging
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger("omnicache.gateway")
 from urllib.parse import parse_qs, urlencode, quote_plus, urlparse
@@ -32,7 +33,7 @@ from starlette.responses import JSONResponse, StreamingResponse, HTMLResponse, R
 from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from core.config import config, MODEL_PRICING
+from core.config import config, MODEL_PRICING, validate_startup_security_invariants
 from core.hasher import RequestHasher
 from core.vector_cache import cache_instance, get_model_family, CacheEntry
 from core.radix_tree import radix_tree
@@ -5471,4 +5472,10 @@ routes = [
     Route("/{rest_of_path:path}", handle_catchall, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 ]
 
-app = Starlette(debug=False, routes=routes)
+@asynccontextmanager
+async def lifespan(app: Starlette):
+    """Enforces critical startup security invariants under all ASGI servers (SEC-05)."""
+    validate_startup_security_invariants()
+    yield
+
+app = Starlette(debug=False, routes=routes, lifespan=lifespan)

@@ -197,6 +197,24 @@ class TestSprint0EnterpriseHotfixes(unittest.TestCase):
         self.assertFalse(hit_b)
         self.assertIsNone(res_b)
 
+    def test_11_startup_security_invariants_enforcement(self):
+        """SEC-05: ASGI lifespan must fail fast if bound to 0.0.0.0 without authentication."""
+        orig_host = config.HOST
+        orig_auth = config.REQUIRE_AUTH
+        orig_allow = config.ALLOW_INSECURE_NETWORK_EXPOSURE
+        try:
+            config.HOST = "0.0.0.0"
+            config.REQUIRE_AUTH = False
+            config.ALLOW_INSECURE_NETWORK_EXPOSURE = False
+            with self.assertRaises(RuntimeError) as ctx:
+                with TestClient(app):
+                    pass
+            self.assertIn("SECURITY ERROR: Refusing to bind OmniCache to non-localhost interface", str(ctx.exception))
+        finally:
+            config.HOST = orig_host
+            config.REQUIRE_AUTH = orig_auth
+            config.ALLOW_INSECURE_NETWORK_EXPOSURE = orig_allow
+
 
 if __name__ == "__main__":
     unittest.main()

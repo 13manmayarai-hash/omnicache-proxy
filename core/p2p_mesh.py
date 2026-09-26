@@ -10,12 +10,54 @@ import time
 import uuid
 import json
 import socket
+import ipaddress
+from urllib.parse import urlparse
 import asyncio
 import threading
 from typing import Dict, Any, List, Optional, Tuple, Set, Callable, Union
 import httpx
 
 from core.config import config
+
+
+def is_safe_peer_endpoint(endpoint: str) -> Tuple[bool, str]:
+    """
+    Validates that a peer endpoint does not target internal cloud metadata, loopback,
+    or dangerous network services (SSRF mitigation - SEC-04).
+    """
+    try:
+        parsed = urlparse(endpoint)
+        if parsed.scheme not in ("http", "https"):
+            return False, "Invalid URL scheme; must be http or https"
+        hostname = parsed.hostname
+        if not hostname:
+            return False, "Missing hostname in endpoint"
+
+        # Resolve IP
+        try:
+            ip_str = socket.gethostbyname(hostname)
+            ip = ipaddress.ip_address(ip_str)
+        except Exception:
+            return False, f"Could not resolve host '{hostname}'"
+
+        # Block link-local cloud metadata (AWS/GCP/Azure 169.254.169.254)
+        if ip.is_link_local or str(ip).startswith("169.254."):
+            return False, "Blocked: Cloud metadata / link-local addresses are forbidden"
+
+        # Loopback / Localhost
+        if ip.is_loopback:
+            # Allow loopback ONLY in test / local dev mode when REQUIRE_AUTH is False or ALLOW_INSECURE_NETWORK_EXPOSURE is True
+            if getattr(config, "REQUIRE_AUTH", False) and not getattr(config, "ALLOW_INSECURE_NETWORK_EXPOSURE", False):
+                return False, "Blocked: Loopback addresses are forbidden in production"
+
+        # Private RFC-1918 ranges
+        if ip.is_private:
+            if not getattr(config, "MESH_ALLOW_PRIVATE_IPS", True) and not getattr(config, "ALLOW_INSECURE_NETWORK_EXPOSURE", False):
+                return False, "Blocked: Private IP addresses require MESH_ALLOW_PRIVATE_IPS=true"
+
+        return True, ""
+    except Exception as e:
+        return False, f"Invalid endpoint: {str(e)}"
 
 
 def _generate_node_id() -> str:
@@ -687,6 +729,10 @@ class P2PMesh:
             pass
     async def check_peer_connectivity(self, endpoint: str) -> Dict[str, Any]:
         """Probes peer reachability before registration."""
+        is_safe, reason = is_safe_peer_endpoint(endpoint)
+        if not is_safe:
+            return {"reachable": False, "error": f"SSRF_BLOCKED: {reason}"}
+
         url = f"{endpoint.rstrip('/')}/v1/mesh/heartbeat"
         payload = {
             "node_id": self.node_id,

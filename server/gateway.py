@@ -252,7 +252,7 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
             or hostname == "rawwgrid.com"
             or hostname.endswith(".rawwgrid.com")
             or (render_host and hostname == render_host)
-            or hostname in ("localhost", "127.0.0.1")
+            or hostname in ("localhost", "127.0.0.1", "::1")
         ):
             allow_origin = origin
         else:
@@ -3935,13 +3935,14 @@ async def handle_root(request: Request) -> Response:
         return Response(headers=cors_headers)
 
     accept = request.headers.get("accept", "").lower()
-    # If accessed via web browser requesting HTML, serve high-converting Neo-Brutalist landing page
+    # If accessed via web browser requesting HTML, serve landing page
     if "text/html" in accept:
-        landing_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "landing.html")
-        if os.path.exists(landing_path):
-            with open(landing_path, "r", encoding="utf-8") as f:
-                html = f.read()
-            return HTMLResponse(html, headers=cors_headers)
+        for fname in ("landing_v3.html", "landing.html"):
+            landing_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
+            if os.path.exists(landing_path):
+                with open(landing_path, "r", encoding="utf-8") as f:
+                    html = f.read()
+                return HTMLResponse(html, headers=cors_headers)
         dashboard_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
         if os.path.exists(dashboard_path):
             return await handle_dashboard(request)
@@ -4004,16 +4005,82 @@ async def handle_dashboard(request: Request) -> Response:
 
 
 async def handle_landing(request: Request) -> Response:
-    """Serves the Dark Neo-Brutalist SaaS Landing Page."""
+    """Serves the production v3 landing page (falling back to v2 or v1)."""
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
-    landing_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "landing.html")
-    if os.path.exists(landing_path):
-        with open(landing_path, "r", encoding="utf-8") as f:
+    for fname in ("landing_v3.html", "landing_v2.html", "landing.html"):
+        candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
+        if os.path.exists(candidate):
+            with open(candidate, "r", encoding="utf-8") as f:
+                html = f.read()
+            return HTMLResponse(html, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
+
+
+async def handle_landing_v3(request: Request) -> Response:
+    """Serves the new responsive, animated v3 landing page."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    v3_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "landing_v3.html"))
+    if os.path.exists(v3_path):
+        with open(v3_path, "r", encoding="utf-8") as f:
             html = f.read()
         return HTMLResponse(html, headers=cors_headers)
-    return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Landing v3 Not Found</h1>", status_code=404, headers=cors_headers)
+
+
+async def handle_docs_html(request: Request) -> Response:
+    """Serves the technical report and benchmark documentation (docs.html)."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    docs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "docs.html"))
+    if os.path.exists(docs_path):
+        with open(docs_path, "r", encoding="utf-8") as f:
+            html = f.read()
+        return HTMLResponse(html, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Documentation Not Found</h1>", status_code=404, headers=cors_headers)
+
+
+async def handle_img(request: Request) -> Response:
+    """Serves static image assets from dashboard/img/."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    file_path = request.path_params.get("file_path", "").lstrip("/")
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "img"))
+    target = os.path.abspath(os.path.join(base_dir, file_path))
+    if not (target.startswith(base_dir) and os.path.exists(target) and not os.path.isdir(target)):
+        return Response(b"Not Found", status_code=404, headers=cors_headers)
+    
+    media_type = "image/webp"
+    if target.endswith(".png"):
+        media_type = "image/png"
+    elif target.endswith(".svg"):
+        media_type = "image/svg+xml"
+    elif target.endswith(".jpg") or target.endswith(".jpeg"):
+        media_type = "image/jpeg"
+        
+    with open(target, "rb") as f:
+        content = f.read()
+    cors_headers["cache-control"] = "public, max-age=86400"
+    return Response(content, media_type=media_type, headers=cors_headers)
+
+
+async def handle_og_image(request: Request) -> Response:
+    """Serves omnicache-og.png social share preview image."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    og_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "omnicache-og.png"))
+    if os.path.exists(og_path):
+        with open(og_path, "rb") as f:
+            content = f.read()
+        cors_headers["cache-control"] = "public, max-age=86400"
+        return Response(content, media_type="image/png", headers=cors_headers)
+    return Response(b"Not Found", status_code=404, headers=cors_headers)
 
 
 async def handle_landing_v2(request: Request) -> Response:
@@ -5462,8 +5529,12 @@ routes = [
     Route("/openapi.json", handle_openapi_spec, methods=["GET", "OPTIONS"]),
     Route("/docs", handle_swagger_docs, methods=["GET", "OPTIONS"]),
     Route("/landing", handle_landing, methods=["GET", "OPTIONS"]),
+    Route("/v3", handle_landing_v3, methods=["GET", "OPTIONS"]),
     Route("/v2", handle_landing_v2, methods=["GET", "OPTIONS"]),
     Route("/preview", handle_landing_v2, methods=["GET", "OPTIONS"]),
+    Route("/docs.html", handle_docs_html, methods=["GET", "OPTIONS"]),
+    Route("/omnicache-og.png", handle_og_image, methods=["GET", "OPTIONS"]),
+    Route("/img/{file_path:path}", handle_img, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
     Route("/simulator", handle_simulator, methods=["GET", "OPTIONS"]),
     Route("/ws", handle_ws_http, methods=["GET", "POST", "OPTIONS"]),

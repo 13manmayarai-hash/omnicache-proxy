@@ -1,0 +1,958 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OmniCache Technical Report</title>
+  <meta name="description" content="OmniCache v3.1.0 technical report: design, methodology, measured latency, hit rates, match precision and a claims audit." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0b0f13;
+      --surface: #11171d;
+      --surface-2: #172029;
+      --line: rgba(255, 255, 255, 0.08);
+      --line-2: rgba(255, 255, 255, 0.14);
+      --text: #f3f6f9;
+      --text-2: #c3ced7;
+      --muted: #93a2ae;
+      --accent: #e95d2c;
+      --grid: rgba(255, 255, 255, 0.07);
+      --axis: rgba(255, 255, 255, 0.22);
+
+      /* chart series (validated: dark, surface #11171d) */
+      --s-l1: #e95d2c;
+      --s-l2: #3987e5;
+      --s-miss: #199e70;
+      --s-inproc: #9085e9;
+      --s-tcp: #c98500;
+
+      --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    body {
+      margin: 0; background: var(--bg); color: var(--text-2);
+      font: 400 16px/1.72 var(--sans); font-feature-settings: "cv11", "ss01";
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--text); text-decoration: underline; text-decoration-color: rgba(233, 93, 44, 0.6); text-underline-offset: 3px; }
+    a:hover { text-decoration-color: var(--accent); }
+    code, .mono { font-family: var(--mono); font-size: 0.88em; }
+    :not(pre) > code { background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 0.08em 0.36em; color: var(--text); }
+    ::selection { background: rgba(233, 93, 44, 0.35); color: var(--text); }
+
+    /* ---------- top bar ---------- */
+    .top { position: sticky; top: 0; z-index: 20; background: rgba(11, 15, 19, 0.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+    .top-in { max-width: 1240px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; text-decoration: none; letter-spacing: -0.01em; }
+    .brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: grid; place-items: center; }
+    .brand-mark i { width: 8px; height: 8px; border-radius: 50%; background: var(--bg); }
+    .brand small { color: var(--muted); font-weight: 500; }
+    .top nav { display: flex; gap: 22px; font-size: 14px; }
+    .top nav a { color: var(--muted); text-decoration: none; }
+    .top nav a:hover { color: var(--text); }
+    .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: var(--accent); transform-origin: 0 50%; transform: scaleX(0); }
+
+    /* ---------- layout ---------- */
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 64px; }
+    .toc { position: sticky; top: 88px; align-self: start; padding-top: 72px; font-size: 13.5px; }
+    .toc-h { font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
+    .toc ol { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--line); }
+    .toc li a { display: block; padding: 5px 0 5px 14px; margin-left: -1px; border-left: 2px solid transparent; color: var(--muted); text-decoration: none; line-height: 1.4; }
+    .toc li a:hover { color: var(--text); }
+    .toc li a.on { color: var(--text); border-left-color: var(--accent); }
+    .toc .n { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-right: 6px; }
+    main { min-width: 0; padding: 72px 0 120px; }
+    .col { max-width: 760px; }
+    .wide { max-width: 920px; }
+
+    /* ---------- title block ---------- */
+    .kicker { display: inline-flex; align-items: center; gap: 10px; font: 500 12.5px/1 var(--mono); color: var(--muted); letter-spacing: 0.02em; }
+    .kicker b { color: var(--accent); font-weight: 500; }
+    h1 { color: var(--text); font-size: clamp(30px, 4.2vw, 46px); line-height: 1.1; letter-spacing: -0.028em; font-weight: 700; margin: 18px 0 18px; text-wrap: balance; }
+    .subtitle { font-size: 19px; line-height: 1.55; color: var(--text-2); margin: 0 0 28px; text-wrap: pretty; }
+    .meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 40px; }
+    .meta div { padding: 14px 16px 14px 0; font-size: 13px; line-height: 1.45; }
+    .meta div + div { padding-left: 16px; border-left: 1px solid var(--line); }
+    .meta dt { color: var(--muted); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
+    .meta dd { margin: 0; color: var(--text); font-family: var(--mono); font-size: 12.5px; }
+
+    .abstract { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px 28px; margin: 0 0 40px; }
+    .abstract h2 { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+    .abstract p { margin: 0; color: var(--text-2); font-size: 15.5px; line-height: 1.75; }
+    .abstract strong { color: var(--text); font-weight: 600; }
+
+    /* ---------- key results tiles ---------- */
+    .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin: 0 0 56px; }
+    .tile { background: var(--bg); padding: 20px 20px 18px; }
+    .tile .v { color: var(--text); font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .tile .v small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+    .tile .k { font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.4; }
+    .tile .s { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+
+    /* ---------- sections ---------- */
+    section { scroll-margin-top: 80px; }
+    h2.sec { color: var(--text); font-size: 25px; letter-spacing: -0.02em; line-height: 1.25; font-weight: 650; margin: 64px 0 14px; display: flex; gap: 14px; align-items: baseline; }
+    h2.sec .n { font: 500 14px/1 var(--mono); color: var(--accent); min-width: 24px; }
+    h3 { color: var(--text); font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin: 34px 0 8px; }
+    h3 .n { font: 500 13px/1 var(--mono); color: var(--muted); margin-right: 8px; }
+    p { margin: 0 0 16px; text-wrap: pretty; }
+    strong { color: var(--text); font-weight: 600; }
+    ul.list, ol.list { margin: 0 0 18px; padding-left: 22px; }
+    ul.list li, ol.list li { margin: 0 0 8px; padding-left: 4px; }
+    ul.list li::marker { color: var(--muted); }
+    ol.list li::marker { color: var(--muted); font-family: var(--mono); font-size: 0.86em; }
+    .cite { font-family: var(--mono); font-size: 0.8em; color: var(--muted); text-decoration: none; }
+    .cite:hover { color: var(--text); }
+
+    .callout { border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(233, 93, 44, 0.07), transparent 70%); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 20px 0 24px; font-size: 15px; }
+    .callout b { color: var(--text); }
+
+    /* ---------- tables ---------- */
+    .tbl-wrap { overflow-x: auto; margin: 18px 0 8px; border: 1px solid var(--line); border-radius: 12px; -webkit-overflow-scrolling: touch; }
+    table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.45; }
+    th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    thead th { color: var(--muted); font-weight: 600; font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; background: var(--surface); white-space: nowrap; }
+    td { color: var(--text-2); }
+    td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.num { color: var(--text); }
+    td.dim { color: var(--muted); }
+    tbody tr:hover td { background: rgba(255, 255, 255, 0.018); }
+    .tcap { font-size: 13.5px; color: var(--muted); margin: 0 0 20px; line-height: 1.55; }
+    .tcap b, .fcap b { color: var(--text); font-weight: 600; }
+    .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: 0; }
+
+    .chip { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px/1 var(--mono); padding: 5px 8px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text); white-space: nowrap; }
+    .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.9; }
+    .chip.ok { color: #7fd6ae; }
+    .chip.part { color: #e7c07a; }
+    .chip.assumed { color: #f0a58a; }
+    .chip.none { color: var(--muted); }
+
+    /* ---------- figures ---------- */
+    figure { margin: 28px 0 34px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px 16px; }
+    .fhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
+    .ftitle { color: var(--text); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
+    .fsub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--text-2); margin: 4px 0 6px; }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .legend i { width: 14px; height: 2px; border-radius: 2px; display: inline-block; }
+    .legend i.dot { width: 9px; height: 9px; border-radius: 50%; }
+    .legend i.ring { width: 9px; height: 9px; border-radius: 50%; background: transparent !important; border: 2px solid; }
+    .legend i.box { width: 10px; height: 10px; border-radius: 3px; }
+    .chart { position: relative; width: 100%; touch-action: pan-y; }
+    .chart svg { display: block; width: 100%; overflow: visible; }
+    .chart text { font-family: var(--sans); }
+    .fcap { font-size: 13.5px; color: var(--muted); line-height: 1.6; margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--line); }
+    .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 2px; }
+    .seg button { font: 500 12.5px/1 var(--sans); color: var(--muted); background: transparent; border: 0; border-radius: 6px; padding: 7px 10px; cursor: pointer; }
+    .seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+    .seg button:focus-visible, summary:focus-visible, a:focus-visible, .copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    details.data { margin-top: 10px; }
+    details.data summary { cursor: pointer; font-size: 12.5px; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+    details.data summary::-webkit-details-marker { display: none; }
+    details.data summary::before { content: ""; width: 0; height: 0; border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform 0.15s; }
+    details.data[open] summary::before { transform: rotate(90deg); }
+    details.data summary:hover { color: var(--text); }
+    details.data .tbl-wrap { margin-top: 10px; background: var(--bg); }
+
+    .tip { position: absolute; z-index: 5; pointer-events: none; background: #0a0e12; border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 11px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); min-width: 150px; max-width: 280px; opacity: 0; transform: translateY(4px); transition: opacity 0.12s, transform 0.12s; }
+    .tip.on { opacity: 1; transform: none; }
+    .tip .th { color: var(--text); font-weight: 600; margin-bottom: 4px; }
+    .tip .tr { display: flex; justify-content: space-between; gap: 14px; }
+    .tip .tr span:first-child { display: inline-flex; align-items: center; gap: 6px; }
+    .tip .tr b { color: var(--text); font-family: var(--mono); font-weight: 500; font-size: 12px; }
+    .tip q { display: block; color: var(--muted); font-style: normal; margin-top: 4px; }
+    @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+
+    /* ---------- architecture figure ---------- */
+    .arch { display: grid; grid-template-columns: auto 22px minmax(0, 1fr) 22px auto; align-items: center; gap: 0; margin: 8px 0 4px; }
+    .node { background: var(--bg); border: 1px solid var(--line-2); border-radius: 11px; padding: 12px 14px; font-size: 13px; line-height: 1.35; color: var(--text); }
+    .node small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 3px; font-family: var(--mono); }
+    .node.ext { text-align: center; min-width: 118px; }
+    .proxy { border: 1px solid rgba(233, 93, 44, 0.45); border-radius: 14px; padding: 12px; background: rgba(233, 93, 44, 0.035); }
+    .proxy-h { display: flex; justify-content: space-between; font: 500 11.5px/1 var(--mono); color: var(--muted); margin: 0 2px 10px; }
+    .proxy-h b { color: var(--accent); font-weight: 500; }
+    .stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .stage { background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 11px; font-size: 12.5px; line-height: 1.35; color: var(--text); position: relative; }
+    .stage .tag { display: block; font: 500 10.5px/1 var(--mono); color: var(--muted); letter-spacing: 0.04em; margin-bottom: 6px; }
+    .stage .lat { display: block; font: 500 11.5px/1 var(--mono); margin-top: 7px; color: var(--muted); }
+    .stage .lat b { color: var(--text); font-weight: 500; }
+    .stage i.k { position: absolute; top: 10px; right: 10px; width: 8px; height: 8px; border-radius: 50%; }
+    .side { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .side div { border: 1px dashed transparent; background: var(--surface-2); border-radius: 8px; padding: 7px 9px; font-size: 11.5px; color: var(--text-2); line-height: 1.35; }
+    .arr { height: 1px; background: var(--axis); position: relative; }
+    .arr::after { content: ""; position: absolute; right: -1px; top: -4px; border-left: 6px solid var(--axis); border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+    .arch-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--muted); margin-top: 12px; }
+
+    /* ---------- code ---------- */
+    pre { position: relative; background: #0a0e12; border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font: 400 12.8px/1.7 var(--mono); color: var(--text-2); margin: 14px 0 22px; }
+    pre .c { color: #6f7d88; }
+    pre .p { color: var(--accent); user-select: none; }
+    pre .k { color: #9fc3ec; }
+    pre .s { color: #a8d8bd; }
+    .copy { position: absolute; top: 10px; right: 10px; font: 500 11.5px/1 var(--sans); color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; cursor: pointer; }
+    .copy:hover { color: var(--text); }
+
+    .refs { list-style: none; padding: 0; margin: 0; counter-reset: r; font-size: 14px; }
+    .refs li { counter-increment: r; display: grid; grid-template-columns: 38px minmax(0, 1fr); padding: 7px 0; border-bottom: 1px solid var(--line); }
+    .refs li::before { content: "[" counter(r) "]"; font-family: var(--mono); font-size: 12.5px; color: var(--muted); padding-top: 2px; }
+    .refs code { word-break: break-all; }
+    footer { border-top: 1px solid var(--line); margin-top: 80px; padding-top: 22px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+    /* ---------- responsive ---------- */
+    @media (max-width: 1100px) {
+      .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
+      .toc { display: none; }
+      main { padding-top: 48px; }
+    }
+    @media (max-width: 760px) {
+      .top nav { display: none; }
+      .top-in, .wrap { padding: 0 16px; }
+      body { font-size: 15.5px; }
+      .meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .meta div:nth-child(3) { padding-left: 0; border-left: 0; }
+      .meta div:nth-child(n + 3) { border-top: 1px solid var(--line); }
+      .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .tile { padding: 16px 14px; }
+      .tile .v { font-size: 25px; }
+      .abstract { padding: 20px 18px; }
+      figure { padding: 16px 14px 12px; margin-left: -4px; margin-right: -4px; }
+      h2.sec { font-size: 22px; margin-top: 52px; }
+      .arch { grid-template-columns: minmax(0, 1fr); }
+      .arr { width: 1px; height: 18px; margin: 0 auto; }
+      .arr::after { right: -4px; top: auto; bottom: -1px; border-left: 4.5px solid transparent; border-right: 4.5px solid transparent; border-top: 6px solid var(--axis); border-bottom: 0; }
+      .stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .side { grid-template-columns: minmax(0, 1fr); }
+      .proxy-h span { display: none; }
+      .audit thead { display: none; }
+      .audit tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "claim status" "src src" "found found"; gap: 4px 12px; padding: 14px; border-bottom: 1px solid var(--line); }
+      .audit tr:last-child { border-bottom: 0; }
+      .audit td { border: 0; padding: 0; }
+      .audit td:nth-child(1) { grid-area: claim; color: var(--text); font-weight: 500; }
+      .audit td:nth-child(2) { grid-area: src; font-family: var(--mono); font-size: 11.5px; }
+      .audit td:nth-child(3) { grid-area: found; }
+      .audit td:nth-child(4) { grid-area: status; }
+      .audit tbody tr:hover td { background: transparent; }
+      th, td { padding: 8px 10px; }
+    }
+
+    @media print {
+      :root { --bg: #fff; --surface: #fff; --surface-2: #f3f4f6; --text: #0b0f13; --text-2: #2a333b; --muted: #5b6670; --line: #d9dde1; --line-2: #c3c9cf; --grid: #e5e7ea; --axis: #9aa3ab; }
+      .top, .toc, .copy, .seg, details.data summary { display: none !important; }
+      details.data > .tbl-wrap { display: block; }
+      .wrap { display: block; }
+      figure, .abstract { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-in">
+      <a class="brand" href="#top" aria-label="OmniCache technical report, top"><span class="brand-mark"><i></i></span>OmniCache <small>/ docs</small></a>
+      <nav aria-label="Report sections">
+        <a href="#design">Design</a>
+        <a href="#method">Method</a>
+        <a href="#results">Results</a>
+        <a href="#audit">Claims audit</a>
+        <a href="#repro">Reproduce</a>
+      </nav>
+    </div>
+    <div class="progress" id="progress" aria-hidden="true"></div>
+  </header>
+
+  <div class="wrap" id="top">
+    <aside class="toc" aria-label="Contents">
+      <div class="toc-h">Contents</div>
+      <ol id="tocList">
+        <li><a href="#abstract"><span class="n">—</span>Abstract</a></li>
+        <li><a href="#intro"><span class="n">1</span>Introduction</a></li>
+        <li><a href="#design"><span class="n">2</span>System design</a></li>
+        <li><a href="#method"><span class="n">3</span>Methodology</a></li>
+        <li><a href="#results"><span class="n">4</span>Results</a></li>
+        <li><a href="#discussion"><span class="n">5</span>Discussion</a></li>
+        <li><a href="#limits"><span class="n">6</span>Limitations</a></li>
+        <li><a href="#audit"><span class="n">7</span>Claims audit</a></li>
+        <li><a href="#repro"><span class="n">8</span>Reproducibility</a></li>
+        <li><a href="#refs"><span class="n">—</span>References</a></li>
+      </ol>
+    </aside>
+
+    <main>
+      <div class="col">
+        <div class="kicker"><b>Technical report</b> · OMC-TR-2026-01 · v3.1.0</div>
+        <h1>OmniCache: local exact and near-duplicate caching for LLM coding agents</h1>
+        <p class="subtitle">How the proxy works, what it costs per request, how often it hits on synthetic agent workloads, and which of the published numbers we could reproduce.</p>
+        <dl class="meta">
+          <div><dt>Version</dt><dd>3.1.0 @ 80a987e</dd></div>
+          <div><dt>Date</dt><dd>24 Sep 2026</dd></div>
+          <div><dt>Samples</dt><dd>30k micro · 4.8k e2e</dd></div>
+          <div><dt>Status</dt><dd>Preliminary</dd></div>
+        </dl>
+      </div>
+
+      <section id="abstract" class="col">
+        <div class="abstract">
+          <h2>Abstract</h2>
+          <p>OmniCache is a local HTTP proxy that sits between a coding agent (Claude Code, Cursor, Aider) and the model provider. It answers repeated requests from an <strong>exact-match tier (L1)</strong>, a <strong>near-duplicate vector tier (L2)</strong> and a <strong>Git-aware tool-output replayer</strong>. An intent classifier raises the match threshold for requests where a wrong reuse is costly. On a 4-vCPU Xeon we measure a median lookup cost of <strong>9.1&nbsp;µs</strong> for an L1 hit and <strong>0.18&nbsp;ms</strong> for an L2 hit, over 10,000 samples each. A miss adds <strong>0.19&nbsp;ms</strong>. The L2 tier matched <strong>39 of 40</strong> template paraphrases with no wrong answers. It rejected <strong>20 of 20</strong> unrelated prompts; the closest reached a similarity of 0.539. Seen end to end over loopback HTTP, lookup cost is a small fraction of request time: the Python server stack dominates. At concurrency 8, median latency is 10–14&nbsp;ms. One workload (copilot) shows an unexplained slowdown to a 144&nbsp;ms median. The headline savings figures in the project materials rest on an assumed 1,850&nbsp;ms cloud baseline and synthetic workloads. We mark them as unverified.</p>
+        </div>
+      </section>
+
+      <div class="wide">
+        <div class="tiles" role="list" aria-label="Key results">
+          <div class="tile" role="listitem"><div class="v">9.1<small>µs</small></div><div class="k">L1 exact-hit lookup, p50</div><div class="s">p99 34.9 µs · n=10,000</div></div>
+          <div class="tile" role="listitem"><div class="v">0.18<small>ms</small></div><div class="k">L2 near-duplicate hit, p50</div><div class="s">p99 0.37 ms · n=10,000</div></div>
+          <div class="tile" role="listitem"><div class="v">0<small>/ 20</small></div><div class="k">False matches on unrelated prompts</div><div class="s">max similarity 0.539</div></div>
+          <div class="tile" role="listitem"><div class="v">97.5<small>%</small></div><div class="k">Recall on template paraphrases</div><div class="s">39 / 40 · 0 wrong answers</div></div>
+        </div>
+      </div>
+
+      <section id="intro" class="col">
+        <h2 class="sec"><span class="n">1</span>Introduction</h2>
+        <p>Autonomous coding agents repeat themselves. Within one session they re-read the same files, re-list the same directories and re-ask near-identical questions after a retry or a restart. Each repeat is a full round trip to the provider, billed per input token. Most of those tokens are context that has not changed since the last turn.</p>
+        <p>OmniCache runs on the developer's machine at <code>127.0.0.1:8000</code>. The agent is pointed at it with <code>ANTHROPIC_BASE_URL</code> or <code>OPENAI_BASE_URL</code>. It serves a stored response when it can prove the request is a repeat, and forwards to the provider otherwise. This report makes four contributions:</p>
+        <ol class="list">
+          <li>A description of the lookup pipeline and its intent-gated thresholds, taken from the source (§2).</li>
+          <li>A reproducible latency characterisation of each cache path at 10,000 samples, replacing the 5-sample CLI benchmark (§4.1).</li>
+          <li>An end-to-end measurement of four synthetic agent workloads, in-process and over loopback TCP (§4.2–4.3).</li>
+          <li>A match-quality experiment and an audit of every public performance claim against what we measured (§4.4, §7).</li>
+        </ol>
+      </section>
+
+      <section id="design">
+        <div class="col">
+          <h2 class="sec"><span class="n">2</span>System design</h2>
+          <p>Every request passes through the stages in Figure&nbsp;1, in order. The first stage that can answer does, so a request touches only as much of the pipeline as it needs. Concurrent identical requests are coalesced (singleflight): if eight agents ask the same thing at once, one upstream call is made. Entries are namespaced per tenant (<code>org_id</code>) and snapshotted to SQLite in WAL mode, so the cache survives a restart.</p>
+        </div>
+
+        <figure class="wide" aria-labelledby="f1t">
+          <div class="fhead"><div><div class="ftitle" id="f1t">Figure 1. Request path through the proxy</div><div class="fsub">Stages run in order; the first that can answer returns. Latencies are the measured p50s from §4.1.</div></div></div>
+          <div class="arch">
+            <div class="node ext">Coding agent<small>Claude Code · Cursor</small></div>
+            <div class="arr" aria-hidden="true"></div>
+            <div class="proxy">
+              <div class="proxy-h"><b>omnicache · 127.0.0.1:8000</b><span>server/gateway.py</span></div>
+              <div class="stages">
+                <div class="stage"><span class="tag">GATE</span>Intent classifier<span class="lat">sets threshold</span></div>
+                <div class="stage"><i class="k" style="background: var(--s-l1)"></i><span class="tag">L1</span>Exact match<span class="lat"><b>9.1 µs</b> p50</span></div>
+                <div class="stage"><i class="k" style="background: var(--s-l2)"></i><span class="tag">L2</span>Near-duplicate<span class="lat"><b>0.18 ms</b> p50</span></div>
+                <div class="stage"><span class="tag">TOOLS</span>Tool replay<span class="lat">SHA + mtime check</span></div>
+              </div>
+              <div class="side">
+                <div>Singleflight: identical in-flight requests share one upstream call</div>
+                <div>Tenant namespaces: <code>org_id</code> isolates entries</div>
+                <div>Snapshot: SQLite WAL, restored at start</div>
+              </div>
+            </div>
+            <div class="arr" aria-hidden="true"></div>
+            <div class="node ext">Provider API<small>miss only · <span style="color: var(--s-miss)">●</span> +0.19 ms</small></div>
+          </div>
+          <p class="fcap"><b>Reading the figure.</b> An L1 hit costs a hash lookup. An L2 hit costs one embedding and an ANN search. A miss pays the full L1 + L2 lookup (0.19&nbsp;ms) before forwarding. Tool replay returns a stored tool result only when the file's Git blob SHA and modification time are unchanged.</p>
+        </figure>
+
+        <div class="col">
+          <h3><span class="n">2.1</span>Near-duplicate matching</h3>
+          <p>L2 embeds the last user message and compares it to stored entries by cosine similarity. The default backend (<code>EMBEDDER_BACKEND=auto</code>) is <code>FastHashEmbedder</code>. It projects word tokens and character n-grams into a <strong>512-dimensional hashed vector</strong>, after stop-word removal and a small synonym map <a class="cite" href="#r2">[2]</a>. This is lexical, not neural. It catches rewordings that share vocabulary. It will not match true paraphrases with different words. Neural (<code>onnx</code>, 384-d) and quantized backends exist, but they are opt-in and were not evaluated here.</p>
+
+          <h3><span class="n">2.2</span>Intent-gated thresholds</h3>
+          <p>A fixed threshold forces a bad trade-off. If it is low enough to catch rewordings, it will also return a cached function for a prompt that differs in one argument. OmniCache classifies each request with ordered rules and picks a threshold per class (Table&nbsp;1) <a class="cite" href="#r1">[1]</a>. The first matching rule wins. Exact L1 matches are unaffected by the gate.</p>
+        </div>
+
+        <div class="wide">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>#</th><th>Class</th><th>Trigger (first match wins)</th><th class="num">L2 threshold</th></tr></thead>
+              <tbody>
+                <tr><td class="dim">1</td><td>structured_schema</td><td>JSON schema requested</td><td class="num">bypass</td></tr>
+                <tr><td class="dim">2</td><td>agent_tools</td><td>Tool definitions present</td><td class="num">bypass</td></tr>
+                <tr><td class="dim">3</td><td>creative_bypass</td><td>temperature &gt; 0.85</td><td class="num">bypass</td></tr>
+                <tr><td class="dim">4</td><td>code_generation</td><td><code>```</code>, <code>def f(</code>, <code>function f(</code>, <code>class X:</code>, <code>SELECT…FROM</code>, <code>import x</code></td><td class="num">0.98</td></tr>
+                <tr><td class="dim">5</td><td>math_calculation</td><td>Arithmetic, or <em>calculate / solve / evaluate</em></td><td class="num">0.98</td></tr>
+                <tr><td class="dim">6</td><td>deep_reasoning</td><td><em>step by step</em>, <em>prove that</em>, <em>derive</em>…</td><td class="num">0.98</td></tr>
+                <tr><td class="dim">7</td><td>sql_database_query</td><td>DDL / DML keywords</td><td class="num">0.98</td></tr>
+                <tr><td class="dim">8</td><td>structured_json</td><td><em>return json</em>, <em>format as json</em>…</td><td class="num">0.95</td></tr>
+                <tr><td class="dim">9</td><td>numeric_indexed_query</td><td>Any integer in the prompt</td><td class="num">0.90</td></tr>
+                <tr><td class="dim">10</td><td>conversational_qa</td><td>Everything else (<code>SIMILARITY_THRESHOLD</code>)</td><td class="num">0.75</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="tcap"><b>Table 1.</b> Intent classes from <code>DualTierCache.classify_intent</code> <a class="cite" href="#r1">[1]</a>. "Bypass" sets the threshold to 1.01, which disables L2 for that request.</p>
+        </div>
+      </section>
+
+      <section id="method" class="col">
+        <h2 class="sec"><span class="n">3</span>Methodology</h2>
+        <h3><span class="n">3.1</span>Environment</h3>
+        <div class="tbl-wrap">
+          <table>
+            <tbody>
+              <tr><td class="dim">Hardware</td><td>4 vCPU Intel Xeon @ 2.10 GHz, 15 GB RAM, cloud VM (shared tenancy)</td></tr>
+              <tr><td class="dim">Software</td><td>Linux 6.18, Python 3.11.15, OmniCache 3.1.0 at commit <code>80a987e</code>, installed with <code>pip install -e .</code></td></tr>
+              <tr><td class="dim">Cache config</td><td>Defaults: in-memory storage (no Redis), <code>FastHashEmbedder</code> 512-d, threshold 0.75</td></tr>
+              <tr><td class="dim">Upstream</td><td>None. Misses are served locally in playground mode (see §3.3).</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tcap"><b>Table 2.</b> Test environment. All runs used one machine with no other benchmark load.</p>
+
+        <h3><span class="n">3.2</span>Experiments</h3>
+        <ol class="list">
+          <li><strong>Lookup microbenchmark.</strong> The same <code>DualTierCache.lookup</code> calls as <code>omnicache benchmark</code>, with 10,000 timed samples per path after 500 warm-up calls, timed with <code>time.perf_counter_ns</code>. The CLI defaults to 5 iterations, where p95 and p99 both equal the maximum. The harness is listed in Appendix&nbsp;A.</li>
+          <li><strong>End-to-end load test.</strong> <code>benchmarks.load_test</code> with four generators from <code>benchmarks/scenarios.py</code>: <em>copilot</em>, <em>agent_swarm</em>, <em>burst</em> and <em>multi_tenant</em>. Each ran with n=200 and concurrency 8, three times, in two configurations: in-process ASGI (<code>--url internal</code>) and over loopback TCP against <code>omnicache start</code>.</li>
+          <li><strong>Match quality.</strong> We stored the 8 base prompts from <code>scenarios.py</code>. We then issued 40 paraphrases (5 templates × 8 prompts) and 20 unrelated prompts, and recorded status, similarity and whether the returned answer belonged to the right prompt.</li>
+        </ol>
+
+        <h3><span class="n">3.3</span>Controls and caveats</h3>
+        <div class="callout"><b>Playground mode excludes the provider.</b> The load tests send <code>x-dashboard-playground: true</code> with no API key, so misses are answered by a local stub. End-to-end latencies here are therefore <b>proxy overhead only</b>. They are not what a user would see on a miss, and they are not a comparison against a real provider.</div>
+        <p>The TCP server restored 63 entries from its SQLite snapshot at start-up. Runs 2 and 3 are therefore warmer than run 1. We report the median of three runs and give the in-process run 1 separately as the coldest case.</p>
+      </section>
+
+      <section id="results">
+        <div class="col">
+          <h2 class="sec"><span class="n">4</span>Results</h2>
+          <h3><span class="n">4.1</span>Lookup latency by path</h3>
+          <p>Figure&nbsp;2 shows the full latency distribution for each path. L1 is about 20× cheaper than L2 at the median. The distribution is tight: 99% of L1 hits finish within 35&nbsp;µs. A miss costs slightly more than an L2 hit because it runs the full L2 search and finds nothing.</p>
+        </div>
+
+        <figure class="wide" aria-labelledby="f2t">
+          <div class="fhead"><div><div class="ftitle" id="f2t">Figure 2. Lookup latency distribution (ECDF)</div><div class="fsub">Share of lookups completed within x. Log scale · n=10,000 per path · p1–p99 shown.</div></div></div>
+          <div class="legend" aria-hidden="true">
+            <span><i style="background: var(--s-l1)"></i>L1 exact hit</span>
+            <span><i style="background: var(--s-l2)"></i>L2 near-duplicate hit</span>
+            <span><i style="background: var(--s-miss)"></i>Miss (full lookup)</span>
+          </div>
+          <div class="chart" id="ecdf" role="img" aria-label="Cumulative latency curves. L1 median 0.0091 ms, L2 median 0.180 ms, miss median 0.190 ms."></div>
+          <details class="data"><summary>Data table</summary>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Path</th><th class="num">min</th><th class="num">p50</th><th class="num">p90</th><th class="num">p95</th><th class="num">p99</th><th class="num">p99.9</th><th class="num">max</th><th class="num">mean ± sd</th></tr></thead>
+              <tbody>
+                <tr><td><span class="sw" style="background: var(--s-l1)"></span>L1 exact</td><td class="num">0.0080</td><td class="num">0.0091</td><td class="num">0.0125</td><td class="num">0.0161</td><td class="num">0.0349</td><td class="num">0.0690</td><td class="num">0.435</td><td class="num">0.0104 ± 0.0070</td></tr>
+                <tr><td><span class="sw" style="background: var(--s-l2)"></span>L2 near-dup</td><td class="num">0.1658</td><td class="num">0.1802</td><td class="num">0.2500</td><td class="num">0.2725</td><td class="num">0.3692</td><td class="num">1.0924</td><td class="num">6.004</td><td class="num">0.1976 ± 0.0955</td></tr>
+                <tr><td><span class="sw" style="background: var(--s-miss)"></span>Miss</td><td class="num">0.1768</td><td class="num">0.1903</td><td class="num">0.2554</td><td class="num">0.3133</td><td class="num">0.4077</td><td class="num">0.9601</td><td class="num">5.891</td><td class="num">0.2091 ± 0.0822</td></tr>
+              </tbody>
+            </table></div>
+          </details>
+          <p class="fcap"><b>Takeaway.</b> Cache lookups cost microseconds to a fraction of a millisecond. Against a provider round trip of hundreds of milliseconds or more, the 0.19&nbsp;ms added to every miss is negligible. Tails above p99.9 (up to 6&nbsp;ms) are most likely garbage-collection pauses and VM scheduling; we did not confirm the cause. They are in the table, not the plot.</p>
+        </figure>
+
+        <div class="col">
+          <p>Table&nbsp;3 compares our numbers with the project README and with the stock CLI. Every path is faster here than the README reports: 6.7× for L1 and 5.7× for L2. The README does not state its hardware, so we cannot say whether this is the machine or a code change. The 5-iteration CLI gets medians right but cannot estimate tails.</p>
+        </div>
+        <div class="wide">
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Path (p50, ms)</th><th class="num">README</th><th class="num">CLI, 5 iter × 3 runs</th><th class="num">This report, n=10k</th></tr></thead>
+              <tbody>
+                <tr><td><span class="sw" style="background: var(--s-l1)"></span>L1 exact</td><td class="num">0.0609</td><td class="num">0.0208 – 0.0276</td><td class="num">0.0091</td></tr>
+                <tr><td><span class="sw" style="background: var(--s-l2)"></span>L2 near-duplicate</td><td class="num">1.0232</td><td class="num">0.1959 – 0.2198</td><td class="num">0.1802</td></tr>
+                <tr><td>Tool API replay</td><td class="num">0.3052</td><td class="num">0.0125 – 0.0177</td><td class="num dim">not re-run</td></tr>
+                <tr><td>Git / file replay</td><td class="num dim">—</td><td class="num">0.0229 – 0.0308</td><td class="num dim">not re-run</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="tcap"><b>Table 3.</b> Lookup medians across sources. The CLI's p95 for L2 (1.19–1.24&nbsp;ms) is really its maximum, because 5 samples cannot resolve a 95th percentile.</p>
+        </div>
+
+        <div class="col">
+          <h3><span class="n">4.2</span>End-to-end latency</h3>
+          <p>Moving from a function call to an HTTP request changes the picture (Figure&nbsp;3). In-process through the ASGI app, a cached request has a median of 0.6–1.1&nbsp;ms. Over loopback TCP with 8 concurrent clients, the median rises to 10–14&nbsp;ms. A single client with no concurrency sees 1.6–1.9&nbsp;ms for an exact hit. Most of the end-to-end time is therefore the Python HTTP stack and queueing, not the cache.</p>
+        </div>
+
+        <figure class="wide" aria-labelledby="f3t">
+          <div class="fhead"><div><div class="ftitle" id="f3t">Figure 3. End-to-end latency per workload</div><div class="fsub">Median of 3 runs · n=200 per run · concurrency 8 · log scale · provider excluded</div></div></div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="box" style="background: var(--s-inproc)"></i>In-process ASGI</span>
+            <span><i class="box" style="background: var(--s-tcp)"></i>Loopback TCP</span>
+            <span style="color: var(--muted)"><i class="dot" style="background: var(--text-2)"></i>p50</span>
+            <span style="color: var(--muted)"><i style="background: var(--text-2); width: 2px; height: 10px"></i>p95</span>
+            <span style="color: var(--muted)"><i class="ring" style="border-color: var(--text-2)"></i>p99</span>
+          </div>
+          <div class="chart" id="e2e" role="img" aria-label="Latency ranges per workload for in-process and TCP runs. Copilot over TCP is the outlier at 144 ms median."></div>
+          <details class="data"><summary>Data table</summary>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Workload</th><th>Transport</th><th class="num">rps</th><th class="num">hit %</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th></tr></thead>
+              <tbody id="e2eTable"></tbody>
+            </table></div>
+          </details>
+          <p class="fcap"><b>Anomaly.</b> Copilot over TCP has a median of 144&nbsp;ms (runs: 135, 180, 144). That is 10× the other workloads, although single-client exact hits on the same server take under 2&nbsp;ms. Copilot is the only workload with many L2 hits under the strict 0.98 code gate. Our hypothesis is contention in the L2 path under concurrency. We have not isolated it. In-process copilot was also bimodal: run&nbsp;1 had p95 2.5&nbsp;ms, runs&nbsp;2–3 about 38&nbsp;ms.</p>
+        </figure>
+
+        <div class="col">
+          <h3><span class="n">4.3</span>Hit composition</h3>
+          <p>Figure&nbsp;4 splits each workload's requests by the tier that answered. <em>Burst</em> is almost entirely exact repeats. <em>Agent swarm</em> leans on L2, because its agents rephrase shared tasks. <em>Multi-tenant</em> has no L2 hits by design: tenants cannot see each other's entries. Its misses are first requests in each new namespace.</p>
+        </div>
+
+        <figure class="wide" aria-labelledby="f4t">
+          <div class="fhead">
+            <div><div class="ftitle" id="f4t">Figure 4. Share of requests answered by each tier</div><div class="fsub" id="f4sub">In-process, run 1 (coldest) · n=200 per workload</div></div>
+            <div class="seg" role="group" aria-label="Dataset">
+              <button type="button" aria-pressed="true" data-set="cold">Cold · run 1</button>
+              <button type="button" aria-pressed="false" data-set="warm">TCP · 3 runs</button>
+            </div>
+          </div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="box" style="background: var(--s-l1)"></i>L1 exact</span>
+            <span><i class="box" style="background: var(--s-l2)"></i>L2 near-duplicate</span>
+            <span><i class="box" style="background: var(--s-miss)"></i>Miss</span>
+          </div>
+          <div class="chart" id="tiers" role="img" aria-label="Stacked bars of exact, near-duplicate and miss shares per workload."></div>
+          <details class="data"><summary>Data table</summary>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Workload</th><th>Dataset</th><th class="num">L1 exact</th><th class="num">L2 near-dup</th><th class="num">Miss</th><th class="num">Hit rate</th></tr></thead>
+              <tbody id="tierTable"></tbody>
+            </table></div>
+          </details>
+          <p class="fcap"><b>Caution.</b> These workloads are generated to contain repetition, so their hit rates describe the generators, not real agent sessions. The warm TCP view also includes 63 entries restored from the snapshot.</p>
+        </figure>
+
+        <div class="col">
+          <h3><span class="n">4.4</span>Match quality</h3>
+          <p>A near-duplicate cache is only useful if it never returns the wrong answer. Figure&nbsp;5 plots the similarity of every probe to its nearest stored entry. The two groups are separated by a wide empty band. The highest unrelated prompt ("Write a Python function to reverse a linked list", 0.539) sits well below the lowest paraphrase (0.944).</p>
+        </div>
+
+        <figure class="wide" aria-labelledby="f5t">
+          <div class="fhead">
+            <div><div class="ftitle" id="f5t">Figure 5. Similarity of probes to their nearest stored prompt</div><div class="fsub">8 stored prompts · 40 paraphrases · 20 unrelated prompts · vertical jitter only</div></div>
+            <div class="seg" role="group" aria-label="Axis range">
+              <button type="button" aria-pressed="true" data-range="full">0 – 1</button>
+              <button type="button" aria-pressed="false" data-range="zoom">Zoom 0.93 – 1</button>
+            </div>
+          </div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="dot" style="background: var(--s-l2)"></i>Paraphrase, matched</span>
+            <span><i class="ring" style="border-color: var(--s-l2)"></i>Paraphrase, gated out</span>
+            <span><i class="dot" style="background: var(--s-miss)"></i>Unrelated, rejected</span>
+            <span style="color: var(--muted)"><i style="background: var(--muted); width: 1px; height: 12px"></i>Thresholds</span>
+          </div>
+          <div class="chart" id="sim" role="img" aria-label="Strip plot. Paraphrases cluster between 0.944 and 1.0; unrelated prompts lie between 0.088 and 0.539."></div>
+          <details class="data"><summary>Data table</summary>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Group</th><th>Prompt (truncated)</th><th class="num">Similarity</th><th>Outcome</th></tr></thead>
+              <tbody id="simTable"></tbody>
+            </table></div>
+          </details>
+          <p class="fcap"><b>Result.</b> Precision 100% (0 false matches out of 20). Recall 97.5% (39 of 40), and all 39 hits returned the correct stored answer. The one gated-out paraphrase says "calculate", which triggers the <code>math_calculation</code> class and its 0.98 threshold (it scored 0.963). All five-point dips come from one template, "Kindly …". The other four templates ("Please", "Could you", "Help me", "Can you") consist only of stop words and score 0.9999, which makes them an easy test.</p>
+        </figure>
+      </section>
+
+      <section id="discussion" class="col">
+        <h2 class="sec"><span class="n">5</span>Discussion</h2>
+        <p><strong>The cache is not the bottleneck.</strong> At 9&nbsp;µs for L1 and 0.18&nbsp;ms for L2, lookup cost is at least two orders of magnitude below any network round trip. Optimisation effort is better spent on the HTTP path: that is where an agent's cached request spends roughly 90% or more of its 1.7&nbsp;ms (single client) to 14&nbsp;ms (8 concurrent clients).</p>
+        <p><strong>"Replay in 0.08&nbsp;ms" describes the lookup, not the request.</strong> The figure is in the right range for an in-process lookup; we measured lower. What the agent experiences is an HTTP response. Its latency is 20–175× that number, depending on concurrency. Both numbers are good. Only the second one is user-visible.</p>
+        <p><strong>Gating works, and costs a little recall.</strong> The strict classes rejected one legitimate paraphrase and accepted no false ones. For a tool whose failure mode is silently wrong code, that is the right trade-off. The keyword rules are coarse, though. "Calculate" in a SQL question makes it a math question.</p>
+        <p><strong>Savings are a property of the workload.</strong> Cost saved is roughly the hit rate times the cost of the calls avoided. Neither can be measured on synthetic generators. The 40–70% bill reduction in the README is plausible for agent sessions dominated by file re-reads. It remains a hypothesis until it is measured on recorded sessions.</p>
+      </section>
+
+      <section id="limits" class="col">
+        <h2 class="sec"><span class="n">6</span>Limitations and threats to validity</h2>
+        <ul class="list">
+          <li><strong>No real provider.</strong> Misses were served by a local stub, so miss latency and cost were not measured.</li>
+          <li><strong>Synthetic workloads.</strong> Hit rates come from generators built to repeat. No recorded agent sessions were replayed.</li>
+          <li><strong>Easy paraphrase set.</strong> Four of five templates differ from the stored prompt only by stop words, so recall is an upper bound. A set of human-written paraphrases is needed.</li>
+          <li><strong>Lexical embedder only.</strong> Results apply to the default <code>FastHashEmbedder</code>. The ONNX and quantized backends were not tested.</li>
+          <li><strong>One machine.</strong> A shared-tenancy cloud VM. Tail latencies (p99.9 and above) are sensitive to noisy neighbours.</li>
+          <li><strong>Warm snapshots.</strong> The TCP server restored 63 entries at start, which inflates TCP hit rates relative to a cold start.</li>
+          <li><strong>Open anomaly.</strong> The copilot TCP slowdown (§4.2) is unexplained.</li>
+          <li><strong>Small committed samples.</strong> The repository's <code>latest_report.json</code> uses n=40 per workload, where p99 equals the maximum. It agrees with our TCP medians (6.5–8.9&nbsp;ms vs 9.7–13.9&nbsp;ms) but should not be cited for tails.</li>
+        </ul>
+      </section>
+
+      <section id="audit">
+        <div class="col">
+          <h2 class="sec"><span class="n">7</span>Claims audit</h2>
+          <p>Every performance number in the landing page, README and benchmark reporter, checked against this report. "Assumed" means the number is a constant in code or copy, not a measurement.</p>
+        </div>
+        <div class="wide">
+          <div class="tbl-wrap">
+            <table class="audit">
+              <thead><tr><th>Claim</th><th>Source</th><th>What we found</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>Sub-millisecond L1 / L2 lookups (0.061 / 1.02 ms)</td><td class="dim">README</td><td>0.0091 / 0.180 ms p50 at n=10k. Faster than claimed.</td><td><span class="chip ok">Reproduced</span></td></tr>
+                <tr><td>Intent gating prevents wrong reuse</td><td class="dim">README, code</td><td>0 / 20 false matches, 0 / 39 wrong answers, on a synthetic set</td><td><span class="chip ok">Reproduced</span></td></tr>
+                <tr><td>High hit rates on agent workloads</td><td class="dim">latest_report.json</td><td>88–100% cold, 98.5–100% warm, on synthetic generators only</td><td><span class="chip part">Synthetic only</span></td></tr>
+                <tr><td>"Replay in 0.08 ms"</td><td class="dim">Landing page</td><td>True for the lookup (0.009–0.18 ms). The HTTP response takes 1.7 ms (single client) to 14 ms (c=8).</td><td><span class="chip part">Lookup only</span></td></tr>
+                <tr><td>"Semantic" cache</td><td class="dim">README, landing</td><td>The default embedder is lexical n-gram hashing. Neural backends are opt-in.</td><td><span class="chip part">Needs wording</span></td></tr>
+                <tr><td>1,850 ms cloud baseline and the derived speed-ups</td><td class="dim">benchmarks/reporter.py</td><td>Hard-coded constant (also a 4,200 ms p99 and ~25 rps)</td><td><span class="chip assumed">Assumed</span></td></tr>
+                <tr><td>"98.5% cost cut"</td><td class="dim">benchmarks/reporter.py</td><td>Template text, not computed from a run</td><td><span class="chip assumed">Assumed</span></td></tr>
+                <tr><td>Latency 6,130 → 1,450 ms (−76%), tokens 3,280 → 680 (−79%)</td><td class="dim">Landing page</td><td>Illustrative session; no run in the repo produces these</td><td><span class="chip none">Not measured</span></td></tr>
+                <tr><td>40–70% lower API bill</td><td class="dim">README</td><td>Needs recorded sessions against a real provider</td><td><span class="chip none">Not measured</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="tcap"><b>Table 4.</b> Claim status. The status labels are text and do not rely on colour.</p>
+        </div>
+      </section>
+
+      <section id="repro" class="col">
+        <h2 class="sec"><span class="n">8</span>Reproducibility</h2>
+        <p>Everything in this report can be regenerated from a clean checkout in about ten minutes.</p>
+<pre><button class="copy" type="button" data-copy="repro1">Copy</button><code id="repro1"><span class="c"># install</span>
+<span class="p">$ </span>python -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install -e .
+
+<span class="c"># §4.1 lookup microbenchmark (CLI, 5 iterations; see Appendix A for n=10k)</span>
+<span class="p">$ </span>omnicache benchmark
+
+<span class="c"># §4.2 end-to-end, in-process (repeat 3x)</span>
+<span class="p">$ </span>python -m benchmarks.load_test -n 200 -c 8 --url internal --quiet --export-json e2e.json
+
+<span class="c"># §4.2 end-to-end, loopback TCP (repeat 3x)</span>
+<span class="p">$ </span>omnicache start &amp;
+<span class="p">$ </span>python -m benchmarks.load_test -n 200 -c 8 --url http://127.0.0.1:8000 --quiet --export-json tcp.json</code></pre>
+
+        <h3>Appendix A · Lookup harness</h3>
+<pre><button class="copy" type="button" data-copy="repro2">Copy</button><code id="repro2"><span class="k">import</span> time, statistics
+<span class="k">from</span> core.vector_cache <span class="k">import</span> DualTierCache
+
+N, WARM = <span class="s">10_000</span>, <span class="s">500</span>
+cache = DualTierCache()
+stored = {<span class="s">"model"</span>: <span class="s">"claude-3-5-sonnet"</span>, <span class="s">"temperature"</span>: <span class="s">0.0</span>,
+          <span class="s">"messages"</span>: [{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: <span class="s">"Write a python fast fourier transform algorithm"</span>}]}
+cache.store(stored, {<span class="s">"choices"</span>: [{<span class="s">"message"</span>: {<span class="s">"role"</span>: <span class="s">"assistant"</span>, <span class="s">"content"</span>: <span class="s">"import numpy as np..."</span>}}]})
+variant = {**stored, <span class="s">"messages"</span>: [{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: <span class="s">"Write a python fast fourier transform (FFT) algorithm in numpy"</span>}]}
+novel = <span class="k">lambda</span> i: {**stored, <span class="s">"messages"</span>: [{<span class="s">"role"</span>: <span class="s">"user"</span>, <span class="s">"content"</span>: f<span class="s">"Unrelated question {i}: explain B-tree node splits"</span>}]}
+
+<span class="k">def</span> sample(make):
+    xs, statuses = [], set()
+    <span class="k">for</span> i <span class="k">in</span> range(WARM + N):
+        p = make(i)
+        t0 = time.perf_counter_ns()
+        status = cache.lookup(p)[<span class="s">0</span>]          <span class="c"># HIT_EXACT | HIT_SEMANTIC | MISS | BYPASS</span>
+        dt = (time.perf_counter_ns() - t0) / <span class="s">1e6</span>
+        <span class="k">if</span> i &gt;= WARM: xs.append(dt); statuses.add(status)
+    xs.sort()
+    <span class="k">return</span> statuses, {q: xs[int(len(xs) * q)] <span class="k">for</span> q <span class="k">in</span> (<span class="s">.5</span>, <span class="s">.9</span>, <span class="s">.95</span>, <span class="s">.99</span>, <span class="s">.999</span>)}
+
+<span class="k">for</span> name, fn <span class="k">in</span> [(<span class="s">"l1"</span>, <span class="k">lambda</span> i: stored), (<span class="s">"l2"</span>, <span class="k">lambda</span> i: variant), (<span class="s">"miss"</span>, novel)]:
+    print(name, *sample(fn))</code></pre>
+      </section>
+
+      <section id="refs" class="col">
+        <h2 class="sec"><span class="n">—</span>References</h2>
+        <ol class="refs">
+          <li id="r1"><span><code>core/vector_cache.py</code>: <code>DualTierCache.lookup</code>, <code>classify_intent</code></span></li>
+          <li id="r2"><span><code>core/embeddings.py</code>: <code>FastHashEmbedder</code>, <code>AutoEmbedder</code>, <code>FastSemanticEmbedder</code></span></li>
+          <li id="r3"><span><code>benchmarks/scenarios.py</code>, <code>benchmarks/load_test.py</code>: workload generators and load driver</span></li>
+          <li id="r4"><span><code>benchmarks/reporter.py</code>, <code>benchmarks/latest_report.json</code>: committed report and baseline constants</span></li>
+          <li id="r5"><span><code>server/gateway.py</code>, <code>server/cli.py</code>: HTTP entry point, <code>omnicache benchmark</code></span></li>
+        </ol>
+        <footer>
+          <span>OmniCache Technical Report OMC-TR-2026-01 · preliminary</span>
+          <span><a href="landing_v3.html">← Back to OmniCache</a></span>
+        </footer>
+      </section>
+    </main>
+  </div>
+
+  <div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+  <script>
+  (() => {
+    const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const COL = { l1: css('--s-l1'), l2: css('--s-l2'), miss: css('--s-miss'), inproc: css('--s-inproc'), tcp: css('--s-tcp'), text: css('--text'), text2: css('--text-2'), muted: css('--muted'), grid: css('--grid'), axis: css('--axis'), surface: css('--surface') };
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (tag, attrs = {}, parent) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; };
+    const txt = (parent, x, y, s, attrs = {}) => { const t = el('text', { x, y, fill: COL.muted, 'font-size': 11.5, ...attrs }, parent); t.textContent = s; return t; };
+    const fmtMs = (v) => v < 0.1 ? (v * 1000).toFixed(v < 0.01 ? 1 : 0) + ' µs' : v < 10 ? v.toFixed(v < 1 ? 3 : 2) + ' ms' : v.toFixed(1) + ' ms';
+
+    /* ---------- tooltip ---------- */
+    const tip = document.getElementById('tip');
+    function showTip(html, host, x, y) {
+      tip.innerHTML = html;
+      tip.classList.add('on');
+      const r = host.getBoundingClientRect();
+      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      let left = r.left + window.scrollX + x + 14;
+      if (left + tw > window.scrollX + document.documentElement.clientWidth - 8) left = r.left + window.scrollX + x - tw - 14;
+      left = Math.max(window.scrollX + 8, left);
+      let top = r.top + window.scrollY + y - th - 12;
+      if (top < window.scrollY + 64) top = r.top + window.scrollY + y + 16;
+      tip.style.left = left + 'px';
+      tip.style.top = top + 'px';
+    }
+    const hideTip = () => tip.classList.remove('on');
+    const row = (color, label, val, ring) => `<div class="tr"><span>${color ? `<i class="sw" style="${ring ? `border:2px solid ${color};background:transparent;width:9px;height:9px` : `background:${color}`};margin:0"></i>` : ''}${label}</span><b>${val}</b></div>`;
+
+    const logScale = (d0, d1, r0, r1) => { const a = Math.log10(d0), b = Math.log10(d1); const f = (v) => r0 + (Math.log10(v) - a) / (b - a) * (r1 - r0); f.inv = (px) => Math.pow(10, a + (px - r0) / (r1 - r0) * (b - a)); return f; };
+    const linScale = (d0, d1, r0, r1) => { const f = (v) => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.inv = (px) => d0 + (px - r0) / (r1 - r0) * (d1 - d0); return f; };
+
+    /* ---------- data ---------- */
+    const ECDF = {
+      l1: { min: 0.007968, q: [0.0083,0.0083,0.0083,0.0084,0.0084,0.0084,0.0084,0.0085,0.0085,0.0085,0.0085,0.0085,0.0086,0.0086,0.0086,0.0086,0.0086,0.0086,0.0086,0.0086,0.0087,0.0087,0.0087,0.0087,0.0087,0.0087,0.0088,0.0088,0.0088,0.0088,0.0088,0.0088,0.0088,0.0088,0.0089,0.0089,0.0089,0.0089,0.0089,0.0089,0.009,0.009,0.009,0.009,0.009,0.009,0.009,0.0091,0.0091,0.0091,0.0091,0.0091,0.0092,0.0092,0.0092,0.0092,0.0092,0.0093,0.0093,0.0093,0.0093,0.0094,0.0094,0.0094,0.0094,0.0094,0.0095,0.0095,0.0095,0.0096,0.0096,0.0096,0.0097,0.0097,0.0097,0.0098,0.0098,0.0099,0.0099,0.01,0.01,0.0101,0.0102,0.0103,0.0105,0.0107,0.0111,0.0116,0.0121,0.0125,0.0129,0.0132,0.0138,0.0148,0.0161,0.0182,0.0209,0.0274,0.0349] },
+      l2: { min: 0.165811, q: [0.1677,0.1681,0.1684,0.1686,0.1689,0.1691,0.1692,0.1694,0.1696,0.1697,0.1699,0.17,0.1702,0.1703,0.1705,0.1706,0.1708,0.171,0.1712,0.1714,0.1716,0.1718,0.172,0.1721,0.1724,0.1726,0.1728,0.1731,0.1734,0.1737,0.1739,0.1741,0.1744,0.1747,0.175,0.1753,0.1755,0.1758,0.1762,0.1764,0.1767,0.1771,0.1774,0.1777,0.178,0.1785,0.1789,0.1793,0.1797,0.1802,0.1807,0.1811,0.1816,0.1822,0.1827,0.1833,0.1838,0.1844,0.185,0.1855,0.1862,0.1869,0.1878,0.1885,0.1892,0.1899,0.1906,0.1913,0.1919,0.1928,0.1935,0.1944,0.1953,0.1964,0.1976,0.199,0.201,0.2033,0.2051,0.2071,0.2093,0.2119,0.2145,0.2176,0.2218,0.2255,0.2295,0.2355,0.2433,0.25,0.2526,0.2558,0.2618,0.2675,0.2725,0.2789,0.293,0.3101,0.3692] },
+      miss: { min: 0.176765, q: [0.1784,0.1789,0.1792,0.1794,0.1797,0.1799,0.1801,0.1803,0.1804,0.1806,0.1808,0.1809,0.1811,0.1813,0.1814,0.1815,0.1817,0.1819,0.1821,0.1822,0.1824,0.1826,0.1828,0.183,0.1832,0.1835,0.1837,0.1839,0.1841,0.1844,0.1846,0.1848,0.1851,0.1854,0.1857,0.1859,0.1862,0.1865,0.1868,0.187,0.1873,0.1877,0.188,0.1883,0.1886,0.1889,0.1893,0.1896,0.19,0.1903,0.1907,0.1911,0.1915,0.192,0.1924,0.1928,0.1932,0.1937,0.1942,0.1948,0.1953,0.1959,0.1966,0.1973,0.1981,0.1987,0.1995,0.2002,0.2008,0.2015,0.2023,0.2028,0.2035,0.2044,0.2054,0.2064,0.2078,0.2097,0.2116,0.214,0.2158,0.2185,0.2212,0.2244,0.2275,0.2304,0.2348,0.2409,0.2472,0.2554,0.2695,0.2867,0.2964,0.3041,0.3133,0.3241,0.3413,0.3634,0.4077] },
+    };
+    const SERIES = [
+      { key: 'l1', name: 'L1 exact hit', color: COL.l1 },
+      { key: 'l2', name: 'L2 near-dup hit', color: COL.l2 },
+      { key: 'miss', name: 'Miss', color: COL.miss },
+    ];
+
+    const WORKLOADS = ['copilot', 'agent_swarm', 'burst', 'multi_tenant'];
+    const E2E = {
+      copilot:      { inproc: { rps: 105.9, hit: 94.5, p50: 0.94, p95: 38.49, p99: 42.38 }, tcp: { rps: 48.3, hit: 98.5, p50: 143.75, p95: 266.31, p99: 305.06 } },
+      agent_swarm:  { inproc: { rps: 839.8, hit: 99.5, p50: 1.10, p95: 1.87, p99: 2.68 },   tcp: { rps: 474.9, hit: 100, p50: 13.51, p95: 34.01, p99: 49.49 } },
+      burst:        { inproc: { rps: 1364.8, hit: 100, p50: 0.64, p95: 0.96, p99: 1.45 },   tcp: { rps: 443.3, hit: 100, p50: 9.73, p95: 38.34, p99: 168.40 } },
+      multi_tenant: { inproc: { rps: 846.6, hit: 88.0, p50: 0.69, p95: 2.08, p99: 19.08 },  tcp: { rps: 381.7, hit: 100, p50: 13.89, p95: 49.95, p99: 87.50 } },
+    };
+    const TIERS = {
+      cold: { label: 'In-process, run 1 (coldest) · n=200 per workload', rows: { copilot: [122, 54, 24], agent_swarm: [78, 111, 11], burst: [197, 0, 3], multi_tenant: [176, 0, 24] } },
+      warm: { label: 'Loopback TCP, 3 runs pooled (snapshot-warm) · n=600 per workload', rows: { copilot: [391, 200, 9], agent_swarm: [264, 336, 0], burst: [600, 0, 0], multi_tenant: [576, 0, 24] } },
+    };
+    const SIM = {
+      pos: [[0.9999,1,"Please write a Python function to sort a list usin"],[0.9999,1,"Could you write a Python function to sort a list u"],[0.9999,1,"Help me write a Python function to sort a list usi"],[0.9999,1,"Can you write a Python function to sort a list usi"],[0.9583,1,"Kindly write a Python function to sort a list usin"],[0.9999,1,"Please explain the difference between optimistic a"],[0.9998,1,"Could you explain the difference between optimisti"],[0.9998,1,"Help me explain the difference between optimistic "],[0.9998,1,"Can you explain the difference between optimistic "],[0.9437,1,"Kindly explain the difference between optimistic a"],[0.9999,1,"Please how do I implement rate limiting using the "],[0.9999,1,"Could you how do I implement rate limiting using t"],[0.9999,1,"Help me how do I implement rate limiting using the"],[0.9999,1,"Can you how do I implement rate limiting using the"],[0.957,1,"Kindly how do I implement rate limiting using the "],[0.9999,1,"Please what are the best practices for structuring"],[0.9998,1,"Could you what are the best practices for structur"],[0.9999,1,"Help me what are the best practices for structurin"],[0.9998,1,"Can you what are the best practices for structurin"],[0.9527,1,"Kindly what are the best practices for structuring"],[0.9999,1,"Please convert this SQL query to use window functi"],[0.9999,1,"Could you convert this SQL query to use window fun"],[0.9999,1,"Help me convert this SQL query to use window funct"],[0.9999,1,"Can you convert this SQL query to use window funct"],[0.963,0,"Kindly convert this SQL query to use window functi"],[0.9999,1,"Please debug this memory leak in Node.js event emi"],[0.9998,1,"Could you debug this memory leak in Node.js event "],[0.9998,1,"Help me debug this memory leak in Node.js event em"],[0.9998,1,"Can you debug this memory leak in Node.js event em"],[0.9489,1,"Kindly debug this memory leak in Node.js event emi"],[0.9999,1,"Please provide a Kubernetes Deployment YAML for a "],[0.9999,1,"Could you provide a Kubernetes Deployment YAML for"],[0.9999,1,"Help me provide a Kubernetes Deployment YAML for a"],[0.9999,1,"Can you provide a Kubernetes Deployment YAML for a"],[0.9624,1,"Kindly provide a Kubernetes Deployment YAML for a "],[0.9999,1,"Please how does the CRDT state-based replication r"],[0.9999,1,"Could you how does the CRDT state-based replicatio"],[0.9999,1,"Help me how does the CRDT state-based replication "],[0.9999,1,"Can you how does the CRDT state-based replication "],[0.9603,1,"Kindly how does the CRDT state-based replication r"]],
+    };
+    SIM.neg = [[0.0879, "What is the capital of France?"], [0.1293, "Explain how TCP congestion control works"], [0.1314, "Summarize the plot of Hamlet"], [0.1379, "How do I bake sourdough bread at home?"], [0.1736, "Write a haiku about autumn leaves"], [0.1608, "What causes the northern lights?"], [0.1262, "Translate 'good morning' into Japanese"], [0.1854, "List the planets in order from the sun"], [0.1208, "How do vaccines train the immune system?"], [0.2201, "Explain the rules of chess castling"], [0.1118, "What is a Roth IRA?"], [0.1347, "Describe photosynthesis in simple terms"], [0.539, "Write a Python function to reverse a linked list"], [0.3383, "Explain optimistic concurrency in HTTP ETags"], [0.1481, "How do I configure CORS headers in an nginx gateway?"], [0.2243, "Write a bash script to rotate log files"], [0.146, "Explain B-tree node split invariants in detail"], [0.1064, "What is the time complexity of heapsort?"], [0.2751, "Provide a Docker Compose file for Postgres and Redis"], [0.1623, "How does Raft leader election work?"]];
+
+    /* ---------- Figure 2: ECDF ---------- */
+    function drawEcdf(host) {
+      host.innerHTML = '';
+      const W = host.clientWidth, narrow = W < 560;
+      const H = narrow ? 260 : 320, m = { t: 12, r: 12, b: 34, l: 40 };
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H }, host);
+      const x = logScale(0.006, 0.5, m.l, W - m.r), y = linScale(0, 1, H - m.b, m.t);
+      const ticks = narrow ? [0.01, 0.1, 0.5] : [0.01, 0.02, 0.05, 0.1, 0.2, 0.5];
+      const minor = [0.006, 0.007, 0.008, 0.009, 0.03, 0.04, 0.06, 0.07, 0.08, 0.09, 0.3, 0.4];
+      minor.forEach((v) => el('line', { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, stroke: COL.grid, 'stroke-width': 1, opacity: 0.45 }, svg));
+      ticks.forEach((v) => {
+        el('line', { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, stroke: COL.grid }, svg);
+        txt(svg, x(v), H - m.b + 18, v < 0.1 ? Math.round(v * 1000) + ' µs' : v + ' ms', { 'text-anchor': 'middle' });
+      });
+      [0, 0.25, 0.5, 0.75, 1].forEach((v) => {
+        el('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: v === 0 ? COL.axis : COL.grid }, svg);
+        txt(svg, m.l - 8, y(v) + 4, Math.round(v * 100) + '%', { 'text-anchor': 'end' });
+      });
+      const paths = {};
+      SERIES.forEach((s) => {
+        const d = ECDF[s.key];
+        const pts = [[d.min, 0], ...d.q.map((v, i) => [v, (i + 1) / 100])];
+        paths[s.key] = pts;
+        el('path', { d: 'M' + pts.map(([a, b]) => `${x(a).toFixed(1)},${y(b).toFixed(1)}`).join('L'), fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+      });
+      // selective direct labels
+      const lab = (key, p, dx, anchor, label) => { const v = ECDF[key].q[p - 1]; txt(svg, x(v) + dx, y(p / 100) + 4, label, { 'text-anchor': anchor, fill: COL.text2, 'font-size': 12, 'font-weight': 500 }); };
+      lab('l1', 50, 10, 'start', 'L1 exact');
+      lab('l2', 82, -10, 'end', 'L2 near-dup');
+      lab('miss', 22, 10, 'start', 'Miss');
+
+      // hover layer: horizontal crosshair at a percentile
+      const g = el('g', { opacity: 0 }, svg);
+      const hl = el('line', { x1: m.l, x2: W - m.r, stroke: COL.text2, 'stroke-width': 1 }, g);
+      const dots = SERIES.map((s) => el('circle', { r: 4.5, fill: s.color, stroke: COL.surface, 'stroke-width': 2 }, g));
+      const hit = el('rect', { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: 'transparent' }, svg);
+      const move = (ev) => {
+        const r = svg.getBoundingClientRect();
+        const py = ev.clientY - r.top;
+        let p = Math.round(y.inv(py) * 100); p = Math.max(1, Math.min(99, p));
+        hl.setAttribute('y1', y(p / 100)); hl.setAttribute('y2', y(p / 100));
+        SERIES.forEach((s, i) => { const v = ECDF[s.key].q[p - 1]; dots[i].setAttribute('cx', x(v)); dots[i].setAttribute('cy', y(p / 100)); });
+        g.setAttribute('opacity', 1);
+        showTip(`<div class="th">p${p}: ${p}% of lookups finish within</div>` + SERIES.map((s) => row(s.color, s.name, ECDF[s.key].q[p - 1].toFixed(4) + ' ms')).join(''), host, ev.clientX - r.left, y(p / 100));
+      };
+      hit.addEventListener('pointermove', move);
+      hit.addEventListener('pointerdown', move);
+      hit.addEventListener('pointerleave', () => { g.setAttribute('opacity', 0); hideTip(); });
+    }
+
+    /* ---------- Figure 3: e2e ranges ---------- */
+    function drawE2E(host) {
+      host.innerHTML = '';
+      const W = host.clientWidth, narrow = W < 560;
+      const rowH = 22, groupGap = narrow ? 30 : 18, labelW = narrow ? 0 : 118;
+      const m = { t: narrow ? 20 : 8, r: 14, b: 34, l: labelW + 8 };
+      const H = m.t + WORKLOADS.length * (2 * rowH) + (WORKLOADS.length - 1) * groupGap + m.b;
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H }, host);
+      const x = logScale(0.4, 400, m.l, W - m.r);
+      const ticks = narrow ? [1, 10, 100] : [0.5, 1, 2, 5, 10, 20, 50, 100, 200];
+      ticks.forEach((v) => { el('line', { x1: x(v), x2: x(v), y1: 0, y2: H - m.b, stroke: COL.grid }, svg); txt(svg, x(v), H - m.b + 18, v < 1 ? v + ' ms' : v + (v === ticks[ticks.length - 1] || v === 1 ? ' ms' : ''), { 'text-anchor': 'middle' }); });
+      el('line', { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: COL.axis }, svg);
+      let yy = m.t;
+      WORKLOADS.forEach((w, gi) => {
+        if (narrow) txt(svg, m.l, yy - 6, w, { fill: COL.text, 'font-size': 12, 'font-weight': 600 });
+        else txt(svg, 0, yy + rowH + 4, w, { fill: COL.text, 'font-size': 12.5, 'font-weight': 500 });
+        ['inproc', 'tcp'].forEach((t) => {
+          const d = E2E[w][t], cy = yy + rowH / 2, color = t === 'tcp' ? COL.tcp : COL.inproc;
+          const g = el('g', {}, svg);
+          el('line', { x1: x(d.p50), x2: x(d.p99), y1: cy, y2: cy, stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0.75 }, g);
+          el('line', { x1: x(d.p95), x2: x(d.p95), y1: cy - 5, y2: cy + 5, stroke: color, 'stroke-width': 2, 'stroke-linecap': 'round' }, g);
+          el('circle', { cx: x(d.p99), cy, r: 4, fill: COL.surface, stroke: color, 'stroke-width': 2 }, g);
+          el('circle', { cx: x(d.p50), cy, r: 4.5, fill: color, stroke: COL.surface, 'stroke-width': 2 }, g);
+          if (!narrow || gi === 0) txt(g, x(d.p99) + 10, cy + 4, t === 'tcp' ? 'TCP' : 'in-proc', { 'font-size': 11 });
+          const hit = el('rect', { x: m.l, y: yy, width: W - m.l - m.r, height: rowH, fill: 'transparent' }, g);
+          const show = (ev) => {
+            const r = svg.getBoundingClientRect();
+            showTip(`<div class="th">${w} · ${t === 'tcp' ? 'loopback TCP' : 'in-process'}</div>` + row(color, 'p50', d.p50.toFixed(2) + ' ms') + row(null, 'p95', d.p95.toFixed(2) + ' ms') + row(null, 'p99', d.p99.toFixed(2) + ' ms') + row(null, 'Throughput', d.rps + ' rps') + row(null, 'Hit rate', d.hit + '%'), host, ev.clientX - r.left, cy);
+          };
+          hit.addEventListener('pointermove', show);
+          hit.addEventListener('pointerdown', show);
+          hit.addEventListener('pointerleave', hideTip);
+          yy += rowH;
+        });
+        yy += groupGap;
+      });
+    }
+    function fillE2ETable() {
+      document.getElementById('e2eTable').innerHTML = WORKLOADS.flatMap((w) => ['inproc', 'tcp'].map((t) => { const d = E2E[w][t]; return `<tr><td>${w}</td><td><span class="sw" style="background:${t === 'tcp' ? COL.tcp : COL.inproc}"></span>${t === 'tcp' ? 'Loopback TCP' : 'In-process'}</td><td class="num">${d.rps}</td><td class="num">${d.hit}</td><td class="num">${d.p50.toFixed(2)}</td><td class="num">${d.p95.toFixed(2)}</td><td class="num">${d.p99.toFixed(2)}</td></tr>`; })).join('');
+    }
+
+    /* ---------- Figure 4: tier composition ---------- */
+    let tierSet = 'cold';
+    function drawTiers(host) {
+      host.innerHTML = '';
+      const W = host.clientWidth, narrow = W < 560;
+      const barH = 22, gap = narrow ? 34 : 16, labelW = narrow ? 0 : 118, valW = 52;
+      const m = { t: narrow ? 20 : 4, r: valW, b: 6, l: labelW };
+      const set = TIERS[tierSet];
+      const H = m.t + WORKLOADS.length * barH + (WORKLOADS.length - 1) * gap + m.b;
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H }, host);
+      const x = linScale(0, 1, m.l, W - m.r);
+      const defs = el('defs', {}, svg);
+      const colors = [COL.l1, COL.l2, COL.miss], names = ['L1 exact', 'L2 near-duplicate', 'Miss'];
+      WORKLOADS.forEach((w, i) => {
+        const y0 = m.t + i * (barH + gap);
+        const vals = set.rows[w], total = vals.reduce((a, b) => a + b, 0);
+        if (narrow) txt(svg, m.l, y0 - 7, w, { fill: COL.text, 'font-size': 12, 'font-weight': 600 });
+        else txt(svg, 0, y0 + barH / 2 + 4, w, { fill: COL.text, 'font-size': 12.5, 'font-weight': 500 });
+        const clip = el('clipPath', { id: 'clip' + i }, defs);
+        el('rect', { x: m.l, y: y0, width: x(1) - m.l, height: barH, rx: 4 }, clip);
+        const g = el('g', { 'clip-path': `url(#clip${i})` }, svg);
+        let acc = 0;
+        const segs = vals.map((v, ci) => { const s = { a: acc / total, b: (acc + v) / total, v, ci }; acc += v; return s; }).filter((s) => s.v > 0);
+        segs.forEach((s, k) => {
+          // 2px surface gap between adjacent segments
+          const x0 = x(s.a) + (k > 0 ? 1 : 0), x1 = x(s.b) - (k < segs.length - 1 ? 1 : 0);
+          el('rect', { x: x0, y: y0, width: Math.max(0, x1 - x0), height: barH, fill: colors[s.ci] }, g);
+          const pct = (s.v / total) * 100;
+          if (x1 - x0 > 40) txt(svg, (x0 + x1) / 2, y0 + barH / 2 + 4, pct.toFixed(pct < 10 ? 1 : 0) + '%', { 'text-anchor': 'middle', fill: '#0b0f13', 'font-size': 11.5, 'font-weight': 600 });
+        });
+        const hitPct = ((vals[0] + vals[1]) / total) * 100;
+        txt(svg, W - m.r + 10, y0 + barH / 2 + 4, hitPct.toFixed(hitPct % 1 ? 1 : 0) + '%', { fill: COL.text, 'font-size': 12, 'font-weight': 600 });
+        const hit = el('rect', { x: m.l, y: y0 - 4, width: W - m.l - m.r, height: barH + 8, fill: 'transparent' }, svg);
+        const show = (ev) => {
+          const r = svg.getBoundingClientRect();
+          showTip(`<div class="th">${w} · n=${total}</div>` + vals.map((v, j) => row(colors[j], names[j], `${v} · ${((v / total) * 100).toFixed(1)}%`)).join('') + row(null, 'Hit rate', hitPct.toFixed(1) + '%'), host, ev.clientX - r.left, y0);
+        };
+        hit.addEventListener('pointermove', show);
+        hit.addEventListener('pointerdown', show);
+        hit.addEventListener('pointerleave', hideTip);
+      });
+    }
+    function fillTierTable() {
+      document.getElementById('tierTable').innerHTML = ['cold', 'warm'].flatMap((k) => WORKLOADS.map((w) => { const v = TIERS[k].rows[w], t = v[0] + v[1] + v[2]; return `<tr><td>${w}</td><td class="dim">${k === 'cold' ? 'In-process run 1' : 'TCP, 3 runs'}</td><td class="num">${v[0]}</td><td class="num">${v[1]}</td><td class="num">${v[2]}</td><td class="num">${(((v[0] + v[1]) / t) * 100).toFixed(1)}%</td></tr>`; })).join('');
+    }
+
+    /* ---------- Figure 5: similarity strip ---------- */
+    let simRange = 'full';
+    function drawSim(host) {
+      host.innerHTML = '';
+      const W = host.clientWidth, narrow = W < 560;
+      const laneH = 64, labelW = narrow ? 0 : 118;
+      const m = { t: narrow ? 40 : 30, r: 14, b: 34, l: labelW + 8 };
+      const lanes = narrow ? [{ k: 'pos', y: m.t + 14 }, { k: 'neg', y: m.t + laneH + 38 }] : [{ k: 'pos', y: m.t }, { k: 'neg', y: m.t + laneH + 14 }];
+      const H = lanes[1].y + laneH + m.b;
+      const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, height: H }, host);
+      const [d0, d1] = simRange === 'full' ? [0, 1] : [0.93, 1];
+      const x = linScale(d0, d1, m.l, W - m.r);
+      const ticks = simRange === 'full' ? (narrow ? [0, 0.5, 1] : [0, 0.2, 0.4, 0.6, 0.8, 1]) : (narrow ? [0.94, 0.97, 1] : [0.93, 0.94, 0.95, 0.96, 0.97, 0.98, 0.99, 1]);
+      ticks.forEach((v) => { el('line', { x1: x(v), x2: x(v), y1: m.t - 6, y2: H - m.b, stroke: COL.grid }, svg); txt(svg, x(v), H - m.b + 18, v.toFixed(v === 0 || v === 1 ? 0 : 2), { 'text-anchor': 'middle' }); });
+      el('line', { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: COL.axis }, svg);
+      txt(svg, W - m.r, H - 2, 'cosine similarity →', { 'text-anchor': 'end', 'font-size': 11 });
+
+      // thresholds (solid hairlines)
+      const TH = simRange === 'full' ? [[0.75, 'default 0.75'], [0.98, 'strict 0.98']] : [[0.95, 'json 0.95'], [0.98, 'strict 0.98']];
+      TH.forEach(([v, lbl], i) => {
+        el('line', { x1: x(v), x2: x(v), y1: m.t - 14, y2: H - m.b, stroke: COL.muted, 'stroke-width': 1, opacity: 0.8 }, svg);
+        const endAnchor = narrow || (i === TH.length - 1 && simRange === 'full');
+        txt(svg, x(v) + (endAnchor ? -5 : 6), m.t - 18, narrow ? String(v) : lbl, { 'text-anchor': endAnchor ? 'end' : 'start', fill: COL.text2, 'font-size': 11 });
+      });
+
+      const jit = (i) => ((i * 37) % 11) / 10 - 0.5;
+      lanes.forEach(({ k, y: ly }) => {
+        const label = k === 'pos' ? 'Paraphrases' : 'Unrelated';
+        const n = SIM[k].length;
+        if (narrow) txt(svg, m.l, ly - 8, `${label} · n=${n}`, { fill: COL.text, 'font-size': 12, 'font-weight': 600 });
+        else { txt(svg, 0, ly + laneH / 2, label, { fill: COL.text, 'font-size': 12.5, 'font-weight': 500 }); txt(svg, 0, ly + laneH / 2 + 16, `n=${n}`, { 'font-size': 11 }); }
+        el('rect', { x: m.l, y: ly, width: W - m.l - m.r, height: laneH, fill: 'rgba(255,255,255,0.015)', rx: 6 }, svg);
+        let off = 0;
+        SIM[k].forEach((p, i) => {
+          const v = p[0];
+          if (v < d0) { off++; return; }
+          const cx = x(v), cy = ly + laneH / 2 + jit(i) * (laneH - 20);
+          const color = k === 'pos' ? COL.l2 : COL.miss;
+          const matched = k === 'pos' ? p[1] === 1 : false;
+          const c = k === 'pos' && !matched
+            ? el('circle', { cx, cy, r: 5, fill: COL.surface, stroke: color, 'stroke-width': 2 }, svg)
+            : el('circle', { cx, cy, r: 4.5, fill: color, stroke: COL.surface, 'stroke-width': 1.5, opacity: 0.95 }, svg);
+          const hit = el('circle', { cx, cy, r: 10, fill: 'transparent' }, svg);
+          const q = k === 'pos' ? p[2] : p[1];
+          const outcome = k === 'pos' ? (matched ? 'HIT_SEMANTIC · correct answer' : 'MISS · gated by math_calculation (0.98)') : 'MISS · rejected';
+          const show = (ev) => { const r = svg.getBoundingClientRect(); c.setAttribute('r', 6.5); showTip(`<div class="th">${label}</div>` + row(null, 'Similarity', v.toFixed(4)) + row(null, 'Outcome', '') + `<q style="color:var(--text-2)">${outcome}</q><q>“${q}${q.length >= 50 ? '…' : ''}”</q>`, host, cx, cy); };
+          const hide = () => { c.setAttribute('r', k === 'pos' && !matched ? 5 : 4.5); hideTip(); };
+          hit.addEventListener('pointermove', show);
+          hit.addEventListener('pointerdown', show);
+          hit.addEventListener('pointerleave', hide);
+        });
+        if (off) txt(svg, m.l + 8, ly + laneH / 2 + 4, `← all ${off} below ${d0} (max ${Math.max(...SIM[k].map((p) => p[0])).toFixed(3)})`, { fill: COL.text2, 'font-size': 12 });
+      });
+      if (simRange === 'full') {
+        const hi = Math.max(...SIM.neg.map((p) => p[0])), lo = Math.min(...SIM.pos.map((p) => p[0]));
+        const yb = lanes[1].y - (narrow ? 26 : 7);
+        el('line', { x1: x(hi) + 8, x2: x(lo) - 8, y1: yb, y2: yb, stroke: COL.text2, 'stroke-width': 1 }, svg);
+        [x(hi) + 8, x(lo) - 8].forEach((xx) => el('line', { x1: xx, x2: xx, y1: yb - 4, y2: yb + 4, stroke: COL.text2, 'stroke-width': 1 }, svg));
+        const midx = x(hi) + (x(lo) - x(hi)) * 0.3;
+        const t = txt(svg, midx, yb - 5, `gap ${(lo - hi).toFixed(3)}`, { 'text-anchor': 'middle', fill: COL.text, 'font-size': 11.5, 'font-weight': 600 });
+      }
+    }
+    function fillSimTable() {
+      const rows = [...SIM.pos.map((p) => ['Paraphrase', p[2], p[0], p[1] ? 'Matched' : 'Gated out (0.98)']), ...SIM.neg.map((p) => ['Unrelated', p[1], p[0], 'Rejected'])];
+      document.getElementById('simTable').innerHTML = rows.map((r) => `<tr><td class="dim">${r[0]}</td><td>${r[1].replace(/</g, '&lt;')}${r[1].length >= 50 ? '…' : ''}</td><td class="num">${r[2].toFixed(4)}</td><td>${r[3]}</td></tr>`).join('');
+    }
+
+    /* ---------- wire up ---------- */
+    const charts = [['ecdf', drawEcdf], ['e2e', drawE2E], ['tiers', drawTiers], ['sim', drawSim]];
+    const renderAll = () => charts.forEach(([id, fn]) => fn(document.getElementById(id)));
+    fillE2ETable(); fillTierTable(); fillSimTable(); renderAll();
+    let lastW = window.innerWidth, rt;
+    window.addEventListener('resize', () => { if (window.innerWidth === lastW) return; lastW = window.innerWidth; clearTimeout(rt); rt = setTimeout(renderAll, 120); });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(renderAll);
+
+    document.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', () => {
+      tierSet = b.dataset.set;
+      document.querySelectorAll('[data-set]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      document.getElementById('f4sub').textContent = TIERS[tierSet].label;
+      drawTiers(document.getElementById('tiers'));
+    }));
+    document.querySelectorAll('[data-range]').forEach((b) => b.addEventListener('click', () => {
+      simRange = b.dataset.range;
+      document.querySelectorAll('[data-range]').forEach((o) => o.setAttribute('aria-pressed', String(o === b)));
+      drawSim(document.getElementById('sim'));
+    }));
+    document.querySelectorAll('.copy').forEach((b) => b.addEventListener('click', async () => {
+      const text = document.getElementById(b.dataset.copy).innerText.split('\n').map((l) => l.replace(/^\$ /, '')).join('\n');
+      try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Select & copy'; }
+      setTimeout(() => (b.textContent = 'Copy'), 1600);
+    }));
+
+    /* ---------- TOC + progress ---------- */
+    const links = [...document.querySelectorAll('#tocList a')];
+    const secs = links.map((a) => document.querySelector(a.getAttribute('href')));
+    const bar = document.getElementById('progress');
+    const onScroll = () => {
+      const h = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.transform = `scaleX(${h > 0 ? Math.min(1, window.scrollY / h) : 0})`;
+      let cur = 0;
+      secs.forEach((s, i) => { if (s && s.getBoundingClientRect().top < 140) cur = i; });
+      links.forEach((a, i) => a.classList.toggle('on', i === cur));
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+  </script>
+</body>
+</html>

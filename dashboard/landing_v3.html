@@ -26,7 +26,7 @@
   <link rel="preload" as="image" href="img/hero-1983.webp" imagesrcset="img/hero-1000.webp 1000w, img/hero-1983.webp 1983w" imagesizes="(max-width: 1240px) 100vw, 1240px" fetchpriority="high">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <script type="application/ld+json">
   {
@@ -60,8 +60,16 @@
       --ok: #7fd6ae;
       --radius: 14px;
       --nav-h: 64px;
-      --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
       --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+      /* Neumorphism (Soft UI) Elevation Physics */
+      --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
+      --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
+      --neu-flat-hover: 5px 5px 14px #02070b, -5px -5px 14px rgba(74, 92, 106, 0.32);
+      --neu-pressed: inset 2px 2px 5px #02080d, inset -2px -2px 5px rgba(74, 92, 106, 0.18);
+      --neu-pill: 9999px;
+      --neu-card: 20px;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -89,23 +97,38 @@
 
     /* Nav */
     .nav { position: fixed; inset: 0 0 auto; z-index: 50; border-bottom: 1px solid transparent; transition: background 0.25s, border-color 0.25s; }
-    .nav.scrolled { background: rgba(11, 15, 19, 0.82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-color: var(--line); }
+    .nav.scrolled { background: rgba(11, 15, 19, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-color: var(--line); }
     .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: var(--nav-h); }
     .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
     .logo-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-2); display: grid; place-items: center; color: var(--accent); }
     .logo-mark svg { width: 15px; height: 15px; }
-    .nav-links { display: flex; align-items: center; gap: 28px; font-size: 14px; color: var(--muted); }
-    .nav-links a:not(.btn) { position: relative; padding: 6px 0; transition: color 0.2s; }
-    .nav-links a:not(.btn):hover, .nav-links a.active { color: var(--text); }
+    .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; color: var(--muted); }
+    .nav-links a:not(.btn):not(.nav-dash) { position: relative; padding: 6px 0; transition: color 0.2s; }
+    .nav-links a:not(.btn):not(.nav-dash):hover, .nav-links a.active { color: var(--text); }
     .nav-links a.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; border-radius: 2px; background: var(--accent); }
 
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 600; border: 1px solid var(--line-2); color: var(--text); transition: background 0.2s, border-color 0.2s, transform 0.2s; white-space: nowrap; }
-    .btn:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, 0.24); }
-    .btn:active { transform: translateY(1px); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: var(--neu-pill); font-size: 14px; font-weight: 600; border: 1px solid var(--line-2); color: var(--text); box-shadow: var(--neu-flat-1); transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s; white-space: nowrap; }
+    .btn:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, 0.24); box-shadow: var(--neu-flat-hover); }
+    .btn:active { transform: translateY(1px); box-shadow: var(--neu-pressed); }
     .btn svg { width: 16px; height: 16px; flex: none; }
-    .btn-sm { height: 36px; padding: 0 14px; font-size: 13px; }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0b0f13; }
-    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-sm { height: 36px; padding: 0 16px; font-size: 13px; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0b0f13; box-shadow: 0 4px 16px rgba(233, 93, 44, 0.35); }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 6px 22px rgba(233, 93, 44, 0.5); }
+    .btn-dash { background: rgba(37, 55, 69, 0.5); border-color: rgba(74, 92, 106, 0.45); color: #CCD0CF; }
+    .btn-dash:hover { background: #253745; color: #fff; border-color: rgba(74, 92, 106, 0.8); }
+    .nav-dash { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: var(--neu-pill); background: rgba(37, 55, 69, 0.45); border: 1px solid rgba(74, 92, 106, 0.35); color: #CCD0CF; font-size: 13px; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+    .nav-dash:hover { background: #253745; color: #fff; border-color: rgba(74, 92, 106, 0.7); box-shadow: var(--neu-flat-hover); }
+    .mobile-toggle { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text); cursor: pointer; }
+    .mobile-toggle svg { width: 18px; height: 18px; }
+    .mobile-toggle .i-close { display: none; }
+    .mobile-toggle[aria-expanded="true"] .i-menu { display: none; }
+    .mobile-toggle[aria-expanded="true"] .i-close { display: block; }
+    .mobile-drawer { position: fixed; top: var(--nav-h); left: 0; right: 0; background: rgba(11, 15, 19, 0.96); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line-2); padding: 16px 24px 20px; z-index: 49; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8); }
+    .mobile-drawer[hidden] { display: none; }
+    .mobile-nav-links { display: flex; flex-direction: column; gap: 12px; font-size: 14px; font-weight: 500; }
+    .mobile-nav-links a { color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
+    .mobile-nav-links a:hover { color: var(--text); }
+    .mobile-nav-links a.mob-dash { color: var(--accent); font-weight: 600; border-bottom: 0; }
     .stars { display: none; align-items: center; gap: 4px; margin-left: 2px; padding-left: 10px; border-left: 1px solid currentColor; font-family: var(--mono); font-size: 12px; font-weight: 500; opacity: 0.8; }
     .has-stars .stars { display: inline-flex; }
     .stars svg { width: 12px; height: 12px; }
@@ -122,10 +145,10 @@
     .lede { margin: 24px auto 0; max-width: 560px; font-size: clamp(16px, 1.7vw, 19px); color: var(--muted); text-wrap: pretty; }
 
     .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 36px; }
-    .cmd { display: inline-flex; align-items: center; gap: 12px; height: 44px; padding: 0 7px 0 16px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line-2); font-family: var(--mono); font-size: 14px; transition: border-color 0.2s; }
+    .cmd { display: inline-flex; align-items: center; gap: 12px; height: 44px; padding: 0 7px 0 16px; border-radius: var(--neu-pill); background: var(--surface); border: 1px solid var(--line-2); font-family: var(--mono); font-size: 14px; box-shadow: var(--neu-pressed); transition: border-color 0.2s, box-shadow 0.2s; }
     .cmd:hover { border-color: var(--accent-line); }
     .cmd .dollar { color: var(--accent); }
-    .copy-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 7px; background: var(--surface-2); font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--muted); transition: color 0.2s; }
+    .copy-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: var(--neu-pill); background: var(--surface-2); font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--muted); transition: color 0.2s, background 0.2s; }
     .copy-chip svg { width: 13px; height: 13px; }
     .copy-chip .i-check { display: none; }
     .copied .copy-chip, .copy-chip.copied { color: var(--ok); }
@@ -137,7 +160,7 @@
 
     /* Hero flow animation */
     .flow { display: flex; align-items: center; max-width: 720px; margin: 64px auto 0; }
-    .node { position: relative; flex: 0 0 auto; width: 128px; padding: 16px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line-2); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; transition: border-color 0.3s, box-shadow 0.3s; }
+    .node { position: relative; flex: 0 0 auto; width: 128px; padding: 16px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line-2); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; box-shadow: var(--neu-flat-1); transition: border-color 0.3s, box-shadow 0.3s; }
     .node svg { width: 22px; height: 22px; color: var(--muted); }
     .node-core { border-color: var(--accent-line); }
     .node-core svg { color: var(--accent); }
@@ -154,7 +177,7 @@
     .pkt { position: absolute; top: 50%; left: 0; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--muted); opacity: 0; }
     .pkt.hit { background: var(--accent); box-shadow: 0 0 14px var(--accent); }
 
-    .log { max-width: 540px; margin: 28px auto 0; padding: 10px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: rgba(14, 19, 24, 0.86); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); font-family: var(--mono); font-size: 12.5px; text-align: left; }
+    .log { max-width: 540px; margin: 28px auto 0; padding: 10px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: rgba(14, 19, 24, 0.86); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); font-family: var(--mono); font-size: 12.5px; text-align: left; box-shadow: var(--neu-flat-1); }
     .row { display: grid; grid-template-columns: 50px 1fr 44px 70px; gap: 10px; align-items: center; padding: 6px 0; transition: opacity 0.35s; }
     .row + .row { border-top: 1px dashed var(--line); }
     .row .turn, .row code { color: var(--muted); }
@@ -172,7 +195,7 @@
 
     /* Impact bars */
     .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 28px; }
+    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--neu-card); padding: 28px; box-shadow: var(--neu-flat-2); }
     .m-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
     .m-label { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
     .m-delta { font-size: clamp(40px, 5vw, 56px); font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--accent); }
@@ -188,7 +211,7 @@
     .anim .in .bar i { transform: scaleX(var(--w)); }
     .note { margin-top: 20px; text-align: center; font-size: 13.5px; color: var(--muted); text-wrap: balance; }
 
-    .proof { margin-top: 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: stretch; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+    .proof { margin-top: 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: stretch; border: 1px solid var(--line); border-radius: var(--neu-card); overflow: hidden; box-shadow: var(--neu-flat-1); }
     .proof > div { padding: 20px 22px; border-right: 1px solid var(--line); }
     .proof b { display: block; white-space: nowrap; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
     .proof span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.4; }
@@ -217,11 +240,11 @@
     .miss-note b { color: var(--text); font-weight: 600; }
 
     /* Get started */
-    .tabs { display: flex; gap: 4px; width: max-content; max-width: 100%; margin: 0 auto 16px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow-x: auto; }
-    .tab { height: 36px; padding: 0 14px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: color 0.2s, background 0.2s; }
+    .tabs { display: flex; gap: 4px; width: max-content; max-width: 100%; margin: 0 auto 16px; padding: 4px; border: 1px solid var(--line); border-radius: var(--neu-pill); background: var(--surface); overflow-x: auto; box-shadow: var(--neu-pressed); }
+    .tab { height: 36px; padding: 0 16px; border-radius: var(--neu-pill); font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: color 0.2s, background 0.2s, box-shadow 0.2s; }
     .tab:hover { color: var(--text); }
-    .tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
-    .term { background: #0e1318; border: 1px solid var(--line-2); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7); }
+    .tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); box-shadow: var(--neu-flat-1); }
+    .term { background: #0e1318; border: 1px solid var(--line-2); border-radius: var(--neu-card); overflow: hidden; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), var(--neu-flat-2); }
     .term-bar { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); }
     .term-bar > i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
     .term-title { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
@@ -243,7 +266,7 @@
     .art img { display: block; width: 100%; height: auto; mix-blend-mode: screen; }
     /* Hero stage (tablet and up): the image defines the box; the description sits in its top 20%,
        the install block in its bottom 20%, and the middle 60% stays clear. */
-    .hero-stage { position: relative; width: min(1240px, 100vw); margin: 16px 0 0 calc(50% - min(620px, 50vw)); aspect-ratio: 1983 / 793; min-height: 500px; }
+    .hero-stage { position: relative; width: 100%; max-width: 1240px; margin: 16px auto 0; aspect-ratio: 1983 / 793; min-height: clamp(380px, 42vw, 500px); }
     .hero-visual { position: absolute; inset: 0; margin: 0; }
     .hero-visual img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 45% 50%; mix-blend-mode: screen;
       -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to right, transparent 0%, #000 7%, #000 93%, transparent 100%);
@@ -304,11 +327,10 @@
       .metrics { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
-      .steps { --rowh: 96px; }
-      .step-list { grid-template-columns: 1fr; grid-auto-rows: var(--rowh); gap: 16px; }
+      .step-list { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 20px; }
       .step { flex-direction: row; align-items: flex-start; text-align: left; gap: 18px; }
       .step p { max-width: none; }
-      .track { left: 25px; right: auto; top: 26px; bottom: calc(var(--rowh) - 26px); width: 2px; height: auto; }
+      .track { left: 25px; right: auto; top: 26px; bottom: 26px; width: 2px; height: auto; }
       .track .fill { width: 100%; height: calc(var(--p) * 100%); transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
       .track .head { top: calc(var(--p) * 100%); left: 50%; transition: top 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
       .dot { flex: 0 0 52px; }
@@ -331,11 +353,13 @@
       .hero-actions { display: block; }
     }
     @media (max-width: 600px) {
-      .nav-links { gap: 18px; }
+      .nav-links { gap: 12px; }
       .nav-links .hide-sm { display: none; }
-      .node { width: 92px; padding: 12px 6px; font-size: 12px; }
-      .node svg { width: 18px; height: 18px; }
-      .flow { margin-top: 48px; }
+      .mobile-toggle { display: inline-flex; }
+      .flow { margin-top: 48px; gap: 4px; }
+      .node { flex: 1 1 0; min-width: 0; max-width: 105px; width: auto; padding: 12px 4px; font-size: 11px; }
+      .node svg { width: 16px; height: 16px; }
+      .link { min-width: 12px; }
       .art-how { aspect-ratio: 16 / 9; margin-bottom: 24px; }
       .art-impact, .art-start { max-height: 240px; overflow: hidden; }
       .art-impact img, .art-start img { height: 240px; object-fit: cover; }
@@ -373,13 +397,29 @@
       </a>
       <nav class="nav-links" aria-label="Primary">
         <a href="#how" class="hide-sm" data-spy="how">How it works</a>
+        <a href="#impact" class="hide-sm" data-spy="impact">Impact</a>
         <a href="#start" class="hide-sm" data-spy="start">Get started</a>
         <a href="docs.html" class="hide-xs">Benchmarks</a>
+        <a href="/dashboard" class="nav-dash hide-sm" aria-label="Open Live Dashboard">Dashboard ↗</a>
         <a class="btn btn-sm gh" data-label="GitHub" href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M12 2C6.48 2 2 6.48 2 12.02c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03a9.56 9.56 0 0 1 5 0c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86l-.01 2.75c0 .27.18.58.69.48A10.02 10.02 0 0 0 22 12.02C22 6.48 17.52 2 12 2z"/></svg>
           GitHub
           <span class="stars" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg><span class="star-n"></span></span>
         </a>
+        <button id="mobileNavToggle" class="mobile-toggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="Toggle mobile navigation menu">
+          <svg class="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          <svg class="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </nav>
+    </div>
+    <div id="mobileDrawer" class="mobile-drawer" hidden>
+      <nav class="mobile-nav-links" aria-label="Mobile Navigation">
+        <a href="#how" class="mob-link">How it works</a>
+        <a href="#impact" class="mob-link">Impact & Metrics</a>
+        <a href="#start" class="mob-link">Get started</a>
+        <a href="docs.html" class="mob-link">Benchmarks & Technical Report</a>
+        <a href="/dashboard" class="mob-link mob-dash">Live Telemetry Dashboard ↗</a>
+        <a href="/simulator" class="mob-link">Interactive Cache Simulator ↗</a>
       </nav>
     </div>
   </header>
@@ -402,6 +442,7 @@
             <span class="copy-chip"><svg class="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span class="copy-label">Copy</span></span>
           </button>
           <a class="btn" href="#how">See how it works</a>
+          <a class="btn btn-dash" href="/dashboard">Live Dashboard ↗</a>
         </div>
         <p class="facts">
           <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Runs on localhost</span>
@@ -553,6 +594,8 @@
         omnicache
       </a>
       <nav aria-label="Footer">
+        <a href="/dashboard" style="color: var(--accent); font-weight: 500;">Live Dashboard ↗</a>
+        <a href="/simulator">Simulator</a>
         <a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener">GitHub</a>
         <a href="https://pypi.org/project/omnicache-proxy/" target="_blank" rel="noopener">PyPI</a>
         <a href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md" target="_blank" rel="noopener">Docs</a>
@@ -616,21 +659,38 @@
           return ok;
         } catch (_) { return false; }
       };
-      const copy = async (text, btn) => {
+      const copy = async (text, btn, showToast = false) => {
         const ok = await writeClip(text);
         const label = btn.querySelector('.copy-label');
         const msg = ok ? 'Copied' : 'Press Ctrl+C';
         status.textContent = ok ? 'Copied to clipboard' : 'Copy failed. Select the text and copy it manually.';
         btn.classList.toggle('copied', ok);
         if (label) label.textContent = msg;
-        if (ok) {
+        if (ok && showToast) {
           toast.classList.add('on');
           clearTimeout(toastT);
           toastT = setTimeout(() => toast.classList.remove('on'), 1600);
         }
         setTimeout(() => { btn.classList.remove('copied'); if (label) label.textContent = 'Copy'; }, 1800);
       };
-      $('#copyCmd').addEventListener('click', (e) => copy('pip install omnicache-proxy', e.currentTarget));
+      $('#copyCmd').addEventListener('click', (e) => copy('pip install omnicache-proxy', e.currentTarget, false));
+
+      /* ---------- Mobile navigation drawer toggle ---------- */
+      const mobToggle = $('#mobileNavToggle');
+      const mobDrawer = $('#mobileDrawer');
+      if (mobToggle && mobDrawer) {
+        mobToggle.addEventListener('click', () => {
+          const open = mobToggle.getAttribute('aria-expanded') === 'true';
+          mobToggle.setAttribute('aria-expanded', String(!open));
+          mobDrawer.hidden = open;
+        });
+        $$('.mob-link', mobDrawer).forEach((a) => {
+          a.addEventListener('click', () => {
+            mobToggle.setAttribute('aria-expanded', 'false');
+            mobDrawer.hidden = true;
+          });
+        });
+      }
 
       /* ---------- Get started: per-agent tabs ---------- */
       const AGENTS = {
@@ -685,7 +745,7 @@
           }
         });
       });
-      $('#termCopy').addEventListener('click', (e) => copy(AGENTS[agent].cmds.join('\n'), e.currentTarget));
+      $('#termCopy').addEventListener('click', (e) => copy(AGENTS[agent].cmds.join('\n'), e.currentTarget, true));
 
       /* ---------- GitHub stars (progressive enhancement; hidden below a threshold) ---------- */
       const STAR_MIN = 25;

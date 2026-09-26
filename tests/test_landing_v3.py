@@ -13,6 +13,10 @@ def test_landing_v3_served_on_landing_route():
     # Verify GitHub link with logo is present at extreme right
     assert 'class="btn btn-sm gh"' in resp.text
     assert 'https://github.com/13manmayarai-hash/omnicache-proxy' in resp.text
+    # Verify Live Dashboard wayfinding links
+    assert 'href="/dashboard"' in resp.text
+    assert 'id="mobileNavToggle"' in resp.text
+    assert 'id="mobileDrawer"' in resp.text
 
 def test_landing_v3_served_on_v3_route():
     resp = client.get("/v3")
@@ -29,6 +33,8 @@ def test_docs_html_served():
     assert resp.status_code == 200
     assert "OmniCache" in resp.text
     assert "docs" in resp.text
+    assert 'href="/landing"' in resp.text
+    assert 'Live Dashboard' in resp.text
 
 def test_omnicache_og_png_served():
     resp = client.get("/omnicache-og.png")

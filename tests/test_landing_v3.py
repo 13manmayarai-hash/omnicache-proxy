@@ -58,3 +58,32 @@ def test_img_assets_served():
         assert resp.status_code == 200, f"Failed for {img}"
         assert resp.headers["content-type"] == "image/webp"
         assert len(resp.content) > 100
+
+def test_landing_v3_heading_accents_and_kinetic_motion():
+    resp = client.get("/landing")
+    assert resp.status_code == 200
+    # Verify color consistency: all 3 sub-phrases have .accent burnt-orange
+    assert '<span class="accent">A fraction of the cost.</span>' in resp.text
+    assert '<span class="accent">Under a millisecond.</span>' in resp.text
+    assert '<span class="accent">Zero config.</span>' in resp.text
+    # Verify living hero engine elements
+    assert 'class="hero-glow-core"' in resp.text
+    assert 'class="hero-beam-scanner"' in resp.text
+    assert 'id="heroImg"' in resp.text
+    # Verify parallax images
+    assert 'class="parallax-img"' in resp.text
+    assert 'updateParallax' in resp.text
+
+def test_docs_html_design_consistency():
+    resp = client.get("/docs.html")
+    assert resp.status_code == 200
+    assert "Plus Jakarta Sans" in resp.text
+    assert "--neu-flat-1" in resp.text
+    assert 'class="nav-dash"' in resp.text
+
+def test_simulator_html_served_and_styled():
+    resp = client.get("/simulator")
+    assert resp.status_code == 200
+    assert "Plus Jakarta Sans" in resp.text
+    assert 'href="/landing"' in resp.text
+    assert "Pipeline Replay Sandbox" in resp.text

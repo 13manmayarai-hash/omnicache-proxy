@@ -7,7 +7,7 @@
   <meta name="description" content="OmniCache v3.1.0 technical report: design, methodology, measured latency, hit rates, match precision and a claims audit." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0b0f13;
@@ -19,6 +19,8 @@
       --text-2: #c3ced7;
       --muted: #93a2ae;
       --accent: #e95d2c;
+      --accent-hover: #f26e3e;
+      --accent-soft: rgba(233, 93, 44, 0.14);
       --grid: rgba(255, 255, 255, 0.07);
       --axis: rgba(255, 255, 255, 0.22);
 
@@ -29,8 +31,16 @@
       --s-inproc: #9085e9;
       --s-tcp: #c98500;
 
-      --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+      /* Neumorphism (Soft UI) Elevation Physics */
+      --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
+      --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
+      --neu-flat-hover: 5px 5px 14px #02070b, -5px -5px 14px rgba(74, 92, 106, 0.32);
+      --neu-pressed: inset 2px 2px 5px #02080d, inset -2px -2px 5px rgba(74, 92, 106, 0.18);
+      --neu-pill: 9999px;
+      --neu-card: 20px;
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -47,15 +57,19 @@
     ::selection { background: rgba(233, 93, 44, 0.35); color: var(--text); }
 
     /* ---------- top bar ---------- */
-    .top { position: sticky; top: 0; z-index: 20; background: rgba(11, 15, 19, 0.86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+    .top { position: sticky; top: 0; z-index: 20; background: rgba(11, 15, 19, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
     .top-in { max-width: 1240px; margin: 0 auto; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 600; text-decoration: none; letter-spacing: -0.01em; }
-    .brand-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); display: grid; place-items: center; }
-    .brand-mark i { width: 8px; height: 8px; border-radius: 50%; background: var(--bg); }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; text-decoration: none; letter-spacing: -0.01em; }
+    .brand-mark { width: 24px; height: 24px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-2); display: grid; place-items: center; color: var(--accent); }
+    .brand-mark svg { width: 13px; height: 13px; }
     .brand small { color: var(--muted); font-weight: 500; }
-    .top nav { display: flex; gap: 22px; font-size: 14px; }
-    .top nav a { color: var(--muted); text-decoration: none; }
-    .top nav a:hover { color: var(--text); }
+    .top nav { display: flex; align-items: center; gap: 18px; font-size: 14px; }
+    .top nav a:not(.nav-dash):not(.nav-back) { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+    .top nav a:not(.nav-dash):not(.nav-back):hover { color: var(--text); }
+    .nav-back { display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px; border-radius: var(--neu-pill); color: var(--accent) !important; font-weight: 600; font-size: 13px; text-decoration: none !important; transition: background 0.2s; }
+    .nav-back:hover { background: var(--surface-2); }
+    .nav-dash { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: var(--neu-pill); background: rgba(37, 55, 69, 0.45); border: 1px solid rgba(74, 92, 106, 0.35); color: #CCD0CF !important; font-size: 13px; font-weight: 600; text-decoration: none !important; transition: all 0.2s; box-shadow: var(--neu-flat-1); }
+    .nav-dash:hover { background: #253745; color: #fff !important; border-color: rgba(74, 92, 106, 0.7); box-shadow: var(--neu-flat-hover); }
     .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 100%; background: var(--accent); transform-origin: 0 50%; transform: scaleX(0); }
 
     /* ---------- layout ---------- */
@@ -82,16 +96,17 @@
     .meta dt { color: var(--muted); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-bottom: 4px; }
     .meta dd { margin: 0; color: var(--text); font-family: var(--mono); font-size: 12.5px; }
 
-    .abstract { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 24px 28px; margin: 0 0 40px; }
-    .abstract h2 { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+    .abstract { background: var(--surface); border: 1px solid var(--line); border-radius: var(--neu-card); padding: 26px 30px; margin: 0 0 40px; box-shadow: var(--neu-flat-1); }
+    .abstract h2 { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; font-weight: 600; }
     .abstract p { margin: 0; color: var(--text-2); font-size: 15.5px; line-height: 1.75; }
     .abstract strong { color: var(--text); font-weight: 600; }
 
     /* ---------- key results tiles ---------- */
-    .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; margin: 0 0 56px; }
-    .tile { background: var(--bg); padding: 20px 20px 18px; }
-    .tile .v { color: var(--text); font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-    .tile .v small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
+    .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; background: transparent; border: 0; border-radius: 0; overflow: visible; margin: 0 0 56px; }
+    .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px 20px 20px; box-shadow: var(--neu-flat-2); transition: transform 0.25s, box-shadow 0.25s, border-color 0.25s; }
+    .tile:hover { transform: translateY(-3px); box-shadow: var(--neu-flat-hover), 0 0 20px rgba(233, 93, 44, 0.12); border-color: rgba(233, 93, 44, 0.35); }
+    .tile .v { color: var(--accent); background: linear-gradient(135deg, #ff854d 0%, #e95d2c 55%, #f26e3e 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 32px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .tile .v small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 3px; letter-spacing: 0; -webkit-text-fill-color: var(--muted); }
     .tile .k { font-size: 13px; color: var(--text-2); margin-top: 6px; line-height: 1.4; }
     .tile .s { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
 
@@ -110,11 +125,11 @@
     .cite { font-family: var(--mono); font-size: 0.8em; color: var(--muted); text-decoration: none; }
     .cite:hover { color: var(--text); }
 
-    .callout { border-left: 2px solid var(--accent); background: linear-gradient(90deg, rgba(233, 93, 44, 0.07), transparent 70%); padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 20px 0 24px; font-size: 15px; }
+    .callout { border-left: 3px solid var(--accent); background: linear-gradient(90deg, rgba(233, 93, 44, 0.08), transparent 75%); padding: 16px 20px; border-radius: 0 12px 12px 0; margin: 20px 0 24px; font-size: 15px; box-shadow: var(--neu-flat-1); }
     .callout b { color: var(--text); }
 
     /* ---------- tables ---------- */
-    .tbl-wrap { overflow-x: auto; margin: 18px 0 8px; border: 1px solid var(--line); border-radius: 12px; -webkit-overflow-scrolling: touch; }
+    .tbl-wrap { overflow-x: auto; margin: 18px 0 8px; border: 1px solid var(--line); border-radius: 14px; -webkit-overflow-scrolling: touch; box-shadow: var(--neu-flat-1); }
     table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.45; }
     th, td { padding: 9px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
     tr:last-child td { border-bottom: 0; }
@@ -136,7 +151,8 @@
     .chip.none { color: var(--muted); }
 
     /* ---------- figures ---------- */
-    figure { margin: 28px 0 34px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px 16px; }
+    figure { margin: 28px 0 34px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--neu-card); padding: 22px 24px 18px; box-shadow: var(--neu-flat-1); transition: border-color 0.25s, box-shadow 0.25s; }
+    figure:hover { border-color: rgba(255, 255, 255, 0.16); box-shadow: var(--neu-flat-hover); }
     .fhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; margin-bottom: 10px; }
     .ftitle { color: var(--text); font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.35; }
     .fsub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
@@ -256,10 +272,13 @@
 <body>
   <header class="top">
     <div class="top-in">
-      <a class="brand" href="/landing" aria-label="OmniCache technical report, back to home"><span class="brand-mark"><i></i></span>OmniCache <small>/ docs</small></a>
+      <a class="brand" href="/landing" aria-label="OmniCache technical report, back to home">
+        <span class="brand-mark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
+        omnicache <small>/ docs · technical report</small>
+      </a>
       <nav aria-label="Report sections">
-        <a href="/landing" style="color: var(--accent); font-weight: 500;">← Back to Home</a>
-        <a href="/dashboard" style="color: var(--text);">Live Dashboard</a>
+        <a href="/landing" class="nav-back">← Back to Home</a>
+        <a href="/dashboard" class="nav-dash">Live Dashboard ↗</a>
         <a href="#design">Design</a>
         <a href="#method">Method</a>
         <a href="#results">Results</a>

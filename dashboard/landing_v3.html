@@ -93,7 +93,14 @@
     .wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-left)); }
     .narrow { max-width: 720px; }
     .muted { color: var(--muted); }
-    .accent { color: var(--accent); }
+    .accent {
+      color: var(--accent);
+      background: linear-gradient(135deg, #ff854d 0%, #e95d2c 55%, #f26e3e 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block;
+      filter: drop-shadow(0 0 20px rgba(233, 93, 44, 0.38));
+    }
 
     /* Nav */
     .nav { position: fixed; inset: 0 0 auto; z-index: 50; border-bottom: 1px solid transparent; transition: background 0.25s, border-color 0.25s; }
@@ -195,7 +202,8 @@
 
     /* Impact bars */
     .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--neu-card); padding: 28px; box-shadow: var(--neu-flat-2); }
+    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--neu-card); padding: 28px; box-shadow: var(--neu-flat-2); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease; }
+    .metric:hover { transform: translateY(-4px); box-shadow: var(--neu-flat-hover), 0 0 24px rgba(233, 93, 44, 0.14); border-color: rgba(233, 93, 44, 0.35); }
     .m-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
     .m-label { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
     .m-delta { font-size: clamp(40px, 5vw, 56px); font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--accent); }
@@ -211,7 +219,8 @@
     .anim .in .bar i { transform: scaleX(var(--w)); }
     .note { margin-top: 20px; text-align: center; font-size: 13.5px; color: var(--muted); text-wrap: balance; }
 
-    .proof { margin-top: 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: stretch; border: 1px solid var(--line); border-radius: var(--neu-card); overflow: hidden; box-shadow: var(--neu-flat-1); }
+    .proof { margin-top: 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: stretch; border: 1px solid var(--line); border-radius: var(--neu-card); overflow: hidden; box-shadow: var(--neu-flat-1); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease; }
+    .proof:hover { transform: translateY(-2px); box-shadow: var(--neu-flat-hover); border-color: rgba(255, 255, 255, 0.22); }
     .proof > div { padding: 20px 22px; border-right: 1px solid var(--line); }
     .proof b { display: block; white-space: nowrap; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
     .proof span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.4; }
@@ -244,7 +253,8 @@
     .tab { height: 36px; padding: 0 16px; border-radius: var(--neu-pill); font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: color 0.2s, background 0.2s, box-shadow 0.2s; }
     .tab:hover { color: var(--text); }
     .tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); box-shadow: var(--neu-flat-1); }
-    .term { background: #0e1318; border: 1px solid var(--line-2); border-radius: var(--neu-card); overflow: hidden; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), var(--neu-flat-2); }
+    .term { background: #0e1318; border: 1px solid var(--line-2); border-radius: var(--neu-card); overflow: hidden; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), var(--neu-flat-2); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease; }
+    .term:hover { transform: translateY(-3px); box-shadow: 0 28px 70px -16px rgba(0, 0, 0, 0.85), var(--neu-flat-hover); border-color: rgba(233, 93, 44, 0.3); }
     .term-bar { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); }
     .term-bar > i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
     .term-title { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
@@ -266,17 +276,54 @@
     .art img { display: block; width: 100%; height: auto; mix-blend-mode: screen; }
     /* Hero stage (tablet and up): the image defines the box; the description sits in its top 20%,
        the install block in its bottom 20%, and the middle 60% stays clear. */
-    .hero-stage { position: relative; width: 100%; max-width: 1240px; margin: 16px auto 0; aspect-ratio: 1983 / 793; min-height: clamp(380px, 42vw, 500px); }
-    .hero-visual { position: absolute; inset: 0; margin: 0; }
+    .hero-stage { position: relative; width: 100%; max-width: 1240px; margin: 16px auto 0; aspect-ratio: 1983 / 793; min-height: clamp(380px, 42vw, 500px); perspective: 1200px; }
+    .hero-visual { position: absolute; inset: 0; margin: 0; overflow: hidden; border-radius: var(--neu-card); transform-style: preserve-3d; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
     .hero-visual img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 45% 50%; mix-blend-mode: screen;
       -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to right, transparent 0%, #000 7%, #000 93%, transparent 100%);
       -webkit-mask-composite: source-in;
               mask-image: linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to right, transparent 0%, #000 7%, #000 93%, transparent 100%);
-              mask-composite: intersect; }
+              mask-composite: intersect; will-change: transform; }
+    /* Living engine core glow & energy sweep */
+    .hero-glow-core {
+      position: absolute;
+      top: 48%;
+      left: 45.5%;
+      transform: translate(-50%, -50%);
+      width: clamp(240px, 32vw, 440px);
+      height: clamp(240px, 32vw, 440px);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 126, 71, 0.6) 0%, rgba(233, 93, 44, 0.35) 30%, rgba(233, 93, 44, 0.08) 60%, transparent 75%);
+      filter: blur(28px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+      z-index: 1;
+      animation: coreEnginePulse 3.8s ease-in-out infinite alternate;
+    }
+    @keyframes coreEnginePulse {
+      0% { transform: translate(-50%, -50%) scale(0.86); opacity: 0.55; filter: blur(24px); }
+      50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.95; filter: blur(34px); }
+      100% { transform: translate(-50%, -50%) scale(0.94); opacity: 0.7; filter: blur(28px); }
+    }
+    .hero-beam-scanner {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent 0%, rgba(233, 93, 44, 0.04) 40%, rgba(255, 140, 90, 0.22) 50%, rgba(233, 93, 44, 0.04) 60%, transparent 100%);
+      background-size: 200% 100%;
+      mix-blend-mode: screen;
+      z-index: 1;
+      animation: beamSweep 5.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    }
+    @keyframes beamSweep {
+      0% { background-position: -120% 0; opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { background-position: 220% 0; opacity: 0; }
+    }
     /* Darkens only the two 20% bands so text stays readable; the 20–80% centre is untouched. */
     .hero-visual::after { content: ""; position: absolute; inset: 0; pointer-events: none;
       background: linear-gradient(to bottom, rgba(11, 15, 19, 0.82) 0%, rgba(11, 15, 19, 0.6) 17%, rgba(11, 15, 19, 0) 22%, rgba(11, 15, 19, 0) 78%, rgba(11, 15, 19, 0.6) 83%, rgba(11, 15, 19, 0.85) 100%); }
-    .hero-stage .lede, .hero-actions { position: absolute; left: 50%; transform: translateX(-50%); z-index: 1; height: 20%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+    .hero-stage .lede, .hero-actions { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; height: 20%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
     .hero-stage .lede { top: 0; margin: 0; width: min(560px, calc(100% - 48px)); }
     .hero-actions { bottom: 0; width: calc(100% - 48px); }
     .hero-actions .cta { margin-top: 0; }
@@ -285,18 +332,32 @@
 
     .impact-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 24px; align-items: center; }
     .impact-grid .metrics { grid-template-columns: 1fr; gap: 16px; }
-    .art-impact { margin: -24px 0 -24px -40px; }
+    .art-impact { margin: -24px 0 -24px -40px; overflow: hidden; }
+    .art-impact img { will-change: transform; }
 
     .art-how { max-width: 860px; margin: -8px auto 36px; aspect-ratio: 21 / 8; overflow: hidden; }
-    .art-how img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 58%;
+    .art-how img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 58%; will-change: transform;
       -webkit-mask-image: radial-gradient(closest-side, #000 70%, transparent 100%); mask-image: radial-gradient(closest-side, #000 70%, transparent 100%); }
 
     .start-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; }
     .start-grid .tabs { margin-left: 0; }
-    .art-start { margin-left: -32px; }
+    .art-start { margin-left: -32px; overflow: hidden; }
+    .art-start img { will-change: transform; }
 
-    .anim .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1); }
-    .anim .reveal.in { opacity: 1; transform: none; }
+    .anim .reveal {
+      opacity: 0;
+      filter: blur(12px);
+      transform: translateY(32px) scale(0.97);
+      transition: opacity 0.95s cubic-bezier(0.16, 1, 0.3, 1),
+                  filter 0.95s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.95s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: opacity, filter, transform;
+    }
+    .anim .reveal.in {
+      opacity: 1;
+      filter: blur(0px);
+      transform: translateY(0) scale(1);
+    }
 
     /* Footer */
     .foot { border-top: 1px solid var(--line); padding: 28px 0 calc(28px + env(safe-area-inset-bottom)); font-size: 13px; color: var(--muted); }
@@ -430,10 +491,12 @@
       <div class="wrap">
         <p class="kicker"><span class="live" aria-hidden="true"></span>Local cache for AI agents</p>
         <h1>Stop paying<br class="br-sm"> twice<br class="br-lg"> <span class="accent">for AI.</span></h1>
-        <div class="hero-stage">
+        <div class="hero-stage" id="heroStage">
         <p class="lede">OmniCache answers repeat calls from Claude Code, Cursor and any LLM app on your own machine, in milliseconds, without spending a token.</p>
-        <figure class="hero-visual" aria-hidden="true">
-          <img src="img/hero-1983.webp" srcset="img/hero-1000.webp 1000w, img/hero-1983.webp 1983w" sizes="(max-width: 1240px) 100vw, 1240px" width="1983" height="793" alt="" fetchpriority="high" decoding="async">
+        <figure class="hero-visual" aria-hidden="true" id="heroVisual">
+          <div class="hero-glow-core" aria-hidden="true"></div>
+          <div class="hero-beam-scanner" aria-hidden="true"></div>
+          <img id="heroImg" src="img/hero-1983.webp" srcset="img/hero-1000.webp 1000w, img/hero-1983.webp 1983w" sizes="(max-width: 1240px) 100vw, 1240px" width="1983" height="793" alt="" fetchpriority="high" decoding="async">
         </figure>
         <div class="hero-actions">
         <div class="cta">
@@ -481,12 +544,12 @@
     <!-- 2 · IMPACT -->
     <section class="sec" id="impact" aria-labelledby="impact-h">
       <div class="wrap">
-        <h2 class="h2" id="impact-h">Same session.<br><span class="muted">A fraction of the cost.</span></h2>
+        <h2 class="h2 reveal" id="impact-h">Same session.<br><span class="accent">A fraction of the cost.</span></h2>
         <div class="impact-grid">
         <figure class="art art-soft art-impact reveal" aria-hidden="true">
-          <img src="img/impact-1536.webp" srcset="img/impact-768.webp 768w, img/impact-1536.webp 1536w" sizes="(max-width: 900px) 92vw, 560px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
+          <img class="parallax-img" src="img/impact-1536.webp" srcset="img/impact-768.webp 768w, img/impact-1536.webp 1536w" sizes="(max-width: 900px) 92vw, 560px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
         </figure>
-        <div class="metrics" id="metrics">
+        <div class="metrics reveal" id="metrics">
           <div class="metric">
             <div class="m-head"><span class="m-label">Wait time</span><span class="m-delta">−75%</span></div>
             <div class="bar-row"><span class="b-name">Direct</span><div class="bar"><i style="--w: 1"></i></div><span class="b-val" data-count="5800" data-suffix=" ms">5,800 ms</span></div>
@@ -502,7 +565,7 @@
         <p class="note">Illustrative 4-turn session re-reading one unchanged file: one miss at 1,450&nbsp;ms and 820 tokens, then three local hits at 1.8&nbsp;ms each.</p>
 
         <p class="proof-label">Measured on a 4-vCPU machine</p>
-        <div class="proof">
+        <div class="proof reveal">
           <div><b>9&nbsp;µs</b><span>exact-match lookup (p50)</span></div>
           <div><b>0.18&nbsp;ms</b><span>near-duplicate lookup (p50)</span></div>
           <div><b>0 / 20</b><span>false matches on unrelated prompts</span></div>
@@ -516,11 +579,11 @@
     <!-- 3 · HOW IT WORKS -->
     <section class="sec" id="how" aria-labelledby="how-h">
       <div class="wrap">
-        <h2 class="h2" id="how-h">Four checks.<br><span class="muted">Under a millisecond.</span></h2>
+        <h2 class="h2 reveal" id="how-h">Four checks.<br><span class="accent">Under a millisecond.</span></h2>
         <figure class="art art-how reveal" aria-hidden="true">
-          <img src="img/how-1536.webp" srcset="img/how-768.webp 768w, img/how-1536.webp 1536w" sizes="(max-width: 900px) 100vw, 860px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
+          <img class="parallax-img" src="img/how-1536.webp" srcset="img/how-768.webp 768w, img/how-1536.webp 1536w" sizes="(max-width: 900px) 100vw, 860px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
         </figure>
-        <div class="steps" id="steps">
+        <div class="steps reveal" id="steps">
           <div class="track" aria-hidden="true"><i class="fill"></i><i class="head"></i></div>
           <ol class="step-list">
             <li class="step on">
@@ -548,13 +611,13 @@
     <!-- 4 · GET STARTED -->
     <section class="sec" id="start" aria-labelledby="start-h">
       <div class="wrap">
-        <h2 class="h2" id="start-h">One install.<br><span class="muted">Zero config.</span></h2>
+        <h2 class="h2 reveal" id="start-h">One install.<br><span class="accent">Zero config.</span></h2>
 
         <div class="start-grid">
         <figure class="art art-soft art-start reveal" aria-hidden="true">
-          <img src="img/start-1536.webp" srcset="img/start-768.webp 768w, img/start-1536.webp 1536w" sizes="(max-width: 900px) 92vw, 480px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
+          <img class="parallax-img" src="img/start-1536.webp" srcset="img/start-768.webp 768w, img/start-1536.webp 1536w" sizes="(max-width: 900px) 92vw, 480px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
         </figure>
-        <div class="start-main">
+        <div class="start-main reveal">
         <div class="tabs" role="tablist" aria-label="Choose your agent">
           <button class="tab" role="tab" id="tab-claude" aria-selected="true" aria-controls="term" data-agent="claude" type="button">Claude Code</button>
           <button class="tab" role="tab" id="tab-cursor" aria-selected="false" aria-controls="term" data-agent="cursor" type="button" tabindex="-1">Cursor</button>
@@ -891,6 +954,64 @@
           await sleep(300);
         }
       }, 0.5);
+
+      /* ---------- Kinetic Parallax Scrolling & Interactive 3D Depth ---------- */
+      const heroStage = $('#heroStage');
+      const heroVisual = $('#heroVisual');
+      const heroImg = $('#heroImg');
+      const parallaxImages = $$('.parallax-img');
+
+      // Desktop interactive mouse-tracking 3D tilt on hero engine
+      if (heroStage && heroVisual && window.matchMedia('(pointer: fine)').matches) {
+        let stageBounds = null;
+        const updateBounds = () => { stageBounds = heroStage.getBoundingClientRect(); };
+        window.addEventListener('resize', updateBounds, { passive: true });
+
+        heroStage.addEventListener('mouseenter', () => { updateBounds(); });
+        heroStage.addEventListener('mousemove', (e) => {
+          if (!stageBounds) updateBounds();
+          const x = (e.clientX - stageBounds.left) / stageBounds.width - 0.5;
+          const y = (e.clientY - stageBounds.top) / stageBounds.height - 0.5;
+          const rotX = (-y * 6.5).toFixed(2);
+          const rotY = (x * 8.5).toFixed(2);
+          heroVisual.style.transform = `perspective(1000px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.015, 1.015, 1.015)`;
+        });
+        heroStage.addEventListener('mouseleave', () => {
+          heroVisual.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
+        });
+      }
+
+      // 60fps RequestAnimationFrame Parallax Engine
+      let parallaxTicking = false;
+      const updateParallax = () => {
+        const scrollY = window.scrollY || window.pageYOffset;
+        const vh = window.innerHeight;
+
+        // Hero image subtle deep parallax drift
+        if (heroImg && scrollY < vh * 1.5) {
+          heroImg.style.transform = `translate3d(0, ${(scrollY * 0.18).toFixed(1)}px, 0)`;
+        }
+
+        // Section illustrations multi-plane parallax drift
+        parallaxImages.forEach((img) => {
+          const rect = img.getBoundingClientRect();
+          if (rect.bottom > -100 && rect.top < vh + 100) {
+            const center = rect.top + rect.height / 2;
+            const distFromMid = center - vh / 2;
+            const offset = (distFromMid * -0.11).toFixed(1);
+            img.style.transform = `translate3d(0, ${offset}px, 0) scale(1.05)`;
+          }
+        });
+        parallaxTicking = false;
+      };
+
+      window.addEventListener('scroll', () => {
+        if (!parallaxTicking) {
+          parallaxTicking = true;
+          requestAnimationFrame(updateParallax);
+        }
+      }, { passive: true });
+      updateParallax();
     })();
   </script>
 </body>

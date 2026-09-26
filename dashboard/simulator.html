@@ -3,14 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     :root {
-      --card: #0e111a;
-      --background: #080a10;
-      --border: #202636;
-      --foreground: #f1f5f9;
-      --muted-foreground: #94a3b8;
+      --card: #11171d;
+      --background: #0b0f13;
+      --border: rgba(255, 255, 255, 0.08);
+      --foreground: #f3f6f9;
+      --muted-foreground: #93a2ae;
+      --accent: #e95d2c;
+      --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
+      --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
+      --neu-card: 20px;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     }
     @keyframes pulse-ring {
       0% { transform: scale(0.95); opacity: 0.8; }
@@ -25,20 +35,31 @@
     }
   </style>
 </head>
-<body class="bg-[#080a10] text-[var(--foreground)] antialiased p-2 sm:p-4 select-none min-h-screen flex items-center justify-center">
+<body class="bg-[#0b0f13] text-[var(--foreground)] antialiased p-2 sm:p-4 select-none min-h-screen flex items-center justify-center">
 
   <!-- Main Container Card -->
-  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-xl p-3.5 sm:p-4 shadow-lg max-w-xl mx-auto flex flex-col gap-3 font-sans">
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-[20px] p-4 sm:p-5 shadow-[var(--neu-flat-2)] max-w-xl w-full mx-auto flex flex-col gap-3 font-sans">
     
+    <!-- Top Wayfinding Bar -->
+    <div class="flex items-center justify-between text-xs font-semibold pb-2 border-b border-[var(--border)]">
+      <a href="/landing" class="text-[#e95d2c] hover:underline flex items-center gap-1.5">
+        ← Back to Home
+      </a>
+      <div class="flex items-center gap-3">
+        <a href="/docs.html" class="text-[#93a2ae] hover:text-[#f3f6f9] transition-colors">Benchmarks</a>
+        <a href="/dashboard" class="px-2.5 py-1 rounded-full bg-[#253745]/60 border border-[#4A5C6A]/50 text-[#CCD0CF] hover:text-white transition-all text-[11px]">Dashboard ↗</a>
+      </div>
+    </div>
+
     <!-- Top Header -->
     <div class="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
       <div class="flex items-center gap-2">
-        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-[#e95d2c] animate-pulse"></span>
         <h2 class="text-xs sm:text-sm font-bold tracking-tight uppercase font-mono">
           OmniCache // Pipeline Replay Sandbox
         </h2>
       </div>
-      <span id="pipeline-status" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+      <span id="pipeline-status" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-[#e95d2c]/30 bg-[#e95d2c]/10 text-[#e95d2c]">
         STATUS: READY
       </span>
     </div>

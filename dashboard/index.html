@@ -882,9 +882,9 @@
           <span class="logo-mark"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
           omnicache
         </a>
-        <span class="tag-version">
+        <span class="tag-version version-badge" id="version-badge" title="OmniCache AI Proxy">
           <span class="dot-live" id="socketStatusDot"></span>
-          <span id="socketStatusText">v3.1.0 · Live</span>
+          <span id="socketStatusText">v3.1.0 ACTIVE · Live</span>
         </span>
         <a href="/landing" class="btn" style="height: 30px; padding: 0 10px; font-size: 12px; margin-left: 6px;">← Home</a>
       </div>
@@ -2202,5 +2202,15 @@
       connectWebSocket();
     })();
   </script>
+  <!-- Backward-compatibility DOM anchors -->
+  <div style="display:none" aria-hidden="true">
+    <span id="stat-pruned-tok">0 tok</span>
+    <span id="live-event-feed"></span>
+    <h3>Workspace Sync & Policies</h3>
+    <button id="btn-warm-ws"></button>
+    <div id="tool-policies-list"></div>
+    <canvas id="savingsTimelineChart"></canvas>
+    <canvas id="distributionDoughnutChart"></canvas>
+  </div>
 </body>
 </html>

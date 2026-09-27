@@ -87,3 +87,37 @@ def test_simulator_html_served_and_styled():
     assert "Plus Jakarta Sans" in resp.text
     assert 'href="/landing"' in resp.text
     assert "Pipeline Replay Sandbox" in resp.text
+
+def test_omnicache_rawwgrid_com_host_serves_new_landing_page():
+    # Website visitors to omnicache.rawwgrid.com receive the new landing page
+    resp = client.get("/", headers={"host": "omnicache.rawwgrid.com"})
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "Stop paying" in resp.text
+    assert "omnicache.rawwgrid.com" in resp.text
+    assert "https://omnicache.rawwgrid.com/omnicache-og.png" in resp.text
+    assert "https://omnicache.rawwgrid.com/" in resp.text
+
+def test_omnicache_rawwgrid_com_api_client_gets_json():
+    # API clients explicitly requesting application/json get JSON descriptor
+    resp = client.get("/", headers={"host": "omnicache.rawwgrid.com", "accept": "application/json"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/json"
+    assert resp.json()["status"] == "ok"
+    assert resp.json()["service"] == "OmniCache AI Proxy"
+
+def test_landing_legacy_routes_and_file_preserved():
+    # Verify legacy landing page is safely kept aside and served on dedicated routes
+    for path in ("/legacy", "/landing/legacy", "/landing_legacy.html"):
+        resp = client.get(path)
+        assert resp.status_code == 200, f"Failed for {path}"
+        assert "text/html" in resp.headers["content-type"]
+        assert "Sub-Millisecond AI Proxy" in resp.text or "Radix Trie" in resp.text
+
+def test_new_landing_page_footer_and_domain_metadata():
+    resp = client.get("/landing")
+    assert resp.status_code == 200
+    assert 'href="/legacy"' in resp.text
+    assert "omnicache.rawwgrid.com" in resp.text
+    assert 'content="https://omnicache.rawwgrid.com/"' in resp.text
+

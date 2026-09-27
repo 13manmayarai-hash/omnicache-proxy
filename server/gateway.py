@@ -3929,15 +3929,22 @@ async def handle_healthz(request: Request) -> Response:
 
 
 async def handle_root(request: Request) -> Response:
-    """Root endpoint handler. Serves Dashboard for web browsers, or service JSON for API clients."""
+    """Root endpoint handler. Serves Landing Page for web browsers and omnicache.rawwgrid.com, or service JSON for API clients."""
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
 
     accept = request.headers.get("accept", "").lower()
-    # If accessed via web browser requesting HTML, serve landing page
-    if "text/html" in accept:
-        for fname in ("landing_v3.html", "landing.html"):
+    host = request.headers.get("host", "").lower().split(":")[0]
+
+    # Requests from the website domain (omnicache.rawwgrid.com) serve the landing page
+    # unless an API client explicitly requests application/json.
+    is_website_domain = host in ("omnicache.rawwgrid.com", "rawwgrid.com") or host.endswith(".rawwgrid.com")
+    is_html_request = "text/html" in accept or (is_website_domain and "application/json" not in accept)
+
+    # If accessed via web browser or website domain, serve landing page
+    if is_html_request:
+        for fname in ("landing.html", "landing_v3.html"):
             landing_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
             if os.path.exists(landing_path):
                 with open(landing_path, "r", encoding="utf-8") as f:
@@ -4005,17 +4012,31 @@ async def handle_dashboard(request: Request) -> Response:
 
 
 async def handle_landing(request: Request) -> Response:
-    """Serves the production v3 landing page (falling back to v2 or v1)."""
+    """Serves the production v3 landing page."""
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
-    for fname in ("landing_v3.html", "landing_v2.html", "landing.html"):
+    for fname in ("landing.html", "landing_v3.html"):
         candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
         if os.path.exists(candidate):
             with open(candidate, "r", encoding="utf-8") as f:
                 html = f.read()
             return HTMLResponse(html, headers=cors_headers)
     return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
+
+
+async def handle_landing_legacy(request: Request) -> Response:
+    """Serves the archived legacy landing page kept aside."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    for fname in ("landing_legacy.html", "landing_v1.html"):
+        legacy_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
+        if os.path.exists(legacy_path):
+            with open(legacy_path, "r", encoding="utf-8") as f:
+                html = f.read()
+            return HTMLResponse(html, headers=cors_headers)
+    return HTMLResponse("<h1>OmniCache Legacy Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
 async def handle_landing_v3(request: Request) -> Response:
@@ -5532,6 +5553,9 @@ routes = [
     Route("/v3", handle_landing_v3, methods=["GET", "OPTIONS"]),
     Route("/v2", handle_landing_v2, methods=["GET", "OPTIONS"]),
     Route("/preview", handle_landing_v2, methods=["GET", "OPTIONS"]),
+    Route("/legacy", handle_landing_legacy, methods=["GET", "OPTIONS"]),
+    Route("/landing/legacy", handle_landing_legacy, methods=["GET", "OPTIONS"]),
+    Route("/landing_legacy.html", handle_landing_legacy, methods=["GET", "OPTIONS"]),
     Route("/docs.html", handle_docs_html, methods=["GET", "OPTIONS"]),
     Route("/omnicache-og.png", handle_og_image, methods=["GET", "OPTIONS"]),
     Route("/img/{file_path:path}", handle_img, methods=["GET", "OPTIONS"]),

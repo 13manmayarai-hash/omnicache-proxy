@@ -893,15 +893,11 @@
       <nav class="top-center" aria-label="Dashboard sections">
         <button class="nav-tab active" data-tab="tab-overview" onclick="switchTab('tab-overview')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
-          Overview
+          Overview & Playground
         </button>
         <button class="nav-tab" data-tab="tab-fabric" onclick="switchTab('tab-fabric')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           Cache Fabric
-        </button>
-        <button class="nav-tab" data-tab="tab-playground" onclick="switchTab('tab-playground')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Playground
         </button>
         <button class="nav-tab" data-tab="tab-mesh" onclick="switchTab('tab-mesh')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
@@ -989,119 +985,8 @@
       </div>
     </section>
 
-    <!-- ==================== TAB 1: OVERVIEW & TELEMETRY ==================== -->
+    <!-- ==================== TAB 1: OVERVIEW & PLAYGROUND (COMMAND CENTER) ==================== -->
     <div id="tab-overview" class="tab-pane active">
-      <!-- Live Charts Grid -->
-      <div class="grid-2" style="margin-bottom: 24px;">
-        <div class="panel" style="margin-bottom: 0;">
-          <div class="panel-head">
-            <div class="panel-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-              Live Throughput & Cache Hits
-            </div>
-            <div class="tag-version"><span class="dot-live"></span>Real-Time Stream</div>
-          </div>
-          <div class="panel-body">
-            <div class="chart-box">
-              <canvas id="throughputChart"></canvas>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel" style="margin-bottom: 0;">
-          <div class="panel-head">
-            <div class="panel-title">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
-              Latency Distribution (OmniCache vs Cloud)
-            </div>
-            <div class="tag-version">p50 / p90 / p99</div>
-          </div>
-          <div class="panel-body">
-            <div class="chart-box">
-              <canvas id="latencyChart"></canvas>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Live Request Event Stream Console -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-            Live Request Event Stream
-          </div>
-          <div class="panel-actions">
-            <button class="btn" style="height: 30px; font-size: 12px;" onclick="clearStreamLog()">Clear Feed</button>
-            <button class="btn" style="height: 30px; font-size: 12px;" id="toggleStreamBtn" onclick="toggleStreamPause()">Pause</button>
-          </div>
-        </div>
-        <div class="panel-body" style="padding: 16px;">
-          <div class="term-box" id="streamLog">
-            <div class="term-row" style="color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--line);">
-              <span>TIME</span>
-              <span>STATUS</span>
-              <span>PROMPT / PAYLOAD</span>
-              <span style="text-align: right;">TOKENS</span>
-              <span style="text-align: right;">LATENCY</span>
-            </div>
-            <div class="term-row">
-              <span class="term-time">INITIALIZED</span>
-              <span class="badge badge-hit">READY</span>
-              <span class="term-prompt">OmniCache v3.1.0 gateway listening on localhost:8000</span>
-              <span class="term-tokens">—</span>
-              <span class="term-lat hit">0.0 ms</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== TAB 2: CACHE FABRIC EXPLORER ==================== -->
-    <div id="tab-fabric" class="tab-pane">
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            Cache Fabric Registry & Entry Auditor
-          </div>
-          <div class="panel-actions">
-            <div class="input-well">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="fabricSearch" aria-label="Filter cache fabric entries" placeholder="Filter by prompt, model, or hash..." oninput="filterFabricEntries()">
-            </div>
-            <button class="btn" onclick="fetchFabricEntries()">Refresh</button>
-          </div>
-        </div>
-        <div class="panel-body" style="padding: 0;">
-          <div class="table-wrap">
-            <table id="fabricTable">
-              <thead>
-                <tr>
-                  <th>Cache Key Hash</th>
-                  <th>Model Target</th>
-                  <th>Prompt Preview</th>
-                  <th>Hits</th>
-                  <th>Tokens Saved</th>
-                  <th>Created / TTL</th>
-                  <th style="text-align: right;">Actions</th>
-                </tr>
-              </thead>
-              <tbody id="fabricTableBody">
-                <tr>
-                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 36px;">
-                    No entries in cache fabric yet. Send prompts through Claude Code, Cursor, or the Playground tab to populate!
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== TAB 3: PLAYGROUND (INTERACTIVE SANDBOX) ==================== -->
-    <div id="tab-playground" class="tab-pane">
       <!-- 5-Stage Visual Execution Pipeline -->
       <div class="pg-pipeline" id="pgPipeline">
         <div class="pipe-node" id="pipeNode1">
@@ -1136,7 +1021,8 @@
         </div>
       </div>
 
-      <div class="grid-2-1">
+      <!-- Interactive Playground Sandbox & Execution Verdict -->
+      <div class="grid-2-1" style="margin-bottom: 24px;">
         <!-- Interactive Prompt Sender -->
         <div class="panel" style="margin-bottom: 0;">
           <div class="panel-head">
@@ -1247,6 +1133,114 @@
                 Click "Send Request" to test live execution. The 1st run registers in cache; the 2nd run replays locally in under 2 milliseconds!
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Charts Grid -->
+      <div class="grid-2" style="margin-bottom: 24px;">
+        <div class="panel" style="margin-bottom: 0;">
+          <div class="panel-head">
+            <div class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              Live Throughput & Cache Hits
+            </div>
+            <div class="tag-version"><span class="dot-live"></span>Real-Time Stream</div>
+          </div>
+          <div class="panel-body">
+            <div class="chart-box">
+              <canvas id="throughputChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom: 0;">
+          <div class="panel-head">
+            <div class="panel-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+              Latency Distribution (OmniCache vs Cloud)
+            </div>
+            <div class="tag-version">p50 / p90 / p99</div>
+          </div>
+          <div class="panel-body">
+            <div class="chart-box">
+              <canvas id="latencyChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Request Event Stream Console -->
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Live Request Event Stream
+          </div>
+          <div class="panel-actions">
+            <button class="btn" style="height: 30px; font-size: 12px;" onclick="clearStreamLog()">Clear Feed</button>
+            <button class="btn" style="height: 30px; font-size: 12px;" id="toggleStreamBtn" onclick="toggleStreamPause()">Pause</button>
+          </div>
+        </div>
+        <div class="panel-body" style="padding: 16px;">
+          <div class="term-box" id="streamLog">
+            <div class="term-row" style="color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--line);">
+              <span>TIME</span>
+              <span>STATUS</span>
+              <span>PROMPT / PAYLOAD</span>
+              <span style="text-align: right;">TOKENS</span>
+              <span style="text-align: right;">LATENCY</span>
+            </div>
+            <div class="term-row">
+              <span class="term-time">INITIALIZED</span>
+              <span class="badge badge-hit">READY</span>
+              <span class="term-prompt">OmniCache v3.1.0 gateway listening on localhost:8000</span>
+              <span class="term-tokens">—</span>
+              <span class="term-lat hit">0.0 ms</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== TAB 2: CACHE FABRIC EXPLORER ==================== -->
+    <div id="tab-fabric" class="tab-pane">
+      <div class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            Cache Fabric Registry & Entry Auditor
+          </div>
+          <div class="panel-actions">
+            <div class="input-well">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="fabricSearch" aria-label="Filter cache fabric entries" placeholder="Filter by prompt, model, or hash..." oninput="filterFabricEntries()">
+            </div>
+            <button class="btn" onclick="fetchFabricEntries()">Refresh</button>
+          </div>
+        </div>
+        <div class="panel-body" style="padding: 0;">
+          <div class="table-wrap">
+            <table id="fabricTable">
+              <thead>
+                <tr>
+                  <th>Cache Key Hash</th>
+                  <th>Model Target</th>
+                  <th>Prompt Preview</th>
+                  <th>Hits</th>
+                  <th>Tokens Saved</th>
+                  <th>Created / TTL</th>
+                  <th style="text-align: right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="fabricTableBody">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 36px;">
+                    No entries in cache fabric yet. Send prompts through Claude Code, Cursor, or the Playground tab to populate!
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1458,13 +1452,18 @@
 
       /* ---------- Navigation Tabs ---------- */
       window.switchTab = (tabId) => {
+        if (tabId === 'tab-playground') tabId = 'tab-overview';
         $$('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
         $$('.tab-pane').forEach(p => p.classList.toggle('active', p.id === tabId));
         if (tabId === 'tab-fabric') fetchFabricEntries();
         if (tabId === 'tab-mesh') fetchMeshStatus();
         if (tabId === 'tab-audit') fetchAuditEvents();
-        if (tabId === 'tab-playground' && playgroundSessionChart) {
-          setTimeout(() => playgroundSessionChart.resize(), 50);
+        if (tabId === 'tab-overview') {
+          setTimeout(() => {
+            if (throughputChart) throughputChart.resize();
+            if (latencyChart) latencyChart.resize();
+            if (playgroundSessionChart) playgroundSessionChart.resize();
+          }, 50);
         }
       };
 

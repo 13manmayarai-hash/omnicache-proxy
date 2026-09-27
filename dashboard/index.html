@@ -840,15 +840,34 @@
       .kpi-grid { grid-template-columns: repeat(3, 1fr); }
       .grid-2, .grid-2-1, .grid-3 { grid-template-columns: 1fr; }
     }
-    @media (max-width: 800px) {
-      .top-center { display: none; }
+    @media (max-width: 1024px) {
+      .pg-pipeline { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+    }
+    @media (max-width: 860px) {
+      .top-in {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 10px 0;
+        gap: 12px;
+      }
+      .top-center {
+        order: 3;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        justify-content: flex-start;
+        padding: 4px 6px;
+      }
+      .top-center::-webkit-scrollbar { display: none; }
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .term-row { grid-template-columns: 60px 70px 1fr 65px; }
       .term-row .term-tokens { display: none; }
       .verdict-metrics { grid-template-columns: repeat(2, 1fr); }
     }
-    @media (max-width: 500px) {
+    @media (max-width: 600px) {
       .kpi-grid { grid-template-columns: 1fr; }
+      .pg-pipeline { grid-template-columns: 1fr; }
       .top-right .hide-sm { display: none; }
     }
   </style>
@@ -1049,7 +1068,7 @@
           <div class="panel-actions">
             <div class="input-well">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" id="fabricSearch" placeholder="Filter by prompt, model, or hash..." oninput="filterFabricEntries()">
+              <input type="text" id="fabricSearch" aria-label="Filter cache fabric entries" placeholder="Filter by prompt, model, or hash..." oninput="filterFabricEntries()">
             </div>
             <button class="btn" onclick="fetchFabricEntries()">Refresh</button>
           </div>
@@ -1126,7 +1145,7 @@
               Cache Replay Playground
             </div>
             <div class="panel-actions">
-              <select id="pgModelMode" style="height: 32px; padding: 0 10px; border-radius: var(--neu-pill); background: var(--surface-2); border: 1px solid var(--line-2); font-size: 12px; color: var(--text); cursor: pointer;">
+              <select id="pgModelMode" aria-label="Model target selector" style="height: 32px; padding: 0 10px; border-radius: var(--neu-pill); background: var(--surface-2); border: 1px solid var(--line-2); font-size: 12px; color: var(--text); cursor: pointer;">
                 <option value="claude">Claude Code (/v1/messages)</option>
                 <option value="openai">OpenAI / Cursor (/v1/chat/completions)</option>
               </select>
@@ -1141,7 +1160,7 @@
               <button class="preset-pill" onclick="setPlaygroundPreset('reworded')">🔍 Semantic Paraphrase Test</button>
             </div>
 
-            <textarea id="pgPrompt" class="pg-textarea" placeholder="Enter your prompt here to observe instantaneous local caching and zero token costs..."></textarea>
+            <textarea id="pgPrompt" aria-label="Playground prompt input" class="pg-textarea" placeholder="Enter your prompt here to observe instantaneous local caching and zero token costs..."></textarea>
 
             <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px;">
               <span class="muted" style="font-size: 12px;">Sends real request to proxy sandbox with automatic caching</span>
@@ -1354,7 +1373,7 @@
         <p class="muted" style="font-size: 13.5px;">Enter your OmniCache Admin API Key to access restricted enterprise endpoints, purge controls, and live telemetry feeds.</p>
         <div class="input-well" style="max-width: 100%;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <input type="password" id="authApiKeyInput" placeholder="Enter API Key (e.g. oc_live_...)">
+          <input type="password" id="authApiKeyInput" aria-label="OmniCache API Key" placeholder="Enter API Key (e.g. oc_live_...)">
         </div>
         <div style="font-size: 12px; color: var(--text-muted); background: var(--surface-2); padding: 10px 14px; border-radius: 10px;">
           <strong>Tip:</strong> You can also set a browser session cookie by appending <code>?key=YOUR_KEY</code> to the URL.
@@ -1398,11 +1417,17 @@
       const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
       let currentApiKey = localStorage.getItem('omnicache_api_key') || '';
+      // Also check cookies for omnicache_key
+      if (!currentApiKey && document.cookie) {
+        const match = document.cookie.match(/omnicache_key=([^;]+)/);
+        if (match) currentApiKey = decodeURIComponent(match[1]);
+      }
       // Also check query param ?key=
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('key')) {
         currentApiKey = urlParams.get('key');
         localStorage.setItem('omnicache_api_key', currentApiKey);
+        document.cookie = `omnicache_key=${encodeURIComponent(currentApiKey)}; path=/; max-age=2592000; SameSite=Lax`;
       }
 
       function updateAuthUI() {
@@ -1448,28 +1473,44 @@
       window.openAuthModal = () => {
         $('#authApiKeyInput').value = currentApiKey;
         authModal.classList.add('open');
+        authModal.setAttribute('aria-hidden', 'false');
       };
-      window.closeAuthModal = () => authModal.classList.remove('open');
+      window.closeAuthModal = () => {
+        authModal.classList.remove('open');
+        authModal.setAttribute('aria-hidden', 'true');
+      };
       window.saveApiKey = () => {
         currentApiKey = $('#authApiKeyInput').value.trim();
         localStorage.setItem('omnicache_api_key', currentApiKey);
+        if (currentApiKey) {
+          document.cookie = `omnicache_key=${encodeURIComponent(currentApiKey)}; path=/; max-age=2592000; SameSite=Lax`;
+        }
         closeAuthModal();
         updateAuthUI();
         refreshAllData();
+        connectWebSocket();
       };
       window.clearApiKey = () => {
         currentApiKey = '';
         localStorage.removeItem('omnicache_api_key');
+        document.cookie = 'omnicache_key=; path=/; max-age=0; SameSite=Lax';
         $('#authApiKeyInput').value = '';
         closeAuthModal();
         updateAuthUI();
         refreshAllData();
+        connectWebSocket();
       };
 
       /* ---------- Purge Modal ---------- */
       const purgeModal = $('#purgeModal');
-      window.openPurgeModal = () => purgeModal.classList.add('open');
-      window.closePurgeModal = () => purgeModal.classList.remove('open');
+      window.openPurgeModal = () => {
+        purgeModal.classList.add('open');
+        purgeModal.setAttribute('aria-hidden', 'false');
+      };
+      window.closePurgeModal = () => {
+        purgeModal.classList.remove('open');
+        purgeModal.setAttribute('aria-hidden', 'true');
+      };
       window.executePurge = async (tier) => {
         try {
           const res = await fetch(`/v1/cache/purge?tier=${tier}`, {
@@ -1487,6 +1528,23 @@
           alert('Purge request error: ' + e.message);
         }
       };
+
+      // Modal backdrop click and Escape key dismissal
+      [authModal, purgeModal].forEach(m => {
+        if (!m) return;
+        m.addEventListener('click', (e) => {
+          if (e.target === m) {
+            closeAuthModal();
+            closePurgeModal();
+          }
+        });
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          closeAuthModal();
+          closePurgeModal();
+        }
+      });
 
       /* ---------- Charts Initialization ---------- */
       let throughputChart, latencyChart, playgroundSessionChart;
@@ -1680,6 +1738,27 @@
         log.appendChild(row);
         log.scrollTop = log.scrollHeight;
         if (log.children.length > 50) log.removeChild(log.children[1]);
+
+        // Dynamically update throughputChart
+        if (throughputChart) {
+          const isHit = (badgeCls && badgeCls.includes('hit')) || (status && status.includes('HIT'));
+          const lastIdx = throughputChart.data.datasets[0].data.length - 1;
+          if (lastIdx >= 0) {
+            if (isHit) {
+              throughputChart.data.datasets[0].data[lastIdx]++;
+            } else {
+              throughputChart.data.datasets[1].data[lastIdx]++;
+            }
+            throughputChart.update('none');
+          }
+        }
+
+        // Dynamically update p50 latency KPI if valid latency provided
+        const latNum = parseFloat(latency);
+        if (!isNaN(latNum) && latNum > 0) {
+          const latEl = $('#metricLatency');
+          if (latEl) latEl.textContent = latNum.toFixed(1) + ' ms';
+        }
       }
 
       function escapeHtml(s) {
@@ -1738,29 +1817,40 @@
           tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 36px;">No entries registered in local cache yet. Send requests to see them live!</td></tr>`;
           return;
         }
-        tbody.innerHTML = entries.map(e => `
-          <tr>
-            <td><span class="key-hash" title="${escapeHtml(e.key)}">${escapeHtml(e.key.substring(0, 16))}...</span></td>
-            <td><span class="badge badge-sem">${escapeHtml(e.model || 'llm-proxy')}</span></td>
-            <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(e.prompt_preview || e.key)}</td>
-            <td class="mono font-bold">${e.hits || 1}</td>
-            <td class="mono text-ok">${(e.tokens_saved || 0).toLocaleString()}</td>
-            <td class="mono muted" style="font-size: 12px;">${e.created_at ? new Date(e.created_at).toLocaleTimeString() : 'Active'}</td>
-            <td style="text-align: right;">
-              <button class="btn btn-danger" style="height: 28px; padding: 0 10px; font-size: 11px;" onclick="evictKey('${escapeHtml(e.key)}')">Evict</button>
-            </td>
-          </tr>
-        `).join('');
+        tbody.innerHTML = entries.map(e => {
+          const preview = e.user_prompt_preview || e.user_prompt || e.prompt_preview || e.reply_preview || e.key;
+          const hits = e.hit_count !== undefined ? e.hit_count : (e.hits || 0);
+          const tokens = e.tokens_saved_estimate !== undefined ? e.tokens_saved_estimate : (e.tokens_saved || 0);
+          const rawEpoch = e.created_at || (e.timestamp ? new Date(e.timestamp).getTime() / 1000 : null);
+          let timeDisplay = 'Active';
+          if (rawEpoch) {
+            const ms = rawEpoch < 1e11 ? rawEpoch * 1000 : rawEpoch;
+            timeDisplay = new Date(ms).toLocaleTimeString();
+          }
+          const ttlText = e.ttl_remaining ? ` · ${Math.round(e.ttl_remaining / 60)}m left` : '';
+          return `
+            <tr>
+              <td><span class="key-hash" title="${escapeHtml(e.key)}">${escapeHtml(e.key.substring(0, 16))}...</span></td>
+              <td><span class="badge badge-sem">${escapeHtml(e.model || 'llm-proxy')}</span></td>
+              <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(preview)}">${escapeHtml(preview)}</td>
+              <td class="mono font-bold">${hits.toLocaleString()}</td>
+              <td class="mono text-ok">${tokens.toLocaleString()}</td>
+              <td class="mono muted" style="font-size: 12px;">${escapeHtml(timeDisplay)}${escapeHtml(ttlText)}</td>
+              <td style="text-align: right;">
+                <button class="btn btn-danger" style="height: 28px; padding: 0 10px; font-size: 11px;" onclick="evictKey('${escapeHtml(e.key)}')">Evict</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
       }
 
       window.filterFabricEntries = () => {
         const q = $('#fabricSearch').value.toLowerCase().trim();
         if (!q) return renderFabricTable(fabricEntriesList);
-        const filtered = fabricEntriesList.filter(e =>
-          (e.key && e.key.toLowerCase().includes(q)) ||
-          (e.model && e.model.toLowerCase().includes(q)) ||
-          (e.prompt_preview && e.prompt_preview.toLowerCase().includes(q))
-        );
+        const filtered = fabricEntriesList.filter(e => {
+          const text = (e.key || '') + ' ' + (e.model || '') + ' ' + (e.user_prompt || '') + ' ' + (e.user_prompt_preview || '') + ' ' + (e.reply_preview || '');
+          return text.toLowerCase().includes(q);
+        });
         renderFabricTable(filtered);
       };
 
@@ -1891,12 +1981,19 @@
             if (wfLocalLat) wfLocalLat.textContent = `${rtt} ms`;
             const pct = Math.max(0.15, Math.min(100, (rtt / cloudBaseline) * 100));
             if (wfLocalBar) wfLocalBar.style.width = pct + '%';
-            const speedup = Math.max(0, ((cloudBaseline - rtt) / cloudBaseline) * 100).toFixed(1);
+            const speedup = Math.max(0, Math.min(99.9, ((cloudBaseline - rtt) / cloudBaseline) * 100)).toFixed(1);
             if (wfDeltaBadge) {
-              wfDeltaBadge.textContent = `⚡ ${speedup}% Faster`;
-              wfDeltaBadge.style.color = 'var(--ok)';
-              wfDeltaBadge.style.background = 'rgba(127, 214, 174, 0.15)';
-              wfDeltaBadge.style.borderColor = 'rgba(127, 214, 174, 0.3)';
+              if (rtt < cloudBaseline) {
+                wfDeltaBadge.textContent = `⚡ ${speedup}% Faster`;
+                wfDeltaBadge.style.color = 'var(--ok)';
+                wfDeltaBadge.style.background = 'rgba(127, 214, 174, 0.15)';
+                wfDeltaBadge.style.borderColor = 'rgba(127, 214, 174, 0.3)';
+              } else {
+                wfDeltaBadge.textContent = `⚡ Direct Parity`;
+                wfDeltaBadge.style.color = 'var(--info)';
+                wfDeltaBadge.style.background = 'rgba(57, 135, 229, 0.15)';
+                wfDeltaBadge.style.borderColor = 'rgba(57, 135, 229, 0.3)';
+              }
             }
           } else {
             if (wfCloudLat) wfCloudLat.textContent = `${rtt} ms`;
@@ -1974,14 +2071,43 @@
 
       /* ---------- Cluster Mesh Tab ---------- */
       async function fetchMeshStatus() {
+        const tbody = $('#meshPeersTableBody');
         try {
           const res = await fetch('/v1/cache/stats', { headers: authHeaders() });
           if (!res.ok) return;
           const d = await res.json();
           const m = d.mesh_network || {};
+          const localId = m.node_id || 'localhost-4a2967fa';
+          const localEndpoint = m.endpoint || 'http://127.0.0.1:8000';
+          const lamport = m.lamport_clock !== undefined ? m.lamport_clock : 0;
           if (m.node_id) $('#meshNodeId').textContent = m.node_id;
           if (m.peer_summary) $('#meshPeersCount').textContent = `${m.peer_summary.total || 0} Connected`;
           if (m.tombstone_count !== undefined) $('#meshTombstones').textContent = m.tombstone_count;
+
+          const peers = Array.isArray(m.peers) ? m.peers : [];
+          let html = `
+            <tr>
+              <td class="mono font-bold">${escapeHtml(localId)} <span class="badge badge-hit" style="font-size: 9.5px; margin-left: 6px;">COORDINATOR</span></td>
+              <td class="mono">${escapeHtml(localEndpoint)}</td>
+              <td><span class="badge badge-hit">ONLINE</span></td>
+              <td class="mono">${lamport}</td>
+              <td class="mono text-ok">&lt; 0.1 ms</td>
+              <td class="mono muted" style="font-size: 12px;">Active (Local)</td>
+            </tr>
+          `;
+          if (peers.length > 0) {
+            html += peers.map(p => `
+              <tr>
+                <td class="mono">${escapeHtml(p.node_id || p.peer_id || 'peer')}</td>
+                <td class="mono">${escapeHtml(p.endpoint || p.address || '—')}</td>
+                <td><span class="badge ${p.status === 'alive' || p.status === 'ONLINE' ? 'badge-hit' : 'badge-warn'}">${escapeHtml(p.status || 'SYNCED')}</span></td>
+                <td class="mono">${p.lamport_clock || 0}</td>
+                <td class="mono" style="color: var(--ok);">${(p.latency_ms || 1.2).toFixed(1)} ms</td>
+                <td class="mono muted" style="font-size: 12px;">${p.last_heartbeat ? new Date(p.last_heartbeat * 1000).toLocaleTimeString() : 'Active'}</td>
+              </tr>
+            `).join('');
+          }
+          if (tbody) tbody.innerHTML = html;
         } catch (_) {}
       }
 
@@ -2059,7 +2185,21 @@
       // Initialize
       initCharts();
       refreshAllData();
-      setInterval(refreshAllData, 3000);
+      setInterval(() => {
+        refreshAllData();
+        if (throughputChart) {
+          const nowStr = new Date().toLocaleTimeString();
+          throughputChart.data.labels.push(nowStr);
+          throughputChart.data.datasets[0].data.push(0);
+          throughputChart.data.datasets[1].data.push(0);
+          if (throughputChart.data.labels.length > 14) {
+            throughputChart.data.labels.shift();
+            throughputChart.data.datasets[0].data.shift();
+            throughputChart.data.datasets[1].data.shift();
+          }
+          throughputChart.update('none');
+        }
+      }, 3000);
       connectWebSocket();
     })();
   </script>

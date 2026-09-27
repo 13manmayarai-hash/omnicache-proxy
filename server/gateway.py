@@ -3944,12 +3944,14 @@ async def handle_root(request: Request) -> Response:
 
     # If accessed via web browser or website domain, serve landing page
     if is_html_request:
+        html_headers = dict(cors_headers)
+        html_headers["cache-control"] = "no-cache, must-revalidate"
         for fname in ("landing.html", "landing_v3.html"):
             landing_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
             if os.path.exists(landing_path):
                 with open(landing_path, "r", encoding="utf-8") as f:
                     html = f.read()
-                return HTMLResponse(html, headers=cors_headers)
+                return HTMLResponse(html, headers=html_headers)
         dashboard_path = os.path.join(os.path.dirname(__file__), "..", "dashboard", "index.html")
         if os.path.exists(dashboard_path):
             return await handle_dashboard(request)
@@ -4016,12 +4018,14 @@ async def handle_landing(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
+    html_headers = dict(cors_headers)
+    html_headers["cache-control"] = "no-cache, must-revalidate"
     for fname in ("landing.html", "landing_v3.html"):
         candidate = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
         if os.path.exists(candidate):
             with open(candidate, "r", encoding="utf-8") as f:
                 html = f.read()
-            return HTMLResponse(html, headers=cors_headers)
+            return HTMLResponse(html, headers=html_headers)
     return HTMLResponse("<h1>OmniCache Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
@@ -4030,12 +4034,14 @@ async def handle_landing_legacy(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
+    html_headers = dict(cors_headers)
+    html_headers["cache-control"] = "no-cache, must-revalidate"
     for fname in ("landing_legacy.html", "landing_v1.html"):
         legacy_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", fname))
         if os.path.exists(legacy_path):
             with open(legacy_path, "r", encoding="utf-8") as f:
                 html = f.read()
-            return HTMLResponse(html, headers=cors_headers)
+            return HTMLResponse(html, headers=html_headers)
     return HTMLResponse("<h1>OmniCache Legacy Landing Page Not Found</h1>", status_code=404, headers=cors_headers)
 
 
@@ -4048,7 +4054,9 @@ async def handle_landing_v3(request: Request) -> Response:
     if os.path.exists(v3_path):
         with open(v3_path, "r", encoding="utf-8") as f:
             html = f.read()
-        return HTMLResponse(html, headers=cors_headers)
+        html_headers = dict(cors_headers)
+        html_headers["cache-control"] = "no-cache, must-revalidate"
+        return HTMLResponse(html, headers=html_headers)
     return HTMLResponse("<h1>OmniCache Landing v3 Not Found</h1>", status_code=404, headers=cors_headers)
 
 

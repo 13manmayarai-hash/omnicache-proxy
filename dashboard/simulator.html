@@ -3,267 +3,854 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniCache Pipeline Replay Sandbox & Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     :root {
-      --card: #11171d;
-      --background: #0b0f13;
-      --border: rgba(255, 255, 255, 0.08);
-      --foreground: #f3f6f9;
-      --muted-foreground: #93a2ae;
-      --accent: #e95d2c;
+      --c-obsidian: #06141B;
+      --c-midnight: #11212D;
+      --c-navy: #253745;
+      --c-slate: #4A5C6A;
+      --c-silver: #9BA8AB;
+      --c-frost: #CCD0CF;
+      --accent-orange: #e95d2c;
+      --accent-cyan: #22d3ee;
       --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
       --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
-      --neu-card: 20px;
+      --neu-flat-3: 10px 10px 24px #02070b, -10px -10px 24px rgba(74, 92, 106, 0.28);
+      --neu-pressed: inset 3px 3px 6px #02080d, inset -3px -3px 6px rgba(74, 92, 106, 0.2);
+      --neu-pressed-deep: inset 4px 4px 8px #01060a, inset -4px -4px 8px rgba(74, 92, 106, 0.25);
     }
     body {
       font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: var(--c-obsidian);
+      color: var(--c-frost);
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .neu-card {
+      background: var(--c-midnight);
+      border: 1px solid rgba(74, 92, 106, 0.35);
+      border-radius: 20px;
+      box-shadow: var(--neu-flat-2);
+    }
+    .neu-inset {
+      background: var(--c-obsidian);
+      border: 1px solid rgba(74, 92, 106, 0.25);
+      box-shadow: var(--neu-pressed);
+    }
+    .neu-btn {
+      background: var(--c-midnight);
+      border: 1px solid rgba(74, 92, 106, 0.4);
+      box-shadow: var(--neu-flat-1);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .neu-btn:hover {
+      box-shadow: 4px 4px 12px #02070b, -4px -4px 12px rgba(74, 92, 106, 0.3);
+      border-color: rgba(233, 93, 44, 0.6);
+      transform: translateY(-1px);
+    }
+    .neu-btn:active, .neu-btn-active {
+      box-shadow: var(--neu-pressed) !important;
+      border-color: var(--accent-orange) !important;
+      color: #ffffff !important;
+    }
+    .stage-pill {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
     @keyframes pulse-ring {
-      0% { transform: scale(0.95); opacity: 0.8; }
-      50% { transform: scale(1.05); opacity: 0.3; }
-      100% { transform: scale(0.95); opacity: 0.8; }
+      0% { transform: scale(0.96); opacity: 0.9; }
+      50% { transform: scale(1.04); opacity: 0.4; }
+      100% { transform: scale(0.96); opacity: 0.9; }
     }
-    .pulse-active {
-      animation: pulse-ring 1.2s infinite ease-in-out;
+    .live-pulse {
+      animation: pulse-ring 1.8s infinite ease-in-out;
     }
-    .stage-transition {
-      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--c-obsidian);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--c-slate);
+      border-radius: 3px;
     }
   </style>
 </head>
-<body class="bg-[#0b0f13] text-[var(--foreground)] antialiased p-2 sm:p-4 select-none min-h-screen flex items-center justify-center">
+<body class="min-h-screen p-3 sm:p-6 flex flex-col items-center justify-center selection:bg-[#e95d2c]/30">
 
-  <!-- Main Container Card -->
-  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-[20px] p-4 sm:p-5 shadow-[var(--neu-flat-2)] max-w-xl w-full mx-auto flex flex-col gap-3 font-sans">
-    
-    <!-- Top Wayfinding Bar -->
-    <div class="flex items-center justify-between text-xs font-semibold pb-2 border-b border-[var(--border)]">
-      <a href="/landing" class="text-[#e95d2c] hover:underline flex items-center gap-1.5">
-        ← Back to Home
+  <!-- Main Simulator Container -->
+  <main class="w-full max-w-4xl neu-card p-4 sm:p-7 flex flex-col gap-4">
+
+    <!-- Top Navigation & Wayfinding Bar -->
+    <header class="flex items-center justify-between pb-3 border-b border-[var(--c-slate)]/30 text-xs">
+      <a href="/landing" class="flex items-center gap-2 text-[#e95d2c] hover:text-[#ff7444] font-semibold transition-colors">
+        <span>←</span>
+        <span>Back to OmniCache</span>
       </a>
-      <div class="flex items-center gap-3">
-        <a href="/docs.html" class="text-[#93a2ae] hover:text-[#f3f6f9] transition-colors">Benchmarks</a>
-        <a href="/dashboard" class="px-2.5 py-1 rounded-full bg-[#253745]/60 border border-[#4A5C6A]/50 text-[#CCD0CF] hover:text-white transition-all text-[11px]">Dashboard ↗</a>
+      <div class="flex items-center gap-2 sm:gap-4">
+        <span class="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-[11px]">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          Engine: Online
+        </span>
+        <a href="/docs.html" class="text-[var(--c-silver)] hover:text-white transition-colors text-xs">Technical Docs</a>
+        <a href="/dashboard" class="neu-btn px-3 py-1 rounded-full text-[11px] font-semibold text-[var(--c-frost)] hover:text-white flex items-center gap-1">
+          <span>Live Telemetry</span>
+          <span>↗</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- Header Title & Mode Toggle -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full bg-[#e95d2c] live-pulse"></span>
+          <h1 class="text-base sm:text-lg font-extrabold uppercase tracking-wide mono text-white">
+            OmniCache // Pipeline Replay Sandbox
+          </h1>
+        </div>
+        <p class="text-xs text-[var(--c-silver)] mt-0.5">
+          Simulate real-world agent tool replays, exact prefix trie matching, and semantic cache execution.
+        </p>
+      </div>
+
+      <!-- Mode Selector Tabs -->
+      <div class="neu-inset p-1 rounded-full flex items-center gap-1 self-start sm:self-auto text-xs font-semibold">
+        <button id="tab-traces" onclick="switchMode('traces')" class="px-3 py-1 rounded-full bg-[#253745] text-white shadow-sm transition-all">
+          🤖 Agent Traces
+        </button>
+        <button id="tab-single" onclick="switchMode('single')" class="px-3 py-1 rounded-full text-[var(--c-silver)] hover:text-white transition-all">
+          ⚡ Single Query
+        </button>
       </div>
     </div>
 
-    <!-- Top Header -->
-    <div class="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-      <div class="flex items-center gap-2">
-        <span class="inline-flex h-2.5 w-2.5 rounded-full bg-[#e95d2c] animate-pulse"></span>
-        <h2 class="text-xs sm:text-sm font-bold tracking-tight uppercase font-mono">
-          OmniCache // Pipeline Replay Sandbox
-        </h2>
+    <!-- Scenario Selector Chips -->
+    <div id="trace-selector-bar" class="flex flex-col gap-2">
+      <div class="text-[11px] font-mono text-[var(--c-silver)] flex items-center justify-between">
+        <span>SELECT REAL AGENT WORKFLOW:</span>
+        <span id="session-progress" class="text-[#e95d2c] font-bold">Turn 1 of 4</span>
       </div>
-      <span id="pipeline-status" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-[#e95d2c]/30 bg-[#e95d2c]/10 text-[#e95d2c]">
-        STATUS: READY
-      </span>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-medium">
+        <button id="btn-scen-0" onclick="loadScenario(0)" class="neu-btn neu-btn-active px-3 py-2 rounded-xl text-left flex flex-col gap-0.5">
+          <span class="font-bold text-white flex items-center gap-1">
+            <span>💻</span> Claude Code
+          </span>
+          <span class="text-[10px] text-[var(--c-silver)] truncate">4-Turn Debug & Test Replay</span>
+        </button>
+        <button id="btn-scen-1" onclick="loadScenario(1)" class="neu-btn px-3 py-2 rounded-xl text-left flex flex-col gap-0.5">
+          <span class="font-bold text-white flex items-center gap-1">
+            <span>🎨</span> Cursor Composer
+          </span>
+          <span class="text-[10px] text-[var(--c-silver)] truncate">3-Turn Full-Stack Refactor</span>
+        </button>
+        <button id="btn-scen-2" onclick="loadScenario(2)" class="neu-btn px-3 py-2 rounded-xl text-left flex flex-col gap-0.5">
+          <span class="font-bold text-white flex items-center gap-1">
+            <span>🐝</span> Agent Swarm
+          </span>
+          <span class="text-[10px] text-[var(--c-silver)] truncate">3-Agent Delegation Bus</span>
+        </button>
+        <button id="btn-scen-3" onclick="loadScenario(3)" class="neu-btn px-3 py-2 rounded-xl text-left flex flex-col gap-0.5">
+          <span class="font-bold text-white flex items-center gap-1">
+            <span>📞</span> Voice Agent
+          </span>
+          <span class="text-[10px] text-[var(--c-silver)] truncate">Filler Strip & Fast-Path</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Multi-Turn Timeline Track -->
+    <div id="timeline-container" class="neu-inset p-3 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div id="turns-timeline" class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 w-full">
+        <!-- Rendered dynamically -->
+      </div>
+      <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto font-mono text-xs">
+        <button id="btn-autoplay" onclick="toggleAutoPlay()" class="neu-btn px-3 py-1.5 rounded-full font-bold text-[#e95d2c] border-[#e95d2c]/40 flex items-center gap-1.5">
+          <span id="play-icon">▶</span>
+          <span id="play-label">Auto-Play Trace</span>
+        </button>
+        <button onclick="nextTurn()" class="neu-btn px-3 py-1.5 rounded-full text-[var(--c-frost)] hover:text-white">
+          Next ❯
+        </button>
+        <button onclick="resetTrace()" class="neu-btn px-2.5 py-1.5 rounded-full text-[var(--c-silver)] hover:text-white" title="Reset Trace">
+          ↺
+        </button>
+      </div>
+    </div>
+
+    <!-- Single Prompt Custom Input (Visible in Single Mode) -->
+    <div id="custom-prompt-container" class="hidden flex flex-col gap-2">
+      <div class="flex gap-2">
+        <input id="custom-input" type="text" class="neu-inset flex-1 px-3 py-2 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-[#e95d2c]" value="Write a function to compute Fibonacci sequence in Rust" />
+        <button onclick="runCustomQuery()" class="neu-btn px-4 py-2 rounded-xl font-bold font-mono text-xs text-[#e95d2c] border-[#e95d2c]/40 whitespace-nowrap">
+          INTERCEPT ⌖
+        </button>
+      </div>
     </div>
 
     <!-- 5-Stage Visual Pipeline Bar -->
-    <div class="grid grid-cols-5 gap-1.5 font-mono text-[9px] sm:text-[10px]">
-      <div id="st-1" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
-        <span class="font-bold">01 INT</span>
-        <span class="text-[8px] opacity-75">Sidecar</span>
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center justify-between text-[11px] font-mono text-[var(--c-silver)]">
+        <span>HARDWARE & RADIX PIPELINE EXECUTION:</span>
+        <span id="pipeline-status-text" class="text-cyan-400 font-bold">STATUS: READY</span>
       </div>
-      <div id="st-2" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
-        <span class="font-bold">02 RADIX</span>
-        <span class="text-[8px] opacity-75">L1 Trie</span>
-      </div>
-      <div id="st-3" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
-        <span class="font-bold">03 FUZZY</span>
-        <span class="text-[8px] opacity-75">Subword</span>
-      </div>
-      <div id="st-4" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
-        <span class="font-bold">04 REPLAY</span>
-        <span class="text-[8px] opacity-75">WAL Mem</span>
-      </div>
-      <div id="st-5" class="stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]">
-        <span class="font-bold">05 CLOUD</span>
-        <span class="text-[8px] opacity-75">Fallback</span>
-      </div>
-    </div>
-
-    <!-- Interactive Presets & Controls -->
-    <div class="flex flex-col gap-2">
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-[10px] font-mono">
-        <span class="text-[var(--muted-foreground)] whitespace-nowrap text-[9px]">PRESETS:</span>
-        <button onclick="setScenario(0)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-cyan-500 hover:text-cyan-400 whitespace-nowrap">
-          ⚡ Rust Fib (L1 Radix)
-        </button>
-        <button onclick="setScenario(1)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-purple-500 hover:text-purple-400 whitespace-nowrap">
-          🧠 DeepSeek R1 CoT
-        </button>
-        <button onclick="setScenario(2)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-amber-500 hover:text-amber-400 whitespace-nowrap">
-          🔍 Fuzzy Prompt
-        </button>
-        <button onclick="setScenario(3)" class="preset-btn px-2 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] hover:border-rose-500 hover:text-rose-400 whitespace-nowrap">
-          ✕ Cache Miss
-        </button>
-      </div>
-
-      <!-- Prompt Input & Run Button -->
-      <div class="flex gap-1.5">
-        <input id="prompt-input" type="text" class="flex-1 bg-[var(--background)] border border-[var(--border)] rounded px-2.5 py-1 text-xs font-mono text-[var(--foreground)] focus:outline-none focus:border-cyan-500" value="Write a function to compute Fibonacci sequence in Rust" />
-        <button id="run-btn" onclick="runPipelineSimulation()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs px-3 py-1 rounded transition-colors whitespace-nowrap">
-          REPLAY ⌖
-        </button>
+      <div class="grid grid-cols-5 gap-2 font-mono text-[10px]">
+        <div id="stage-1" class="stage-pill neu-inset flex flex-col items-center justify-center p-2 rounded-xl text-[var(--c-silver)]">
+          <span class="font-extrabold text-white">01 INT</span>
+          <span class="text-[8px] opacity-75">Sidecar</span>
+        </div>
+        <div id="stage-2" class="stage-pill neu-inset flex flex-col items-center justify-center p-2 rounded-xl text-[var(--c-silver)]">
+          <span class="font-extrabold text-white">02 RADIX</span>
+          <span class="text-[8px] opacity-75">L1 Exact Trie</span>
+        </div>
+        <div id="stage-3" class="stage-pill neu-inset flex flex-col items-center justify-center p-2 rounded-xl text-[var(--c-silver)]">
+          <span class="font-extrabold text-white">03 SEMANTIC</span>
+          <span class="text-[8px] opacity-75">L2 Quantized</span>
+        </div>
+        <div id="stage-4" class="stage-pill neu-inset flex flex-col items-center justify-center p-2 rounded-xl text-[var(--c-silver)]">
+          <span class="font-extrabold text-white">04 REPLAY</span>
+          <span class="text-[8px] opacity-75">Tool WAL Mem</span>
+        </div>
+        <div id="stage-5" class="stage-pill neu-inset flex flex-col items-center justify-center p-2 rounded-xl text-[var(--c-silver)]">
+          <span class="font-extrabold text-white">05 CLOUD</span>
+          <span class="text-[8px] opacity-75">Cloud Fallback</span>
+        </div>
       </div>
     </div>
 
     <!-- Telemetry HUD Outcome Grid -->
-    <div class="grid grid-cols-4 gap-1.5 font-mono text-[10px] pt-1 border-t border-[var(--border)]">
-      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
-        <span class="text-[9px] text-[var(--muted-foreground)]">DECISION</span>
-        <span id="hud-decision" class="text-xs font-black text-emerald-400">HIT_RADIX</span>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
+      <div class="neu-inset p-3 rounded-2xl flex flex-col">
+        <span class="text-[9px] text-[var(--c-silver)] uppercase tracking-wider">CACHE DECISION</span>
+        <span id="hud-decision" class="text-sm font-black text-emerald-400 mt-1">HIT_TOOL_REPLAY</span>
       </div>
-      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
-        <span class="text-[9px] text-[var(--muted-foreground)]">LATENCY</span>
-        <span id="hud-latency" class="text-xs font-black text-cyan-400">0.06 ms</span>
+      <div class="neu-inset p-3 rounded-2xl flex flex-col">
+        <span class="text-[9px] text-[var(--c-silver)] uppercase tracking-wider">TURN LATENCY</span>
+        <span id="hud-latency" class="text-sm font-black text-cyan-400 mt-1">0.04 ms</span>
       </div>
-      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
-        <span class="text-[9px] text-[var(--muted-foreground)]">TOKENS SAVED</span>
-        <span id="hud-tokens" class="text-xs font-black text-amber-400">842 tok</span>
+      <div class="neu-inset p-3 rounded-2xl flex flex-col">
+        <span class="text-[9px] text-[var(--c-silver)] uppercase tracking-wider">TOKENS SAVED</span>
+        <span id="hud-tokens" class="text-sm font-black text-amber-400 mt-1">4,120 tok</span>
       </div>
-      <div class="p-2 rounded bg-[var(--background)] border border-[var(--border)] flex flex-col">
-        <span class="text-[9px] text-[var(--muted-foreground)]">COST AVOIDED</span>
-        <span id="hud-cost" class="text-xs font-black text-emerald-400">$0.0253</span>
+      <div class="neu-inset p-3 rounded-2xl flex flex-col">
+        <span class="text-[9px] text-[var(--c-silver)] uppercase tracking-wider">COST AVOIDED</span>
+        <span id="hud-cost" class="text-sm font-black text-emerald-400 mt-1">$0.0618</span>
       </div>
     </div>
 
-    <!-- Dynamic Reason & Terminal Output -->
-    <div class="bg-[var(--background)] border border-[var(--border)] rounded p-2 text-[10.5px] font-mono flex items-center justify-between text-[var(--muted-foreground)]">
-      <div class="truncate mr-2">
-        <span class="text-cyan-400 font-bold">INFO:</span>
-        <span id="hud-reason" class="text-[var(--foreground)]">Prefix trie match verified with Git SHA-256 mtime. Zero token invocation.</span>
+    <!-- Live Execution Reason & Inspector -->
+    <div class="neu-inset p-3 rounded-2xl flex flex-col gap-2 font-mono text-xs">
+      <div class="flex items-center justify-between border-b border-[var(--c-slate)]/20 pb-1.5">
+        <div class="flex items-center gap-2">
+          <span class="h-2 w-2 rounded-full bg-[#e95d2c]"></span>
+          <span class="text-[var(--c-silver)] font-bold text-[10px]">PAYLOAD & DECISION REASON:</span>
+        </div>
+        <span id="hud-speedup-badge" class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold text-[10px]">
+          99.9% FASTER
+        </span>
       </div>
-      <span id="hud-speedup" class="text-[10px] font-bold text-emerald-400 whitespace-nowrap bg-emerald-500/10 px-1.5 py-0.5 rounded">
-        99.9% FASTER
-      </span>
+      <div class="flex flex-col gap-1 text-[11px]">
+        <div class="flex gap-2">
+          <span class="text-[#e95d2c] font-bold shrink-0">Turn Prompt:</span>
+          <span id="hud-prompt-text" class="text-white truncate">read_file("server/gateway.py")</span>
+        </div>
+        <div class="flex gap-2">
+          <span class="text-cyan-400 font-bold shrink-0">Engine Trace:</span>
+          <span id="hud-reason-text" class="text-[var(--c-frost)]">Tool execution intercepted. File SHA-256 matched git index. Output replayed directly from SQLite WAL in 40µs.</span>
+        </div>
+      </div>
     </div>
 
-  </div>
+    <!-- Cumulative Session Scorecard -->
+    <div class="neu-card p-3 sm:p-4 rounded-2xl border border-[#253745] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+      <div class="flex items-center gap-4">
+        <div>
+          <span class="text-[10px] text-[var(--c-silver)] block">SESSION HIT RATE</span>
+          <span id="cum-hit-rate" class="text-sm font-black text-emerald-400">75% (3/4)</span>
+        </div>
+        <div class="h-7 w-[1px] bg-[var(--c-slate)]/40"></div>
+        <div>
+          <span class="text-[10px] text-[var(--c-silver)] block">TOTAL TIME SAVED</span>
+          <span id="cum-time-saved" class="text-sm font-black text-cyan-400">4,259 ms</span>
+        </div>
+        <div class="h-7 w-[1px] bg-[var(--c-slate)]/40"></div>
+        <div>
+          <span class="text-[10px] text-[var(--c-silver)] block">TOTAL COST SAVED</span>
+          <span id="cum-cost-saved" class="text-sm font-black text-emerald-400">$0.1854</span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 self-end sm:self-auto">
+        <a href="https://omnicache.rawwgrid.com/install.sh" target="_blank" class="neu-btn px-3 py-1.5 rounded-full font-bold text-xs text-[#e95d2c] border-[#e95d2c]/50 flex items-center gap-1.5">
+          <span>Get OmniCache</span>
+          <span>↓</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Quick Terminal Install Callout -->
+    <div class="neu-inset p-3 rounded-2xl flex items-center justify-between text-xs font-mono">
+      <div class="flex items-center gap-2 truncate text-[var(--c-silver)]">
+        <span class="text-[#e95d2c] font-bold">$</span>
+        <span class="text-white truncate">curl -fsSL https://omnicache.rawwgrid.com/install.sh | bash</span>
+      </div>
+      <button onclick="copyInstallCmd(this)" class="neu-btn px-3 py-1 rounded-full text-[10px] text-[var(--c-frost)] hover:text-white shrink-0 ml-2">
+        Copy
+      </button>
+    </div>
+
+  </main>
 
   <script>
-    const scenarios = [
+    // Real Agent Traces Data
+    const agentScenarios = [
       {
-        prompt: "Write a function to compute Fibonacci sequence in Rust",
-        stages: [1, 2, 4],
-        status: "HIT_RADIX",
-        latency: "0.06 ms",
-        tokens: "842 tok",
-        cost: "$0.0253",
-        reason: "Radix prefix trie matched. Replayed directly from SQLite WAL in 60 microseconds.",
-        speedup: "99.9% FASTER",
-        theme: "emerald"
+        id: "claude-code",
+        name: "Claude Code",
+        subtitle: "4-Turn Python Debugging & Test Replay",
+        turns: [
+          {
+            turnNum: 1,
+            label: "Inspect gateway.py",
+            prompt: "claude> read_file('server/gateway.py') & analyze CORS headers",
+            stages: [1, 2, 3, 5],
+            status: "CACHE_MISS",
+            latency: "1,420 ms",
+            latencyMs: 1420,
+            tokens: "0 tok",
+            tokensNum: 0,
+            cost: "$0.0000",
+            costNum: 0.0,
+            cloudCostNum: 0.0618,
+            reason: "Initial turn. Fresh prompt routed upstream to Anthropic Claude 3.7 Sonnet. Output cached to local WAL.",
+            speedup: "UPSTREAM TURN",
+            theme: "rose",
+            isHit: false
+          },
+          {
+            turnNum: 2,
+            label: "Re-read gateway.py",
+            prompt: "claude> read_file('server/gateway.py', start=250, end=300)",
+            stages: [1, 2, 4],
+            status: "HIT_TOOL_REPLAY",
+            latency: "0.04 ms",
+            latencyMs: 0.04,
+            tokens: "4,120 tok",
+            tokensNum: 4120,
+            cost: "$0.0618",
+            costNum: 0.0618,
+            cloudCostNum: 0.0618,
+            reason: "Tool call intercepted. Git tree SHA-256 verified unchanged. AST slice replayed from local WAL.",
+            speedup: "99.9% FASTER",
+            theme: "emerald",
+            isHit: true
+          },
+          {
+            turnNum: 3,
+            label: "Review System Rule",
+            prompt: "claude> verify against project guidelines in .cursorrules",
+            stages: [1, 2, 4],
+            status: "HIT_RADIX_L1",
+            latency: "0.06 ms",
+            latencyMs: 0.06,
+            tokens: "2,840 tok",
+            tokensNum: 2840,
+            cost: "$0.0426",
+            costNum: 0.0426,
+            cloudCostNum: 0.0426,
+            reason: "L1 Radix Trie exact match on normalized rule hash. Zero token API invocation.",
+            speedup: "99.9% FASTER",
+            theme: "emerald",
+            isHit: true
+          },
+          {
+            turnNum: 4,
+            label: "Run pytest suite",
+            prompt: "claude> pytest tests/test_gateway.py (re-evaluating pass condition)",
+            stages: [1, 2, 4],
+            status: "HIT_TOOL_REPLAY",
+            latency: "0.05 ms",
+            latencyMs: 0.05,
+            tokens: "5,400 tok",
+            tokensNum: 5400,
+            cost: "$0.0810",
+            costNum: 0.0810,
+            cloudCostNum: 0.0810,
+            reason: "Deterministic test run output cached. Workspace mtime unmutated. Zero cloud delay.",
+            speedup: "99.9% FASTER",
+            theme: "emerald",
+            isHit: true
+          }
+        ]
       },
       {
-        prompt: "DeepSeek-R1 CoT: Solve 3x + 15 = 45 step by step with proof",
-        stages: [1, 2, 3, 4],
-        status: "HIT_REASONER_COT",
-        latency: "0.09 ms",
-        tokens: "2,410 tok",
-        cost: "$0.0723",
-        reason: "Frontier reasoner CoT cache hit. Replayed full chain-of-thought with zero token burn.",
-        speedup: "99.8% FASTER",
-        theme: "purple"
+        id: "cursor-composer",
+        name: "Cursor Composer",
+        subtitle: "3-Turn Full-Stack React Refactor",
+        turns: [
+          {
+            turnNum: 1,
+            label: "Initial React Tree",
+            prompt: "cursor> refactor Button component to Tailwind dark monochrome neumorphism",
+            stages: [1, 2, 3, 5],
+            status: "CACHE_MISS",
+            latency: "1,850 ms",
+            latencyMs: 1850,
+            tokens: "0 tok",
+            tokensNum: 0,
+            cost: "$0.0000",
+            costNum: 0.0,
+            cloudCostNum: 0.0960,
+            reason: "Fresh multi-file composer prompt. Dispatched to OpenAI GPT-4o and indexed into L2 HNSW vector index.",
+            speedup: "UPSTREAM TURN",
+            theme: "rose",
+            isHit: false
+          },
+          {
+            turnNum: 2,
+            label: "Tweak Hover Classes",
+            prompt: "cursor> adjust Button hover shadow to 4px 4px 12px with burnt orange border",
+            stages: [1, 2, 3, 4],
+            status: "HIT_SEMANTIC_L2",
+            latency: "1.40 ms",
+            latencyMs: 1.4,
+            tokens: "6,100 tok",
+            tokensNum: 6100,
+            cost: "$0.0915",
+            costNum: 0.0915,
+            cloudCostNum: 0.0915,
+            reason: "97.4% Cosine similarity against cached component vector. Quantized HNSW served sub-2ms hit.",
+            speedup: "99.9% FASTER",
+            theme: "cyan",
+            isHit: true
+          },
+          {
+            turnNum: 3,
+            label: "Re-export Component",
+            prompt: "cursor> update index.ts to export new NeumorphicButton",
+            stages: [1, 2, 4],
+            status: "HIT_RADIX_L1",
+            latency: "0.06 ms",
+            latencyMs: 0.06,
+            tokens: "1,950 tok",
+            tokensNum: 1950,
+            cost: "$0.0292",
+            costNum: 0.0292,
+            cloudCostNum: 0.0292,
+            reason: "Exact lexical prefix hit on package export signature.",
+            speedup: "99.9% FASTER",
+            theme: "emerald",
+            isHit: true
+          }
+        ]
       },
       {
-        prompt: "Show me a rust fibonacci sequence code generator",
-        stages: [1, 2, 3, 4],
-        status: "HIT_SEMANTIC_FUZZY",
-        latency: "0.14 ms",
-        tokens: "790 tok",
-        cost: "$0.0237",
-        reason: "Subword lexical projection matched with 96.2% similarity against cached trie vector.",
-        speedup: "99.7% FASTER",
-        theme: "cyan"
+        id: "agent-swarm",
+        name: "Agent Swarm",
+        subtitle: "3-Worker Subagent Delegation Bus",
+        turns: [
+          {
+            turnNum: 1,
+            label: "Lead: Decompose Plan",
+            prompt: "swarm/lead> decompose audit findings for security, latency & caching into subtasks",
+            stages: [1, 2, 3, 5],
+            status: "CACHE_MISS",
+            latency: "1,210 ms",
+            latencyMs: 1210,
+            tokens: "0 tok",
+            tokensNum: 0,
+            cost: "$0.0000",
+            costNum: 0.0,
+            cloudCostNum: 0.0720,
+            reason: "Master swarm intent broadcast. Topology tree registered on /v1/swarm/delegate.",
+            speedup: "UPSTREAM TURN",
+            theme: "rose",
+            isHit: false
+          },
+          {
+            turnNum: 2,
+            label: "Worker 1: Query Context",
+            prompt: "swarm/worker-1> fetch security guidelines & CORS specs (X-OmniCache-Swarm-ID: swarm-alpha)",
+            stages: [1, 2, 4],
+            status: "HIT_SWARM_BUS",
+            latency: "0.08 ms",
+            latencyMs: 0.08,
+            tokens: "4,800 tok",
+            tokensNum: 4800,
+            cost: "$0.0720",
+            costNum: 0.0720,
+            cloudCostNum: 0.0720,
+            reason: "Cross-agent shared memory hit. Worker-1 re-used Lead's context tree with zero duplicate tokens.",
+            speedup: "99.9% FASTER",
+            theme: "emerald",
+            isHit: true
+          },
+          {
+            turnNum: 3,
+            label: "Worker 2: Validate Schema",
+            prompt: "swarm/worker-2> cross-check CORS headers against security guidelines",
+            stages: [1, 2, 4],
+            status: "HIT_SWARM_BUS",
+            latency: "0.07 ms",
+            latencyMs: 0.07,
+            tokens: "4,800 tok",
+            tokensNum: 4800,
+            cost: "$0.0720",
+            costNum: 0.0720,
+            cloudCostNum: 0.0720,
+            reason: "Swarm bus replication hit. Concurrent subagent avoided 100% cloud roundtrip.",
+            speedup: "99.9% FASTER",
+            theme: "emerald",
+            isHit: true
+          }
+        ]
       },
       {
-        prompt: "Generate an esoteric esoteric quantum gravity conjecture in Swahili",
-        stages: [1, 2, 3, 5],
-        status: "CACHE_MISS",
-        latency: "1,820 ms",
-        tokens: "0 tok",
-        cost: "$0.0000",
-        reason: "Zero lexical match. Transparently routed to upstream Anthropic cloud API & written to WAL.",
-        speedup: "UPSTREAM TURN",
-        theme: "rose"
+        id: "voice-agent",
+        name: "Voice Agent",
+        subtitle: "Filler Strip & Fast-Path Intent",
+        turns: [
+          {
+            turnNum: 1,
+            label: "Spoken Query with Fillers",
+            prompt: "voice> 'Umm, hey there... yeah, could you tell me my current account balance?'",
+            stages: [1, 2, 4],
+            status: "HIT_VOICE_FASTPATH",
+            latency: "12.0 ms",
+            latencyMs: 12.0,
+            tokens: "640 tok",
+            tokensNum: 640,
+            cost: "$0.0192",
+            costNum: 0.0192,
+            cloudCostNum: 0.0192,
+            reason: "Fillers ('umm', 'yeah') stripped by telephony canonicalizer. Fast-path intent matched in 12ms vs 950ms cloud voice latency.",
+            speedup: "98.7% FASTER",
+            theme: "emerald",
+            isHit: true
+          },
+          {
+            turnNum: 2,
+            label: "Follow-up Query",
+            prompt: "voice> 'And uh... what was my last transaction again?'",
+            stages: [1, 2, 4],
+            status: "HIT_VOICE_FASTPATH",
+            latency: "14.2 ms",
+            latencyMs: 14.2,
+            tokens: "720 tok",
+            tokensNum: 720,
+            cost: "$0.0216",
+            costNum: 0.0216,
+            cloudCostNum: 0.0216,
+            reason: "Speech filler pruned. Normalized canonical utterance matched in conversational turn cache.",
+            speedup: "98.5% FASTER",
+            theme: "emerald",
+            isHit: true
+          }
+        ]
       }
     ];
 
-    let isRunning = false;
+    let currentScenarioIdx = 0;
+    let currentTurnIdx = 0;
+    let isPlaying = false;
+    let autoPlayTimer = null;
+    let isAnimating = false;
 
-    function setScenario(idx) {
-      if (isRunning) return;
-      const s = scenarios[idx];
-      document.getElementById('prompt-input').value = s.prompt;
-      runPipelineSimulation(s);
+    function init() {
+      loadScenario(0);
+    }
+
+    function switchMode(mode) {
+      if (mode === 'traces') {
+        document.getElementById('trace-selector-bar').classList.remove('hidden');
+        document.getElementById('timeline-container').classList.remove('hidden');
+        document.getElementById('custom-prompt-container').classList.add('hidden');
+        document.getElementById('tab-traces').className = 'px-3 py-1 rounded-full bg-[#253745] text-white shadow-sm transition-all';
+        document.getElementById('tab-single').className = 'px-3 py-1 rounded-full text-[var(--c-silver)] hover:text-white transition-all';
+      } else {
+        document.getElementById('trace-selector-bar').classList.add('hidden');
+        document.getElementById('timeline-container').classList.add('hidden');
+        document.getElementById('custom-prompt-container').classList.remove('hidden');
+        document.getElementById('tab-traces').className = 'px-3 py-1 rounded-full text-[var(--c-silver)] hover:text-white transition-all';
+        document.getElementById('tab-single').className = 'px-3 py-1 rounded-full bg-[#253745] text-white shadow-sm transition-all';
+        stopAutoPlay();
+      }
+    }
+
+    function loadScenario(idx) {
+      stopAutoPlay();
+      currentScenarioIdx = idx;
+      currentTurnIdx = 0;
+
+      // Update scenario buttons
+      for (let i = 0; i < 4; i++) {
+        const btn = document.getElementById(`btn-scen-${i}`);
+        if (btn) {
+          if (i === idx) {
+            btn.className = "neu-btn neu-btn-active px-3 py-2 rounded-xl text-left flex flex-col gap-0.5";
+          } else {
+            btn.className = "neu-btn px-3 py-2 rounded-xl text-left flex flex-col gap-0.5";
+          }
+        }
+      }
+
+      renderTimeline();
+      renderTurn(0);
+    }
+
+    function renderTimeline() {
+      const scen = agentScenarios[currentScenarioIdx];
+      const container = document.getElementById('turns-timeline');
+      container.innerHTML = '';
+
+      scen.turns.forEach((t, i) => {
+        const pill = document.createElement('button');
+        pill.id = `turn-pill-${i}`;
+        pill.onclick = () => {
+          stopAutoPlay();
+          renderTurn(i);
+        };
+        const hitBadge = t.isHit ? '⚡' : '☁';
+        pill.className = `px-2.5 py-1 rounded-full text-xs font-mono transition-all shrink-0 flex items-center gap-1.5 ${
+          i === currentTurnIdx ? 'neu-btn neu-btn-active text-white' : 'neu-btn text-[var(--c-silver)] hover:text-white'
+        }`;
+        pill.innerHTML = `<span>${hitBadge}</span> <span>Turn ${t.turnNum}: ${t.label}</span>`;
+        container.appendChild(pill);
+      });
     }
 
     function resetStages() {
       for (let i = 1; i <= 5; i++) {
-        const el = document.getElementById(`st-${i}`);
-        el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]';
+        const el = document.getElementById(`stage-${i}`);
+        el.className = 'stage-pill neu-inset flex flex-col items-center justify-center p-2 rounded-xl text-[var(--c-silver)]';
       }
     }
 
-    async function runPipelineSimulation(customScenario = null) {
-      if (isRunning) return;
-      isRunning = true;
+    async function renderTurn(turnIdx) {
+      if (isAnimating) return;
+      isAnimating = true;
+      currentTurnIdx = turnIdx;
+
+      const scen = agentScenarios[currentScenarioIdx];
+      const turn = scen.turns[turnIdx];
+
+      // Update progress indicator
+      document.getElementById('session-progress').textContent = `Turn ${turnIdx + 1} of ${scen.turns.length}`;
+
+      // Update timeline active state
+      scen.turns.forEach((_, i) => {
+        const pill = document.getElementById(`turn-pill-${i}`);
+        if (pill) {
+          pill.className = `px-2.5 py-1 rounded-full text-xs font-mono transition-all shrink-0 flex items-center gap-1.5 ${
+            i === turnIdx ? 'neu-btn neu-btn-active text-white' : 'neu-btn text-[var(--c-silver)] hover:text-white'
+          }`;
+        }
+      });
+
+      // Animate stages
+      resetStages();
+      const statusText = document.getElementById('pipeline-status-text');
+      statusText.textContent = "INTERCEPTING TURN...";
+      statusText.className = "text-cyan-400 font-bold";
+
+      for (let i = 0; i < turn.stages.length; i++) {
+        const st = turn.stages[i];
+        const el = document.getElementById(`stage-${st}`);
+        if (st === 5) {
+          el.className = 'stage-pill flex flex-col items-center justify-center p-2 rounded-xl border border-rose-500 bg-rose-500/20 text-rose-300 font-bold shadow-sm';
+        } else if (st === 4) {
+          el.className = 'stage-pill flex flex-col items-center justify-center p-2 rounded-xl border border-emerald-500 bg-emerald-500/20 text-emerald-300 font-bold shadow-sm';
+        } else {
+          el.className = 'stage-pill flex flex-col items-center justify-center p-2 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-bold shadow-sm';
+        }
+        await new Promise(r => setTimeout(r, 140));
+      }
+
+      // Update HUD elements
+      document.getElementById('hud-decision').textContent = turn.status;
+      document.getElementById('hud-decision').className = `text-sm font-black mt-1 ${
+        turn.theme === 'rose' ? 'text-rose-400' : turn.theme === 'cyan' ? 'text-cyan-400' : 'text-emerald-400'
+      }`;
+      document.getElementById('hud-latency').textContent = turn.latency;
+      document.getElementById('hud-tokens').textContent = turn.tokens;
+      document.getElementById('hud-cost').textContent = turn.cost;
+      document.getElementById('hud-prompt-text').textContent = turn.prompt;
+      document.getElementById('hud-reason-text').textContent = turn.reason;
+
+      const badge = document.getElementById('hud-speedup-badge');
+      badge.textContent = turn.speedup;
+      badge.className = `px-2 py-0.5 rounded-full font-bold text-[10px] ${
+        turn.theme === 'rose' ? 'bg-rose-500/10 border border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+      }`;
+
+      statusText.textContent = turn.isHit ? "STATUS: 0ms CACHE REPLAYED" : "STATUS: UPSTREAM CLOUD TURN";
+      statusText.className = turn.isHit ? "text-emerald-400 font-bold" : "text-rose-400 font-bold";
+
+      // Update Cumulative metrics for current scenario up to current turn
+      updateCumulativeMetrics();
+
+      isAnimating = false;
+    }
+
+    function updateCumulativeMetrics() {
+      const scen = agentScenarios[currentScenarioIdx];
+      const activeTurns = scen.turns.slice(0, currentTurnIdx + 1);
+
+      const hits = activeTurns.filter(t => t.isHit).length;
+      const totalTurns = activeTurns.length;
+      const hitPct = Math.round((hits / totalTurns) * 100);
+
+      let totalLatencySaved = 0;
+      let totalCostSaved = 0;
+
+      activeTurns.forEach(t => {
+        if (t.isHit) {
+          totalLatencySaved += Math.max(0, 1420 - t.latencyMs);
+          totalCostSaved += t.costNum;
+        }
+      });
+
+      document.getElementById('cum-hit-rate').textContent = `${hitPct}% (${hits}/${totalTurns})`;
+      document.getElementById('cum-time-saved').textContent = `${Math.round(totalLatencySaved).toLocaleString()} ms`;
+      document.getElementById('cum-cost-saved').textContent = `$${totalCostSaved.toFixed(4)}`;
+    }
+
+    function nextTurn() {
+      const scen = agentScenarios[currentScenarioIdx];
+      const nextIdx = (currentTurnIdx + 1) % scen.turns.length;
+      renderTurn(nextIdx);
+    }
+
+    function resetTrace() {
+      stopAutoPlay();
+      renderTurn(0);
+    }
+
+    function toggleAutoPlay() {
+      if (isPlaying) {
+        stopAutoPlay();
+      } else {
+        startAutoPlay();
+      }
+    }
+
+    function startAutoPlay() {
+      isPlaying = true;
+      document.getElementById('play-icon').textContent = '⏸';
+      document.getElementById('play-label').textContent = 'Pause Trace';
+
+      autoPlayTimer = setInterval(() => {
+        const scen = agentScenarios[currentScenarioIdx];
+        if (currentTurnIdx >= scen.turns.length - 1) {
+          renderTurn(0);
+        } else {
+          nextTurn();
+        }
+      }, 1600);
+    }
+
+    function stopAutoPlay() {
+      isPlaying = false;
+      if (autoPlayTimer) clearInterval(autoPlayTimer);
+      const icon = document.getElementById('play-icon');
+      const label = document.getElementById('play-label');
+      if (icon) icon.textContent = '▶';
+      if (label) label.textContent = 'Auto-Play Trace';
+    }
+
+    function runCustomQuery() {
+      const input = document.getElementById('custom-input').value.trim();
+      if (!input) return;
+
+      const isExactMatch = input.toLowerCase().includes('rust') || input.toLowerCase().includes('fibonacci');
+      const customTurn = {
+        turnNum: 1,
+        label: "Custom Query",
+        prompt: input,
+        stages: isExactMatch ? [1, 2, 4] : [1, 2, 3, 5],
+        status: isExactMatch ? "HIT_RADIX_L1" : "CACHE_MISS",
+        latency: isExactMatch ? "0.06 ms" : "1,650 ms",
+        latencyMs: isExactMatch ? 0.06 : 1650,
+        tokens: isExactMatch ? "842 tok" : "0 tok",
+        cost: isExactMatch ? "$0.0253" : "$0.0000",
+        costNum: isExactMatch ? 0.0253 : 0.0,
+        reason: isExactMatch 
+          ? "Exact prefix trie match. Replayed directly from local SQLite WAL in 60 microseconds." 
+          : "Zero lexical match in local cache. Dispatched to cloud API and registered into L1 Radix tree.",
+        speedup: isExactMatch ? "99.9% FASTER" : "UPSTREAM TURN",
+        theme: isExactMatch ? "emerald" : "rose",
+        isHit: isExactMatch
+      };
+
+      // Animate stages for custom turn
+      renderCustomTurn(customTurn);
+    }
+
+    async function renderCustomTurn(turn) {
+      if (isAnimating) return;
+      isAnimating = true;
       resetStages();
 
-      const btn = document.getElementById('run-btn');
-      const statusEl = document.getElementById('pipeline-status');
-      btn.disabled = true;
-      btn.classList.add('opacity-50');
-      statusEl.textContent = 'STATUS: INTERCEPTING...';
-      statusEl.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-400';
+      const statusText = document.getElementById('pipeline-status-text');
+      statusText.textContent = "INTERCEPTING CUSTOM QUERY...";
+      statusText.className = "text-cyan-400 font-bold";
 
-      const s = customScenario || scenarios[Math.floor(Math.random() * 3)];
-
-      for (let i = 0; i < s.stages.length; i++) {
-        const stNum = s.stages[i];
-        const el = document.getElementById(`st-${stNum}`);
-        
-        // Active pulse highlight
-        if (stNum === 5) {
-          el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-rose-500 bg-rose-500/20 text-rose-300 font-bold shadow-sm';
-        } else if (stNum === 4) {
-          el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-emerald-500 bg-emerald-500/20 text-emerald-300 font-bold shadow-sm';
+      for (let i = 0; i < turn.stages.length; i++) {
+        const st = turn.stages[i];
+        const el = document.getElementById(`stage-${st}`);
+        if (st === 5) {
+          el.className = 'stage-pill flex flex-col items-center justify-center p-2 rounded-xl border border-rose-500 bg-rose-500/20 text-rose-300 font-bold shadow-sm';
+        } else if (st === 4) {
+          el.className = 'stage-pill flex flex-col items-center justify-center p-2 rounded-xl border border-emerald-500 bg-emerald-500/20 text-emerald-300 font-bold shadow-sm';
         } else {
-          el.className = 'stage-transition flex flex-col items-center justify-center p-1.5 rounded border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-bold shadow-sm';
+          el.className = 'stage-pill flex flex-col items-center justify-center p-2 rounded-xl border border-cyan-500 bg-cyan-500/20 text-cyan-300 font-bold shadow-sm';
         }
-
-        await new Promise(r => setTimeout(r, 180));
+        await new Promise(r => setTimeout(r, 140));
       }
 
-      // Update HUD
-      document.getElementById('hud-decision').textContent = s.status;
-      document.getElementById('hud-decision').className = `text-xs font-black ${s.theme === 'rose' ? 'text-rose-400' : s.theme === 'purple' ? 'text-purple-400' : 'text-emerald-400'}`;
-      document.getElementById('hud-latency').textContent = s.latency;
-      document.getElementById('hud-tokens').textContent = s.tokens;
-      document.getElementById('hud-cost').textContent = s.cost;
-      document.getElementById('hud-reason').textContent = s.reason;
-      document.getElementById('hud-speedup').textContent = s.speedup;
-      document.getElementById('hud-speedup').className = `text-[10px] font-bold whitespace-nowrap px-1.5 py-0.5 rounded ${s.theme === 'rose' ? 'text-rose-400 bg-rose-500/10' : 'text-emerald-400 bg-emerald-500/10'}`;
+      document.getElementById('hud-decision').textContent = turn.status;
+      document.getElementById('hud-decision').className = `text-sm font-black mt-1 ${
+        turn.theme === 'rose' ? 'text-rose-400' : 'text-emerald-400'
+      }`;
+      document.getElementById('hud-latency').textContent = turn.latency;
+      document.getElementById('hud-tokens').textContent = turn.tokens;
+      document.getElementById('hud-cost').textContent = turn.cost;
+      document.getElementById('hud-prompt-text').textContent = turn.prompt;
+      document.getElementById('hud-reason-text').textContent = turn.reason;
 
-      statusEl.textContent = s.theme === 'rose' ? 'STATUS: UPSTREAM FALLBACK' : 'STATUS: CACHE REPLAYED';
-      statusEl.className = s.theme === 'rose' ? 'text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-rose-500/30 bg-rose-500/10 text-rose-400' : 'text-[10px] font-mono font-bold px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400';
+      const badge = document.getElementById('hud-speedup-badge');
+      badge.textContent = turn.speedup;
+      badge.className = `px-2 py-0.5 rounded-full font-bold text-[10px] ${
+        turn.theme === 'rose' ? 'bg-rose-500/10 border border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+      }`;
 
-      btn.disabled = false;
-      btn.classList.remove('opacity-50');
-      isRunning = false;
+      statusText.textContent = turn.isHit ? "STATUS: 0ms CACHE REPLAYED" : "STATUS: UPSTREAM CLOUD TURN";
+      statusText.className = turn.isHit ? "text-emerald-400 font-bold" : "text-rose-400 font-bold";
+
+      isAnimating = false;
     }
 
-    // Auto-run scenario 0 on initial load
-    window.addEventListener('load', () => {
-      setTimeout(() => setScenario(0), 100);
-    });
+    function copyInstallCmd(btn) {
+      navigator.clipboard.writeText("curl -fsSL https://omnicache.rawwgrid.com/install.sh | bash");
+      const orig = btn.textContent;
+      btn.textContent = "Copied! ✓";
+      btn.classList.add("text-[#e95d2c]");
+      setTimeout(() => {
+        btn.textContent = orig;
+        btn.classList.remove("text-[#e95d2c]");
+      }, 1800);
+    }
+
+    // Auto-init on load
+    window.addEventListener('load', init);
   </script>
 </body>
 </html>

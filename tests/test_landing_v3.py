@@ -87,6 +87,11 @@ def test_simulator_html_served_and_styled():
     assert "Plus Jakarta Sans" in resp.text
     assert 'href="/landing"' in resp.text
     assert "Pipeline Replay Sandbox" in resp.text
+    assert "Claude Code" in resp.text
+    assert "Cursor Composer" in resp.text
+    assert "Agent Swarm" in resp.text
+    assert "Voice Agent" in resp.text
+    assert "HIT_TOOL_REPLAY" in resp.text
 
 def test_omnicache_rawwgrid_com_host_serves_new_landing_page():
     # Website visitors to omnicache.rawwgrid.com receive the new landing page

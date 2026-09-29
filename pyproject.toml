@@ -58,6 +58,7 @@ dev = [
 
 [project.urls]
 "Homepage" = "https://github.com/13manmayarai-hash/omnicache-proxy"
+"Website" = "https://omnicache.rawwgrid.com"
 "Documentation" = "https://github.com/13manmayarai-hash/omnicache-proxy#readme"
 "Repository" = "https://github.com/13manmayarai-hash/omnicache-proxy.git"
 "Issues" = "https://github.com/13manmayarai-hash/omnicache-proxy/issues"

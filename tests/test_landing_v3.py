@@ -121,3 +121,24 @@ def test_new_landing_page_footer_and_domain_metadata():
     assert "omnicache.rawwgrid.com" in resp.text
     assert 'content="https://omnicache.rawwgrid.com/"' in resp.text
 
+def test_install_script_served_at_install_routes():
+    for p in ("/install.sh", "/install"):
+        resp = client.get(p)
+        assert resp.status_code == 200, f"Failed for {p}"
+        assert "text/plain" in resp.headers["content-type"]
+        assert "OmniCache Official One-Line Installer" in resp.text
+        assert "pip install" in resp.text
+        assert "omnicache run claude" in resp.text
+
+def test_security_and_immutable_cache_headers():
+    resp = client.get("/")
+    assert resp.headers.get("x-content-type-options") == "nosniff"
+    assert resp.headers.get("x-frame-options") == "SAMEORIGIN"
+    assert resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+
+    resp_img = client.get("/img/hero-1000.webp")
+    assert resp_img.status_code == 200
+    assert "immutable" in resp_img.headers.get("cache-control", "")
+    assert "max-age=31536000" in resp_img.headers.get("cache-control", "")
+
+

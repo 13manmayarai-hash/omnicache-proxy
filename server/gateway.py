@@ -264,7 +264,10 @@ def get_cors_headers(request: Request) -> Dict[str, str]:
         "Access-Control-Allow-Origin": allow_origin,
         "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
         "Access-Control-Allow-Headers": "Authorization, Content-Type, x-api-key, x-admin-key, x-org-id, x-cache-bypass, x-omnicache-model-cascade, x-allow-cascade, x-omnicache-swarm-id, x-omnicache-agent-id, x-omnicache-parent-agent, x-omnicache-subagent-id, x-omnicache-mesh-node, x-omnicache-mesh-clock, x-cache-ttl, x-cache-threshold, x-cache-tag, anthropic-version, anthropic-beta",
-        "Access-Control-Expose-Headers": "X-Cache-Status, X-Cache-Decision-Reason, X-Cache-Similarity, X-Cache-Latency-Ms, X-Cache-TTL-Remaining, X-Cost-Avoided-USD, X-Cost-Saved-USD, X-Tokens-Used, X-Tokens-Saved, X-Tokens-Accounting, X-Requested-Model, X-Served-Model, X-Cascade-Applied, X-Cascade-Reason, X-OmniCache-Swarm-Hit, X-OmniCache-Origin-Agent, X-OmniCache-Swarm-ID, X-OmniCache-Mesh-Node, X-OmniCache-Mesh-Clock"
+        "Access-Control-Expose-Headers": "X-Cache-Status, X-Cache-Decision-Reason, X-Cache-Similarity, X-Cache-Latency-Ms, X-Cache-TTL-Remaining, X-Cost-Avoided-USD, X-Cost-Saved-USD, X-Tokens-Used, X-Tokens-Saved, X-Tokens-Accounting, X-Requested-Model, X-Served-Model, X-Cascade-Applied, X-Cascade-Reason, X-OmniCache-Swarm-Hit, X-OmniCache-Origin-Agent, X-OmniCache-Swarm-ID, X-OmniCache-Mesh-Node, X-OmniCache-Mesh-Clock",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
     }
 
 
@@ -4094,7 +4097,7 @@ async def handle_img(request: Request) -> Response:
         
     with open(target, "rb") as f:
         content = f.read()
-    cors_headers["cache-control"] = "public, max-age=86400"
+    cors_headers["cache-control"] = "public, max-age=31536000, immutable"
     return Response(content, media_type=media_type, headers=cors_headers)
 
 
@@ -4107,7 +4110,7 @@ async def handle_og_image(request: Request) -> Response:
     if os.path.exists(og_path):
         with open(og_path, "rb") as f:
             content = f.read()
-        cors_headers["cache-control"] = "public, max-age=86400"
+        cors_headers["cache-control"] = "public, max-age=31536000, immutable"
         return Response(content, media_type="image/png", headers=cors_headers)
     return Response(b"Not Found", status_code=404, headers=cors_headers)
 
@@ -4136,6 +4139,22 @@ async def handle_simulator(request: Request) -> Response:
             html = f.read()
         return HTMLResponse(html, headers=cors_headers)
     return HTMLResponse("<h1>OmniCache Simulator Not Found</h1>", status_code=404, headers=cors_headers)
+
+
+async def handle_install_sh(request: Request) -> Response:
+    """Serves the official one-line install.sh POSIX installer script."""
+    cors_headers = get_cors_headers(request)
+    if request.method == "OPTIONS":
+        return Response(headers=cors_headers)
+    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "install.sh"))
+    if os.path.exists(script_path):
+        with open(script_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        headers = dict(cors_headers)
+        headers["content-type"] = "text/plain; charset=utf-8"
+        headers["cache-control"] = "public, max-age=3600"
+        return Response(content, media_type="text/plain", headers=headers)
+    return Response(b"#!/bin/sh\necho 'Installer script not found' >&2\nexit 1\n", status_code=404, headers=cors_headers)
 
 
 async def handle_assets(request: Request) -> Response:
@@ -5569,6 +5588,8 @@ routes = [
     Route("/img/{file_path:path}", handle_img, methods=["GET", "OPTIONS"]),
     Route("/dashboard", handle_dashboard, methods=["GET"]),
     Route("/simulator", handle_simulator, methods=["GET", "OPTIONS"]),
+    Route("/install.sh", handle_install_sh, methods=["GET", "OPTIONS"]),
+    Route("/install", handle_install_sh, methods=["GET", "OPTIONS"]),
     Route("/ws", handle_ws_http, methods=["GET", "POST", "OPTIONS"]),
     WebSocketRoute("/ws", handle_ws),
     Route("/assets/{file_path:path}", handle_assets, methods=["GET", "OPTIONS"]),

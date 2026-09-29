@@ -4146,15 +4146,53 @@ async def handle_install_sh(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
     if request.method == "OPTIONS":
         return Response(headers=cors_headers)
-    script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "install.sh"))
-    if os.path.exists(script_path):
-        with open(script_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        headers = dict(cors_headers)
-        headers["content-type"] = "text/plain; charset=utf-8"
-        headers["cache-control"] = "public, max-age=3600"
-        return Response(content, media_type="text/plain", headers=headers)
-    return Response(b"#!/bin/sh\necho 'Installer script not found' >&2\nexit 1\n", status_code=404, headers=cors_headers)
+    
+    candidates = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dashboard", "install.sh")),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "install.sh")),
+        os.path.abspath("/opt/render/project/src/dashboard/install.sh"),
+        os.path.abspath("/opt/render/project/src/scripts/install.sh"),
+    ]
+    content = ""
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if content:
+                    break
+            except Exception:
+                continue
+
+    if not content:
+        content = (
+            "#!/usr/bin/env bash\n"
+            "# OmniCache Official Installer (v3.1.0)\n"
+            "set -e\n"
+            "echo '🚀 Installing OmniCache (v3.1.0)...'\n"
+            "PYTHON_BIN=\"\"\n"
+            "for cmd in python3 python; do\n"
+            "  if command -v \"$cmd\" >/dev/null 2>&1; then\n"
+            "    PYTHON_BIN=\"$cmd\"\n"
+            "    break\n"
+            "  fi\n"
+            "done\n"
+            "if [ -z \"$PYTHON_BIN\" ]; then\n"
+            "  echo '❌ Error: Python 3.9+ is required.' >&2\n"
+            "  exit 1\n"
+            "fi\n"
+            "\"$PYTHON_BIN\" -m pip install --upgrade --user omnicache-proxy || \\\n"
+            "\"$PYTHON_BIN\" -m pip install --upgrade --user --break-system-packages omnicache-proxy || \\\n"
+            "\"$PYTHON_BIN\" -m pip install --upgrade omnicache-proxy\n"
+            "echo '✅ OmniCache installed successfully!'\n"
+            "echo '   Run with Claude: omnicache run claude'\n"
+            "echo '   Live Dashboard:  http://localhost:8000/dashboard'\n"
+        )
+
+    headers = dict(cors_headers)
+    headers["content-type"] = "text/plain; charset=utf-8"
+    headers["cache-control"] = "public, max-age=3600"
+    return Response(content, media_type="text/plain", headers=headers)
 
 
 async def handle_assets(request: Request) -> Response:

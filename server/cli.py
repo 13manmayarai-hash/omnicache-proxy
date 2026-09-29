@@ -643,6 +643,62 @@ def run_wrapper(cmd_args: list, host: str = "127.0.0.1", port: int = 8000):
 
     sys.exit(exit_code)
 
+def detect_installed_agents() -> Dict[str, Dict[str, Any]]:
+    """Detects available AI coding agents and editors in the local environment."""
+    import shutil
+    status = {}
+
+    # 1. Claude Code CLI
+    claude_bin = shutil.which("claude") or shutil.which("claude-code")
+    claude_cfg = os.path.exists(os.path.expanduser("~/.claude.json")) or os.path.exists(os.path.expanduser("~/.claude"))
+    status["claude"] = {
+        "name": "Claude Code",
+        "detected": bool(claude_bin or claude_cfg),
+        "detail": f"Binary at {claude_bin}" if claude_bin else ("Config directory found" if claude_cfg else "CLI not found in PATH")
+    }
+
+    # 2. Cursor IDE
+    cursor_bin = shutil.which("cursor")
+    cursor_dirs = [
+        os.path.expanduser("~/.cursor"),
+        os.path.join(os.getcwd(), ".cursor"),
+        os.path.expanduser("~/.config/Cursor"),
+        os.path.expanduser("~/Library/Application Support/Cursor")
+    ]
+    cursor_cfg = any(os.path.exists(p) for p in cursor_dirs)
+    status["cursor"] = {
+        "name": "Cursor IDE",
+        "detected": bool(cursor_bin or cursor_cfg),
+        "detail": f"Binary at {cursor_bin}" if cursor_bin else ("Cursor config/workspace found" if cursor_cfg else "IDE not found in PATH")
+    }
+
+    # 3. Cline Extension
+    cline_paths = [
+        os.path.expanduser("~/.config/Code/User/globalStorage/saoudrizwan.claude-dev"),
+        os.path.expanduser("~/.config/Cursor/User/globalStorage/saoudrizwan.claude-dev"),
+        os.path.join(os.getcwd(), ".vscode", "cline_mcp_settings.json")
+    ]
+    cline_cfg = any(os.path.exists(p) for p in cline_paths)
+    status["cline"] = {
+        "name": "Cline Extension",
+        "detected": bool(cline_cfg),
+        "detail": "Extension storage found" if cline_cfg else "Ready for drop-in setup"
+    }
+
+    # 4. OpenHands
+    oh_paths = [
+        os.path.join(os.getcwd(), "config.toml"),
+        os.path.expanduser("~/.openhands")
+    ]
+    oh_cfg = any(os.path.exists(p) for p in oh_paths)
+    status["openhands"] = {
+        "name": "OpenHands",
+        "detected": bool(oh_cfg),
+        "detail": "Workspace config found" if oh_cfg else "Ready for drop-in setup"
+    }
+
+    return status
+
 def run_init(agent: str = "all", show_only: bool = False):
     """
     Automated drop-in setup and profile generator for AI coding agents:
@@ -720,12 +776,14 @@ def run_init(agent: str = "all", show_only: bool = False):
         if clean_agent in ("all", "claude"):
             print("\033[1;33m--- Claude Code (~/.claude.json / ~/.claude/settings.json) ---\033[0m")
             print(json.dumps(claude_mcp, indent=2))
+            print("Claude Settings Env: " + json.dumps({"env": {"ANTHROPIC_BASE_URL": f"http://127.0.0.1:{port}"}}))
             print(f'CLI Environment: export ANTHROPIC_BASE_URL="http://127.0.0.1:{port}"\n')
 
         if clean_agent in ("all", "cursor"):
-            print("\033[1;33m--- Cursor IDE (.cursor/mcp.json) ---\033[0m")
+            print("\033[1;33m--- Cursor IDE (.cursor/mcp.json / .cursorrules / settings.json) ---\033[0m")
             print(json.dumps(cursor_mcp, indent=2))
-            print(f'Cursor AI Settings -> OpenAI Base URL: http://127.0.0.1:{port}/v1\n')
+            print(f'Cursor AI Settings -> OpenAI Base URL: http://127.0.0.1:{port}/v1')
+            print(f'.cursorrules preset:\n  OPENAI_BASE_URL="http://127.0.0.1:{port}/v1"\n  ANTHROPIC_BASE_URL="http://127.0.0.1:{port}"\n')
 
         if clean_agent in ("all", "cline"):
             print("\033[1;33m--- Cline (cline_mcp_settings.json) ---\033[0m")
@@ -830,6 +888,13 @@ def run_init(agent: str = "all", show_only: bool = False):
     print("│ ⚙️  OmniCache Drop-In Agent Auto-Configuration     │")
     print("╰───────────────────────────────────────────────────╯\033[0m\n")
 
+    detected = detect_installed_agents()
+    print("\033[1;37m🔍 Environment Discovery:\033[0m")
+    for k, info in detected.items():
+        icon = "\033[1;32m✔ Detected\033[0m" if info["detected"] else "\033[1;30m○ Ready\033[0m"
+        print(f"  • {info['name']:<18} [{icon}] ({info['detail']})")
+    print()
+
     configured_items = []
 
     # 1. Claude Code
@@ -855,13 +920,17 @@ def run_init(agent: str = "all", show_only: bool = False):
                     "args": ["-m", "mcp.server"],
                     "env": {"OMNICACHE_PORT": str(port)}
                 }
+                if cp.endswith("settings.json"):
+                    if "env" not in data or not isinstance(data["env"], dict):
+                        data["env"] = {}
+                    data["env"]["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{port}"
                 with open(cp, "w", encoding="utf-8") as f:
                     json.dump(data, f, indent=2)
                 configured_items.append(f"Claude Code Config:     {cp}")
             except Exception:
                 pass
 
-    # 2. Cursor MCP
+    # 2. Cursor MCP, Settings & Rules
     if clean_agent in ("all", "cursor"):
         cursor_paths = [
             os.path.expanduser("~/.cursor/mcp.json"),
@@ -889,6 +958,57 @@ def run_init(agent: str = "all", show_only: bool = False):
                 configured_items.append(f"Cursor MCP Config:      {curp}")
             except Exception:
                 pass
+
+        # Cursor Settings (route OpenAI completions through local proxy)
+        cursor_settings_paths = [
+            os.path.join(os.getcwd(), ".cursor", "settings.json"),
+            os.path.expanduser("~/.config/Cursor/User/settings.json"),
+            os.path.expanduser("~/Library/Application Support/Cursor/User/settings.json")
+        ]
+        for csp in cursor_settings_paths:
+            is_ws = (csp == cursor_settings_paths[0])
+            if not is_ws and not os.path.exists(os.path.dirname(csp)):
+                continue
+            try:
+                os.makedirs(os.path.dirname(csp), exist_ok=True)
+                sdata = {}
+                if os.path.exists(csp):
+                    try:
+                        with open(csp, "r", encoding="utf-8") as f:
+                            sdata = json.load(f)
+                    except Exception:
+                        sdata = {}
+                sdata["openai.apiBaseUrl"] = f"http://127.0.0.1:{port}/v1"
+                with open(csp, "w", encoding="utf-8") as f:
+                    json.dump(sdata, f, indent=2)
+                configured_items.append(f"Cursor Settings:        {csp}")
+            except Exception:
+                pass
+
+        # Cursor Rules (.cursorrules for workspace proxy routing)
+        cursorrules_path = os.path.join(os.getcwd(), ".cursorrules")
+        try:
+            rule_block = (
+                f"\n# OmniCache AI Proxy Acceleration\n"
+                f'OPENAI_BASE_URL="http://127.0.0.1:{port}/v1"\n'
+                f'ANTHROPIC_BASE_URL="http://127.0.0.1:{port}"\n'
+                f"# Automatically route completions & agent tool replays through local OmniCache proxy.\n"
+            )
+            if os.path.exists(cursorrules_path):
+                with open(cursorrules_path, "r", encoding="utf-8") as f:
+                    existing_rules = f.read()
+                if "OPENAI_BASE_URL" not in existing_rules and "OmniCache" not in existing_rules:
+                    with open(cursorrules_path, "a", encoding="utf-8") as f:
+                        f.write("\n" + rule_block)
+                    configured_items.append(f"Cursor Rules (Updated): {cursorrules_path}")
+                else:
+                    configured_items.append(f"Cursor Rules (Verified):{cursorrules_path}")
+            else:
+                with open(cursorrules_path, "w", encoding="utf-8") as f:
+                    f.write(rule_block.lstrip())
+                configured_items.append(f"Cursor Rules (Created): {cursorrules_path}")
+        except Exception:
+            pass
 
     # 3. Cline (VS Code & Cursor extension)
     if clean_agent in ("all", "cline"):

@@ -31,14 +31,57 @@ def test_run_init_generates_configurations(tmp_path, monkeypatch):
     assert os.path.exists(cursor_json)
     assert os.path.exists(env_sh)
 
-    with open(claude_json, "r") as f:
-        data = json.load(f)
-        assert "omnicache" in data.get("mcpServers", {})
+    # Check Claude settings.json has both MCP and ANTHROPIC_BASE_URL
+    with open(claude_settings, "r") as f:
+        cset_data = json.load(f)
+        assert "omnicache" in cset_data.get("mcpServers", {})
+        assert "ANTHROPIC_BASE_URL" in cset_data.get("env", {})
+        assert "http://127.0.0.1" in cset_data["env"]["ANTHROPIC_BASE_URL"]
 
-    with open(env_sh, "r") as f:
-        content = f.read()
-        assert "ANTHROPIC_BASE_URL" in content
-        assert "OPENAI_BASE_URL" in content
+    # Check Cursor workspace rules and settings
+    cursorrules = os.path.join(test_proj, ".cursorrules")
+    cursor_settings = os.path.join(test_proj, ".cursor", "settings.json")
+    assert os.path.exists(cursorrules)
+    assert os.path.exists(cursor_settings)
+
+    with open(cursorrules, "r") as f:
+        cr_content = f.read()
+        assert "OPENAI_BASE_URL" in cr_content
+        assert "ANTHROPIC_BASE_URL" in cr_content
+
+    with open(cursor_settings, "r") as f:
+        cs_data = json.load(f)
+        assert "openai.apiBaseUrl" in cs_data
+        assert "http://127.0.0.1" in cs_data["openai.apiBaseUrl"]
+
+
+def test_run_init_agent_specific(tmp_path, monkeypatch):
+    """Verifies targeted init for claude and cursor."""
+    from server.cli import detect_installed_agents
+
+    test_home = str(tmp_path / "home2")
+    test_proj = str(tmp_path / "project2")
+    os.makedirs(test_home, exist_ok=True)
+    os.makedirs(test_proj, exist_ok=True)
+
+    monkeypatch.setenv("HOME", test_home)
+    monkeypatch.setattr(os.path, "expanduser", lambda path: path.replace("~", test_home))
+    monkeypatch.setattr(os, "getcwd", lambda: test_proj)
+
+    # Test agent discovery
+    detected = detect_installed_agents()
+    assert "claude" in detected
+    assert "cursor" in detected
+
+    # Test targeted Claude init
+    run_init(agent="claude")
+    claude_settings = os.path.join(test_home, ".claude", "settings.json")
+    assert os.path.exists(claude_settings)
+
+    # Test targeted Cursor init
+    run_init(agent="cursor")
+    cursorrules = os.path.join(test_proj, ".cursorrules")
+    assert os.path.exists(cursorrules)
 
 
 def test_run_doctor_and_stats():

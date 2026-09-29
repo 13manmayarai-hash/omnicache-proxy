@@ -1,1022 +1,617 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>OmniCache: Stop paying twice for AI</title>
-  <meta name="description" content="OmniCache is a local cache for Claude Code, Cursor and any LLM app. Repeat calls are answered on your machine in milliseconds, with no tokens spent.">
-  <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#0b0f13">
-
-  <!-- Social cards -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>OmniCache — Give your AI agent a memory</title>
+  <meta name="description" content="OmniCache is a local caching sidecar for AI coding agents, with exact and semantic caching, Git-aware freshness, local replay, MCP support, and developer telemetry.">
+  <meta name="theme-color" content="#080b0f">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="OmniCache">
-  <meta property="og:title" content="OmniCache: Stop paying twice for AI">
-  <meta property="og:description" content="A local cache for Claude Code, Cursor and any LLM app. Repeat calls are answered on your machine in milliseconds.">
+  <meta property="og:title" content="OmniCache — Give your AI agent a memory">
+  <meta property="og:description" content="Cache the work that doesn't need to happen twice. Local replay for AI coding agents.">
   <meta property="og:url" content="https://omnicache.rawwgrid.com/">
   <meta property="og:image" content="https://omnicache.rawwgrid.com/omnicache-og.png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="OmniCache: stop paying twice for AI">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="OmniCache: Stop paying twice for AI">
-  <meta name="twitter:description" content="A local cache for Claude Code, Cursor and any LLM app.">
-  <meta name="twitter:image" content="https://omnicache.rawwgrid.com/omnicache-og.png">
   <link rel="canonical" href="https://omnicache.rawwgrid.com/">
-
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230b0f13'/%3E%3Cpath d='M13 3 5 13.5h6L10 21l8-10.5h-6z' fill='%23e95d2c'/%3E%3C/svg%3E">
-  <link rel="preload" as="image" href="img/hero-1983.webp" imagesrcset="img/hero-1000.webp 1000w, img/hero-1983.webp 1983w" imagesizes="(max-width: 1240px) 100vw, 1240px" fetchpriority="high">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23080b0f'/%3E%3Cpath d='M18 4 7 18h8l-2 10 11-14h-8z' fill='%23ff6b32'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "OmniCache",
-    "description": "A local caching proxy for AI coding agents and LLM apps.",
-    "applicationCategory": "DeveloperApplication",
-    "operatingSystem": "Any (Python 3.9+)",
-    "softwareVersion": "3.1.0",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-    "license": "https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE",
-    "url": "https://omnicache.rawwgrid.com",
-    "downloadUrl": "https://pypi.org/project/omnicache-proxy/"
-  }
-  </script>
+<style>
+:root{
+  --bg:#080b0f;--bg2:#0c1117;--panel:#101720;--panel2:#141d27;
+  --line:rgba(255,255,255,.085);--line2:rgba(255,255,255,.14);
+  --text:#f4f7fa;--muted:#93a1ad;--soft:#c5d0d8;
+  --orange:#ff6b32;--orange2:#e95d2c;--orangeSoft:rgba(255,107,50,.11);
+  --blue:#a9d4ec;--green:#79d6a7;--red:#ff7562;--yellow:#f3c96b;
+  --sans:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --max:1180px;--radius:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:78px;background:var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+button,input{border:0}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--orange);outline-offset:4px}
+::selection{background:rgba(255,107,50,.28)}
+.container{width:min(calc(100% - 40px),var(--max));margin:auto}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+.orange{color:var(--orange)}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid rgba(255,107,50,.28);background:var(--orangeSoft);border-radius:999px;color:#ff9a70;font:600 11px var(--mono);letter-spacing:.02em;text-transform:uppercase}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--orange);box-shadow:0 0 12px var(--orange)}
+h1,h2,h3{letter-spacing:-.045em;line-height:1.04}
+h1{font-size:clamp(48px,7.5vw,94px);max-width:950px}
+h2{font-size:clamp(36px,5vw,64px)}
+h3{font-size:20px}
+.lead{font-size:clamp(17px,2vw,20px);color:var(--muted);max-width:720px}
+.small{font-size:13px;color:var(--muted)}
+section{position:relative;padding:120px 0}
+.grid-bg{position:absolute;inset:0;pointer-events:none;opacity:.55;background-image:linear-gradient(rgba(255,255,255,.026) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.026) 1px,transparent 1px);background-size:64px 64px;mask-image:linear-gradient(to bottom,transparent,#000 16%,#000 75%,transparent)}
+.glow{position:absolute;pointer-events:none;border-radius:50%;filter:blur(70px);opacity:.22}
+.glow.orange{width:500px;height:500px;background:var(--orange);top:-220px;left:50%;transform:translateX(-50%)}
+.glow.blue{width:440px;height:440px;background:#4d8eb5;right:-260px;top:20%;opacity:.12}
 
-  <style>
-    :root {
-      --bg: #0b0f13;
-      --surface: #11171d;
-      --surface-2: #172029;
-      --line: rgba(255, 255, 255, 0.08);
-      --line-2: rgba(255, 255, 255, 0.14);
-      --text: #f3f6f9;
-      --muted: #93a2ae;
-      --accent: #e95d2c;
-      --accent-hover: #f26e3e;
-      --accent-soft: rgba(233, 93, 44, 0.14);
-      --accent-line: rgba(233, 93, 44, 0.5);
-      --ok: #7fd6ae;
-      --radius: 14px;
-      --nav-h: 64px;
-      --sans: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-      --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+.nav{height:70px;position:fixed;inset:0 0 auto;z-index:100;border-bottom:1px solid transparent;transition:.25s}
+.nav.scrolled{background:rgba(8,11,15,.86);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-color:var(--line)}
+.nav-inner{height:70px;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.03em}
+.brand-mark{width:31px;height:31px;border-radius:9px;display:grid;place-items:center;background:#111820;border:1px solid var(--line2);color:var(--orange);box-shadow:0 0 28px rgba(255,107,50,.12)}
+.brand-mark svg{width:16px}
+.nav-links{display:flex;align-items:center;gap:24px;color:var(--muted);font-size:13px}
+.nav-links a{transition:.18s}
+.nav-links a:hover{color:var(--text)}
+.nav-actions{display:flex;align-items:center;gap:8px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);font-size:13px;font-weight:700;transition:transform .18s,border-color .18s,background .18s}
+.btn:hover{transform:translateY(-1px);border-color:rgba(255,255,255,.25)}
+.btn-primary{background:var(--orange);color:#130a06;border-color:var(--orange);box-shadow:0 8px 30px rgba(255,107,50,.18)}
+.btn-primary:hover{background:#ff7a45}
+.btn-ghost{background:rgba(255,255,255,.025)}
+.mobile-toggle{display:none;width:42px;height:42px;border:1px solid var(--line2);border-radius:10px;background:var(--panel);align-items:center;justify-content:center}
+.mobile-toggle span{display:block;width:18px;height:2px;background:var(--text);margin:3px}
 
-      /* Neumorphism (Soft UI) Elevation Physics */
-      --neu-flat-1: 3px 3px 8px #030a0f, -3px -3px 8px rgba(74, 92, 106, 0.22);
-      --neu-flat-2: 6px 6px 16px #03090e, -6px -6px 16px rgba(74, 92, 106, 0.25);
-      --neu-flat-hover: 5px 5px 14px #02070b, -5px -5px 14px rgba(74, 92, 106, 0.32);
-      --neu-pressed: inset 2px 2px 5px #02080d, inset -2px -2px 5px rgba(74, 92, 106, 0.18);
-      --neu-pill: 9999px;
-      --neu-card: 20px;
-    }
+.hero{min-height:900px;padding:160px 0 80px;display:flex;align-items:center;overflow:hidden}
+.hero-copy{position:relative;z-index:2;text-align:center;display:flex;flex-direction:column;align-items:center}
+.hero h1{margin:22px auto 24px}
+.hero h1 .line2{display:block;background:linear-gradient(105deg,#fff 0%,#fff 35%,#ff9a70 62%,#ff6b32 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .lead{margin:auto}
+.ctas{display:flex;gap:10px;margin:30px 0 22px;flex-wrap:wrap;justify-content:center}
+.install{display:flex;align-items:center;gap:12px;background:#0b1015;border:1px solid var(--line);border-radius:12px;padding:11px 14px;color:#b8c5ce;font:12px var(--mono);box-shadow:0 15px 45px rgba(0,0,0,.24)}
+.install .prompt{color:var(--orange)}
+.install button{background:transparent;color:#778894;padding:2px}
+.install button:hover{color:#fff}
+.hero-visual{width:min(100%,1050px);margin:70px auto 0;position:relative}
+.flow-shell{border:1px solid var(--line2);border-radius:24px;background:linear-gradient(180deg,rgba(20,29,39,.92),rgba(8,12,16,.95));box-shadow:0 40px 120px rgba(0,0,0,.45),0 0 90px rgba(255,107,50,.06);padding:26px;position:relative;overflow:hidden}
+.flow-shell:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0,rgba(255,107,50,.11),transparent 45%);pointer-events:none}
+.flow-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;color:#7e909d;font:10px var(--mono);text-transform:uppercase;letter-spacing:.08em}
+.live{display:flex;align-items:center;gap:7px;color:#88d9ae}.live .dot{background:#78d6a5;box-shadow:0 0 12px #78d6a5}
+.flow{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:16px;align-items:center}
+.node{min-height:120px;border:1px solid var(--line);background:rgba(255,255,255,.025);border-radius:16px;padding:18px;position:relative;overflow:hidden}
+.node.active{border-color:rgba(255,107,50,.42);box-shadow:0 0 35px rgba(255,107,50,.08)}
+.node .tag{font:10px var(--mono);color:#71818d;text-transform:uppercase;letter-spacing:.08em}
+.node strong{display:block;font-size:18px;margin-top:9px;letter-spacing:-.025em}
+.node p{font-size:12px;color:var(--muted);margin-top:5px}
+.cache-node{min-height:180px;background:linear-gradient(180deg,rgba(255,107,50,.06),rgba(255,255,255,.018))}
+.cache-core{width:74px;height:74px;border-radius:20px;border:1px solid rgba(255,107,50,.4);display:grid;place-items:center;margin:8px auto 12px;color:var(--orange);background:#11161c;box-shadow:0 0 38px rgba(255,107,50,.13)}
+.cache-core svg{width:32px}
+.flow-connector{height:70px;position:relative}
+.flow-line{position:absolute;left:0;right:0;top:34px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent)}
+.packet{position:absolute;width:7px;height:7px;border-radius:50%;top:31px;background:var(--orange);box-shadow:0 0 14px var(--orange);animation:travel 2.5s linear infinite}
+.packet.p2{animation-delay:1.25s}
+.hit-pill{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--mono);padding:5px 8px;border-radius:999px;color:#8ee0b7;background:rgba(121,214,167,.08);border:1px solid rgba(121,214,167,.2)}
+.miss-pill{display:inline-flex;align-items:center;gap:6px;font:600 10px var(--mono);padding:5px 8px;border-radius:999px;color:#ff9a8b;background:rgba(255,117,98,.08);border:1px solid rgba(255,117,98,.2)}
+@keyframes travel{0%{left:0;opacity:0}12%{opacity:1}88%{opacity:1}100%{left:100%;opacity:0}}
+.hero-note{margin-top:12px;color:#6f808c;font:10px var(--mono)}
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: var(--nav-h); }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--sans);
-      font-size: 16px;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
-      overflow-x: hidden;
-    }
-    a { color: inherit; text-decoration: none; }
-    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
-    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
-    ::selection { background: rgba(233, 93, 44, 0.35); }
-    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .skip { position: absolute; left: 16px; top: -48px; z-index: 100; padding: 10px 14px; border-radius: 10px; background: var(--accent); color: var(--bg); font-weight: 600; font-size: 14px; }
-    .skip:focus { top: 12px; }
-    .wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 0 max(24px, env(safe-area-inset-left)); }
-    .narrow { max-width: 720px; }
-    .muted { color: var(--muted); }
-    .accent {
-      color: var(--accent);
-      background: linear-gradient(135deg, #ff854d 0%, #e95d2c 55%, #f26e3e 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      display: inline-block;
-      filter: drop-shadow(0 0 20px rgba(233, 93, 44, 0.38));
-    }
+.section-head{max-width:760px;margin-bottom:54px}
+.section-head .eyebrow{margin-bottom:18px}
+.section-head h2{margin-bottom:18px}
+.section-head p{font-size:17px;color:var(--muted)}
 
-    /* Nav */
-    .nav { position: fixed; inset: 0 0 auto; z-index: 50; border-bottom: 1px solid transparent; transition: background 0.25s, border-color 0.25s; }
-    .nav.scrolled { background: rgba(11, 15, 19, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-color: var(--line); }
-    .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: var(--nav-h); }
-    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
-    .logo-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-2); display: grid; place-items: center; color: var(--accent); }
-    .logo-mark svg { width: 15px; height: 15px; }
-    .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; color: var(--muted); }
-    .nav-links a:not(.btn):not(.nav-dash) { position: relative; padding: 6px 0; transition: color 0.2s; }
-    .nav-links a:not(.btn):not(.nav-dash):hover, .nav-links a.active { color: var(--text); }
-    .nav-links a.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; border-radius: 2px; background: var(--accent); }
+.problem{border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.problem-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:70px;align-items:center}
+.request-stack{border:1px solid var(--line);border-radius:20px;padding:14px;background:#0b1015}
+.req{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid var(--line);font:12px var(--mono);color:#bdc9d1}
+.req:last-child{border-bottom:0}
+.req i{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#8b9aa5;background:#111820;font-style:normal}
+.req .cloud{margin-left:auto;color:#ff9070;font-size:10px}
+.repeat{display:flex;align-items:center;justify-content:center;gap:9px;color:#778793;font:11px var(--mono);padding:14px 0 3px}
+.repeat:before,.repeat:after{content:"";height:1px;background:var(--line);flex:1}
 
-    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: var(--neu-pill); font-size: 14px; font-weight: 600; border: 1px solid var(--line-2); color: var(--text); box-shadow: var(--neu-flat-1); transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s; white-space: nowrap; }
-    .btn:hover { background: var(--surface-2); border-color: rgba(255, 255, 255, 0.24); box-shadow: var(--neu-flat-hover); }
-    .btn:active { transform: translateY(1px); box-shadow: var(--neu-pressed); }
-    .btn svg { width: 16px; height: 16px; flex: none; }
-    .btn-sm { height: 36px; padding: 0 16px; font-size: 13px; }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #0b0f13; box-shadow: 0 4px 16px rgba(233, 93, 44, 0.35); }
-    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); box-shadow: 0 6px 22px rgba(233, 93, 44, 0.5); }
-    .btn-dash { background: rgba(37, 55, 69, 0.5); border-color: rgba(74, 92, 106, 0.45); color: #CCD0CF; }
-    .btn-dash:hover { background: #253745; color: #fff; border-color: rgba(74, 92, 106, 0.8); }
-    .nav-dash { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: var(--neu-pill); background: rgba(37, 55, 69, 0.45); border: 1px solid rgba(74, 92, 106, 0.35); color: #CCD0CF; font-size: 13px; font-weight: 600; text-decoration: none; transition: all 0.2s; }
-    .nav-dash:hover { background: #253745; color: #fff; border-color: rgba(74, 92, 106, 0.7); box-shadow: var(--neu-flat-hover); }
-    .mobile-toggle { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text); cursor: pointer; }
-    .mobile-toggle svg { width: 18px; height: 18px; }
-    .mobile-toggle .i-close { display: none; }
-    .mobile-toggle[aria-expanded="true"] .i-menu { display: none; }
-    .mobile-toggle[aria-expanded="true"] .i-close { display: block; }
-    .mobile-drawer { position: fixed; top: var(--nav-h); left: 0; right: 0; background: rgba(11, 15, 19, 0.96); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--line-2); padding: 16px 24px 20px; z-index: 49; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8); }
-    .mobile-drawer[hidden] { display: none; }
-    .mobile-nav-links { display: flex; flex-direction: column; gap: 12px; font-size: 14px; font-weight: 500; }
-    .mobile-nav-links a { color: var(--muted); padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; }
-    .mobile-nav-links a:hover { color: var(--text); }
-    .mobile-nav-links a.mob-dash { color: var(--accent); font-weight: 600; border-bottom: 0; }
-    .stars { display: none; align-items: center; gap: 4px; margin-left: 2px; padding-left: 10px; border-left: 1px solid currentColor; font-family: var(--mono); font-size: 12px; font-weight: 500; opacity: 0.8; }
-    .has-stars .stars { display: inline-flex; }
-    .stars svg { width: 12px; height: 12px; }
+.compare{background:linear-gradient(180deg,#0a0e13,#080b0f)}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.compare-card{border:1px solid var(--line);border-radius:22px;padding:26px;background:#0d1319;min-height:420px}
+.compare-card.good{border-color:rgba(121,214,167,.2);background:linear-gradient(180deg,rgba(121,214,167,.045),#0d1319)}
+.compare-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.compare-title strong{font-size:15px}.compare-title span{font:10px var(--mono);color:#778894}
+.pipeline{display:flex;flex-direction:column;gap:10px}
+.pipe-step{border:1px solid var(--line);background:rgba(255,255,255,.025);border-radius:12px;padding:14px 15px;display:flex;align-items:center;gap:12px;font-size:13px}
+.pipe-step .num{font:10px var(--mono);color:#667784;width:22px}.pipe-step .state{margin-left:auto;font:10px var(--mono)}
+.pipe-arrow{text-align:center;color:#53636e;font:14px var(--mono)}
+.good .pipe-step.hit{border-color:rgba(121,214,167,.25);background:rgba(121,214,167,.055)}
+.good .pipe-step.hit .state{color:#7fd6ae}
+.bad .pipe-step.cloud{border-color:rgba(255,117,98,.2);background:rgba(255,117,98,.035)}
+.bad .pipe-step.cloud .state{color:#ff8d7c}
 
-    /* Hero */
-    .hero { position: relative; overflow: hidden; min-height: 100vh; min-height: 100svh; display: flex; align-items: center; padding: 112px 0 80px; }
-    .hero::before { content: ""; position: absolute; inset: 0; background: radial-gradient(60% 45% at 50% 0%, rgba(233, 93, 44, 0.11), transparent 70%); pointer-events: none; }
-    .hero .wrap { position: relative; text-align: center; }
-    .kicker { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); margin-bottom: 22px; }
-    .kicker .live { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
-    h1 { font-size: clamp(44px, 7.4vw, 88px); line-height: 1; letter-spacing: -0.045em; font-weight: 700; text-wrap: balance; }
-    .br-sm { display: none; }
-    @media (max-width: 600px) { .br-sm { display: inline; } .br-lg { display: none; } }
-    .lede { margin: 24px auto 0; max-width: 560px; font-size: clamp(16px, 1.7vw, 19px); color: var(--muted); text-wrap: pretty; }
+.demo{border-top:1px solid var(--line)}
+.demo-shell{border:1px solid var(--line2);border-radius:24px;background:#0c1218;overflow:hidden;box-shadow:0 30px 100px rgba(0,0,0,.32)}
+.demo-bar{height:48px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;padding:0 16px}
+.window-dot{width:8px;height:8px;border-radius:50%;background:#3b4851}
+.demo-bar span{margin-left:8px;font:10px var(--mono);color:#687985}
+.demo-body{display:grid;grid-template-columns:1.2fr .8fr;min-height:410px}
+.terminal{padding:24px;border-right:1px solid var(--line);font:12px/1.9 var(--mono);color:#a9b8c2}
+.terminal .prompt{color:var(--orange)}.terminal .success{color:#7fd6ae}.terminal .dim{color:#62727e}
+.demo-controls{padding:24px;background:rgba(255,255,255,.012)}
+.demo-controls label{display:block;font:10px var(--mono);color:#687984;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.demo-input{width:100%;background:#080d12;border:1px solid var(--line2);border-radius:10px;padding:12px;color:#d9e1e6;font:12px var(--mono);margin-bottom:12px}
+.demo-buttons{display:flex;gap:8px;margin-bottom:18px}
+.demo-buttons button{flex:1}
+.status-card{border:1px solid var(--line);border-radius:14px;padding:16px}
+.status-card .status{font:700 12px var(--mono);color:#7fd6ae}.status-card h3{font-size:18px;margin:8px 0}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.metric{padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.02)}.metric span{display:block;font:9px var(--mono);color:#667784;text-transform:uppercase}.metric strong{display:block;margin-top:4px;font:600 12px var(--mono)}
+.demo-hit{color:#7fd6ae}.demo-miss{color:#ff8f7d}
 
-    .cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 36px; }
-    .cmd { display: inline-flex; align-items: center; gap: 12px; height: 44px; padding: 0 7px 0 16px; border-radius: var(--neu-pill); background: var(--surface); border: 1px solid var(--line-2); font-family: var(--mono); font-size: 14px; box-shadow: var(--neu-pressed); transition: border-color 0.2s, box-shadow 0.2s; }
-    .cmd:hover { border-color: var(--accent-line); }
-    .cmd .dollar { color: var(--accent); }
-    .copy-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: var(--neu-pill); background: var(--surface-2); font-family: var(--sans); font-size: 12px; font-weight: 600; color: var(--muted); transition: color 0.2s, background 0.2s; }
-    .copy-chip svg { width: 13px; height: 13px; }
-    .copy-chip .i-check { display: none; }
-    .copied .copy-chip, .copy-chip.copied { color: var(--ok); }
-    .copied .copy-chip .i-copy, .copy-chip.copied .i-copy { display: none; }
-    .copied .copy-chip .i-check, .copy-chip.copied .i-check { display: block; }
-    .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 18px; font-size: 13px; color: var(--muted); }
-    .facts span { display: inline-flex; align-items: center; gap: 7px; }
-    .facts svg { width: 14px; height: 14px; color: var(--accent); }
+.git-section{background:#0b1015;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.git-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:stretch}
+.git-visual{border:1px solid var(--line2);border-radius:22px;background:#090e13;padding:24px}
+.file-row{display:flex;align-items:center;justify-content:space-between;padding:14px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:#0d141a}
+.file-row code{font:12px var(--mono);color:#d7e0e5}.hash{font:10px var(--mono);color:#758692}
+.hash.changed{color:#ff927d}
+.git-arrow{text-align:center;color:#5f707c;font:11px var(--mono);padding:3px}
+.invalidation{display:flex;align-items:center;justify-content:center;padding:15px;border:1px dashed rgba(255,117,98,.28);border-radius:12px;background:rgba(255,117,98,.04);color:#ff9a89;font:11px var(--mono);margin:12px 0}
+.git-copy{padding:12px 0 0 30px}
+.git-copy h2{margin:18px 0}.git-copy p{color:var(--muted);font-size:16px}
+.toggle{display:flex;align-items:center;gap:10px;margin-top:24px;font:11px var(--mono);color:#82929d}
+.switch{width:42px;height:24px;border-radius:99px;border:1px solid var(--line2);background:#121a21;padding:3px;display:flex;transition:.2s}
+.switch i{display:block;width:16px;height:16px;border-radius:50%;background:#6c7b85;transition:.2s}.toggle.on .switch{background:rgba(255,107,50,.14);border-color:rgba(255,107,50,.35)}.toggle.on .switch i{transform:translateX(18px);background:var(--orange)}
 
-    /* Hero flow animation */
-    .flow { display: flex; align-items: center; max-width: 720px; margin: 64px auto 0; }
-    .node { position: relative; flex: 0 0 auto; width: 128px; padding: 16px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line-2); display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; box-shadow: var(--neu-flat-1); transition: border-color 0.3s, box-shadow 0.3s; }
-    .node svg { width: 22px; height: 22px; color: var(--muted); }
-    .node-core { border-color: var(--accent-line); }
-    .node-core svg { color: var(--accent); }
-    .node-core.pulse { border-color: var(--accent); box-shadow: 0 0 0 6px var(--accent-soft), 0 0 36px rgba(233, 93, 44, 0.3); }
-    .node-core.store { border-color: var(--accent); box-shadow: 0 0 0 10px rgba(233, 93, 44, 0.08); }
-    .node-cloud.busy { border-color: rgba(255, 255, 255, 0.34); }
-    .node-cloud .wait { position: absolute; bottom: 7px; left: 50%; transform: translateX(-50%); display: flex; gap: 3px; height: 4px; opacity: 0; transition: opacity 0.2s; }
-    .node-cloud .wait i { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); animation: wait 0.9s infinite; }
-    .node-cloud .wait i:nth-child(2) { animation-delay: 0.15s; }
-    .node-cloud .wait i:nth-child(3) { animation-delay: 0.3s; }
-    .node-cloud.busy .wait { opacity: 1; }
-    @keyframes wait { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
-    .link { flex: 1; min-width: 20px; height: 2px; margin: 0 -1px; background: var(--line-2); position: relative; }
-    .pkt { position: absolute; top: 50%; left: 0; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--muted); opacity: 0; }
-    .pkt.hit { background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+.arch{overflow:hidden}
+.arch-wrap{border:1px solid var(--line2);border-radius:24px;background:#0b1016;padding:28px}
+.arch-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:center}
+.arch-node{min-height:112px;border:1px solid var(--line);border-radius:14px;background:#10171e;padding:14px;position:relative}
+.arch-node:hover{border-color:rgba(255,107,50,.35);transform:translateY(-2px)}
+.arch-node strong{display:block;font-size:13px;margin:10px 0 4px}.arch-node p{font-size:10px;color:#71818c;line-height:1.45}
+.arch-node .num{font:9px var(--mono);color:#596b77}
+.arch-arrow{color:#4f606c;text-align:center;font:16px var(--mono)}
+.arch-detail{margin-top:18px;padding:14px;border-radius:12px;border:1px solid var(--line);font:11px var(--mono);color:#8a9aa5;background:#0a0f14}
+.arch-detail b{color:#d6e0e6}
 
-    .log { max-width: 540px; margin: 28px auto 0; padding: 10px 16px; border: 1px solid var(--line-2); border-radius: 12px; background: rgba(14, 19, 24, 0.86); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); font-family: var(--mono); font-size: 12.5px; text-align: left; box-shadow: var(--neu-flat-1); }
-    .row { display: grid; grid-template-columns: 50px 1fr 44px 70px; gap: 10px; align-items: center; padding: 6px 0; transition: opacity 0.35s; }
-    .row + .row { border-top: 1px dashed var(--line); }
-    .row .turn, .row code { color: var(--muted); }
-    .row code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .row .tag { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
-    .row .tag.hit { color: var(--accent); }
-    .row .t { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .row .t.hit { color: var(--text); }
-    .anim .row { opacity: 0.15; }
-    .anim .row.show { opacity: 1; }
+.features{border-top:1px solid var(--line)}
+.feature-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.feature{border:1px solid var(--line);border-radius:17px;background:#0e141a;padding:22px;min-height:190px;transition:.2s}
+.feature:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.16);background:#111820}
+.feature-icon{width:38px;height:38px;border-radius:11px;background:var(--orangeSoft);border:1px solid rgba(255,107,50,.18);display:grid;place-items:center;color:var(--orange);margin-bottom:20px}
+.feature h3{font-size:16px;margin-bottom:8px}.feature p{font-size:12px;color:var(--muted)}
 
-    /* Sections */
-    .sec { padding: clamp(72px, 9vw, 120px) 0; border-top: 1px solid var(--line); }
-    .h2 { font-size: clamp(32px, 4.4vw, 52px); line-height: 1.06; letter-spacing: -0.04em; font-weight: 700; text-align: center; margin-bottom: clamp(36px, 4.5vw, 56px); text-wrap: balance; }
+.integrations{background:#0b1015;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.integration-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.integration{border:1px solid var(--line);border-radius:15px;padding:20px;background:#0d141a;min-height:120px}.integration strong{display:block;margin-bottom:7px;font-size:14px}.integration span{font-size:11px;color:#72828d}
 
-    /* Impact bars */
-    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .metric { background: var(--surface); border: 1px solid var(--line); border-radius: var(--neu-card); padding: 28px; box-shadow: var(--neu-flat-2); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease; }
-    .metric:hover { transform: translateY(-4px); box-shadow: var(--neu-flat-hover), 0 0 24px rgba(233, 93, 44, 0.14); border-color: rgba(233, 93, 44, 0.35); }
-    .m-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 28px; }
-    .m-label { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-    .m-delta { font-size: clamp(40px, 5vw, 56px); font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--accent); }
-    .bar-row { display: grid; grid-template-columns: 92px 1fr 88px; align-items: center; gap: 14px; }
-    .bar-row + .bar-row { margin-top: 14px; }
-    .b-name { font-size: 13px; color: var(--muted); }
-    .b-val { font-family: var(--mono); font-size: 13px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .bar { height: 10px; border-radius: 99px; background: rgba(255, 255, 255, 0.05); overflow: hidden; }
-    .bar i { display: block; height: 100%; border-radius: inherit; background: #4b5763; transform-origin: left; transform: scaleX(var(--w)); transition: transform 1.2s cubic-bezier(0.2, 0.7, 0.2, 1); }
-    .bar-row.hit .b-name, .bar-row.hit .b-val { color: var(--text); }
-    .bar-row.hit .bar i { background: var(--accent); box-shadow: 0 0 12px rgba(233, 93, 44, 0.5); transition-delay: 0.25s; }
-    .anim .bar i { transform: scaleX(0); }
-    .anim .in .bar i { transform: scaleX(var(--w)); }
-    .note { margin-top: 20px; text-align: center; font-size: 13.5px; color: var(--muted); text-wrap: balance; }
+.bench{border-top:1px solid var(--line)}
+.bench-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.bench-card{border:1px solid var(--line);border-radius:18px;padding:22px;background:#0e141a}.bench-card .value{font:600 34px var(--mono);letter-spacing:-.06em;color:#f0f5f8}.bench-card .unit{font:11px var(--mono);color:#7a8a96}.bench-card h3{font-size:14px;margin:16px 0 6px}.bench-card p{font-size:11px;color:#73838e}
+.bench-note{margin-top:14px;padding:14px 16px;border:1px dashed var(--line2);border-radius:12px;color:#788894;font:10px/1.6 var(--mono)}
 
-    .proof { margin-top: 44px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: stretch; border: 1px solid var(--line); border-radius: var(--neu-card); overflow: hidden; box-shadow: var(--neu-flat-1); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease; }
-    .proof:hover { transform: translateY(-2px); box-shadow: var(--neu-flat-hover); border-color: rgba(255, 255, 255, 0.22); }
-    .proof > div { padding: 20px 22px; border-right: 1px solid var(--line); }
-    .proof b { display: block; white-space: nowrap; font-size: 24px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
-    .proof span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.4; }
-    .proof a { display: flex; align-items: center; gap: 8px; padding: 20px 24px; font-size: 14px; font-weight: 600; color: var(--text); background: var(--surface); transition: background 0.2s, color 0.2s; }
-    .proof a:hover { background: var(--surface-2); color: var(--accent); }
-    .proof a svg { width: 16px; height: 16px; transition: transform 0.2s; }
-    .proof a:hover svg { transform: translateX(3px); }
-    .proof-label { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); text-align: center; margin: 56px 0 14px; }
+.mcp{background:linear-gradient(180deg,#0a0e13,#080b0f)}
+.mcp-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.mcp-card{border:1px solid var(--line);border-radius:20px;padding:26px;background:#0e141a}.mcp-card h3{font-size:20px;margin-bottom:10px}.mcp-card p{font-size:13px;color:var(--muted);margin-bottom:18px}.code{border:1px solid var(--line);border-radius:12px;background:#080c10;padding:16px;font:11px/1.7 var(--mono);color:#a9b8c2;overflow:auto}.code .c{color:#ff9270}.code .g{color:#7fd6ae}.code .d{color:#61717c}
 
-    /* How it works */
-    .steps { position: relative; --p: 1; }
-    /* Column centres sit at 12.5% − 3·gap/8 from each edge (gap = 20px). */
-    .track { position: absolute; top: 25px; left: calc(12.5% - 7.5px); right: calc(12.5% - 7.5px); height: 2px; background: var(--line-2); }
-    .track .fill { position: absolute; left: 0; top: 0; height: 100%; width: calc(var(--p) * 100%); background: var(--accent); box-shadow: 0 0 10px var(--accent); transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-    .track .head { position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px var(--accent), 0 0 18px var(--accent); transition: left 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-    .step-list { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; position: relative; }
-    .step { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; }
-    .dot { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #0b0f13; border: 1px solid var(--accent); box-shadow: 0 0 0 6px var(--accent-soft), 0 0 28px rgba(233, 93, 44, 0.35); transition: all 0.4s; position: relative; z-index: 1; }
-    .dot svg { width: 22px; height: 22px; }
-    .anim .step:not(.on) .dot { background: var(--surface); color: var(--muted); border-color: var(--line-2); box-shadow: none; }
-    .anim .step.on:not(.now) .dot { background: var(--surface-2); color: var(--accent); border-color: var(--accent-line); box-shadow: none; }
-    .step h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
-    .step .num { display: block; font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.1em; color: var(--accent); margin-bottom: 6px; }
-    .step p { margin-top: 6px; font-size: 14px; color: var(--muted); max-width: 210px; text-wrap: pretty; }
-    .miss-note { margin-top: 48px; text-align: center; font-size: 14px; color: var(--muted); }
-    .miss-note b { color: var(--text); font-weight: 600; }
+.quickstart{border-top:1px solid var(--line)}
+.quick-shell{border:1px solid rgba(255,107,50,.2);border-radius:24px;padding:48px;text-align:center;background:radial-gradient(circle at 50% 0,rgba(255,107,50,.1),transparent 55%),#0e141a}
+.quick-shell h2{max-width:700px;margin:0 auto 16px}.quick-shell p{max-width:600px;margin:0 auto;color:var(--muted)}.quick-code{display:inline-flex;align-items:center;gap:16px;margin-top:26px;padding:14px 17px;border:1px solid var(--line2);border-radius:12px;background:#080d12;font:12px var(--mono);text-align:left}.quick-code .cmd{color:#d8e1e7}.quick-code .cmd b{color:var(--orange);font-weight:500}
 
-    /* Get started */
-    .tabs { display: flex; gap: 4px; width: max-content; max-width: 100%; margin: 0 auto 16px; padding: 4px; border: 1px solid var(--line); border-radius: var(--neu-pill); background: var(--surface); overflow-x: auto; box-shadow: var(--neu-pressed); }
-    .tab { height: 36px; padding: 0 16px; border-radius: var(--neu-pill); font-size: 13.5px; font-weight: 600; color: var(--muted); white-space: nowrap; transition: color 0.2s, background 0.2s, box-shadow 0.2s; }
-    .tab:hover { color: var(--text); }
-    .tab[aria-selected="true"] { background: var(--surface-2); color: var(--text); box-shadow: var(--neu-flat-1); }
-    .term { background: #0e1318; border: 1px solid var(--line-2); border-radius: var(--neu-card); overflow: hidden; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7), var(--neu-flat-2); transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.3s ease; }
-    .term:hover { transform: translateY(-3px); box-shadow: 0 28px 70px -16px rgba(0, 0, 0, 0.85), var(--neu-flat-hover); border-color: rgba(233, 93, 44, 0.3); }
-    .term-bar { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); }
-    .term-bar > i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); }
-    .term-title { margin-left: 8px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
-    .term-bar .copy-chip { margin-left: auto; height: 34px; padding: 0 12px; }
-    .term pre { min-height: 190px; padding: 22px 24px 26px; font-family: var(--mono); font-size: clamp(13px, 1.6vw, 15px); line-height: 2; overflow-x: auto; }
-    .ln { display: block; white-space: pre; }
-    .ln .dollar { color: var(--accent); }
-    .ln.out { color: var(--muted); }
-    .ln.out .ok { color: var(--ok); }
-    .ln.cmt { color: #6f7d88; }
-    .anim .ln.pending { opacity: 0; }
-    .typing .typed::after { content: "▍"; color: var(--accent); animation: blink 1s steps(1) infinite; }
-    @keyframes blink { 50% { opacity: 0; } }
-    .works { margin-top: 24px; text-align: center; font-size: 14px; color: var(--muted); }
-    .cta-center { justify-content: center; margin-top: 32px; }
+.footer{border-top:1px solid var(--line);padding:38px 0 50px;color:#758591}
+.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:20px}.footer-brand{color:#dce4e9;font-weight:700}.footer-links{display:flex;gap:18px;font-size:12px}.footer-links a:hover{color:#fff}
 
-    /* Imagery. Screen blending turns the images' near-black into the page background, so edges disappear. */
-    .art { margin: 0; position: relative; }
-    .art img { display: block; width: 100%; height: auto; mix-blend-mode: screen; }
-    /* Hero stage (tablet and up): the image defines the box; the description sits in its top 20%,
-       the install block in its bottom 20%, and the middle 60% stays clear. */
-    .hero-stage { position: relative; width: 100%; max-width: 1240px; margin: 16px auto 0; aspect-ratio: 1983 / 793; min-height: clamp(380px, 42vw, 500px); perspective: 1200px; }
-    .hero-visual { position: absolute; inset: 0; margin: 0; overflow: hidden; border-radius: var(--neu-card); transform-style: preserve-3d; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); will-change: transform; }
-    .hero-visual img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 45% 50%; mix-blend-mode: screen;
-      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to right, transparent 0%, #000 7%, #000 93%, transparent 100%);
-      -webkit-mask-composite: source-in;
-              mask-image: linear-gradient(to bottom, transparent 0%, #000 5%, #000 95%, transparent 100%), linear-gradient(to right, transparent 0%, #000 7%, #000 93%, transparent 100%);
-              mask-composite: intersect; will-change: transform; }
-    /* Living engine core glow & energy sweep */
-    .hero-glow-core {
-      position: absolute;
-      top: 48%;
-      left: 45.5%;
-      transform: translate(-50%, -50%);
-      width: clamp(240px, 32vw, 440px);
-      height: clamp(240px, 32vw, 440px);
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(255, 126, 71, 0.6) 0%, rgba(233, 93, 44, 0.35) 30%, rgba(233, 93, 44, 0.08) 60%, transparent 75%);
-      filter: blur(28px);
-      mix-blend-mode: screen;
-      pointer-events: none;
-      z-index: 1;
-      animation: coreEnginePulse 3.8s ease-in-out infinite alternate;
-    }
-    @keyframes coreEnginePulse {
-      0% { transform: translate(-50%, -50%) scale(0.86); opacity: 0.55; filter: blur(24px); }
-      50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.95; filter: blur(34px); }
-      100% { transform: translate(-50%, -50%) scale(0.94); opacity: 0.7; filter: blur(28px); }
-    }
-    .hero-beam-scanner {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background: linear-gradient(90deg, transparent 0%, rgba(233, 93, 44, 0.04) 40%, rgba(255, 140, 90, 0.22) 50%, rgba(233, 93, 44, 0.04) 60%, transparent 100%);
-      background-size: 200% 100%;
-      mix-blend-mode: screen;
-      z-index: 1;
-      animation: beamSweep 5.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    }
-    @keyframes beamSweep {
-      0% { background-position: -120% 0; opacity: 0; }
-      20% { opacity: 1; }
-      80% { opacity: 1; }
-      100% { background-position: 220% 0; opacity: 0; }
-    }
-    /* Darkens only the two 20% bands so text stays readable; the 20–80% centre is untouched. */
-    .hero-visual::after { content: ""; position: absolute; inset: 0; pointer-events: none;
-      background: linear-gradient(to bottom, rgba(11, 15, 19, 0.82) 0%, rgba(11, 15, 19, 0.6) 17%, rgba(11, 15, 19, 0) 22%, rgba(11, 15, 19, 0) 78%, rgba(11, 15, 19, 0.6) 83%, rgba(11, 15, 19, 0.85) 100%); }
-    .hero-stage .lede, .hero-actions { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; height: 20%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-    .hero-stage .lede { top: 0; margin: 0; width: min(560px, calc(100% - 48px)); }
-    .hero-actions { bottom: 0; width: calc(100% - 48px); }
-    .hero-actions .cta { margin-top: 0; }
-    .hero-stage .lede, .hero-actions .facts { text-shadow: 0 1px 10px rgba(11, 15, 19, 0.9); }
-    .art-soft img { -webkit-mask-image: radial-gradient(closest-side, #000 62%, transparent 100%); mask-image: radial-gradient(closest-side, #000 62%, transparent 100%); }
-
-    .impact-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 24px; align-items: center; }
-    .impact-grid .metrics { grid-template-columns: 1fr; gap: 16px; }
-    .art-impact { margin: -24px 0 -24px -40px; overflow: hidden; }
-    .art-impact img { will-change: transform; }
-
-    .art-how { max-width: 860px; margin: -8px auto 36px; aspect-ratio: 21 / 8; overflow: hidden; }
-    .art-how img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 58%; will-change: transform;
-      -webkit-mask-image: radial-gradient(closest-side, #000 70%, transparent 100%); mask-image: radial-gradient(closest-side, #000 70%, transparent 100%); }
-
-    .start-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 32px; align-items: center; }
-    .start-grid .tabs { margin-left: 0; }
-    .art-start { margin-left: -32px; overflow: hidden; }
-    .art-start img { will-change: transform; }
-
-    .anim .reveal {
-      opacity: 0;
-      filter: blur(12px);
-      transform: translateY(32px) scale(0.97);
-      transition: opacity 0.95s cubic-bezier(0.16, 1, 0.3, 1),
-                  filter 0.95s cubic-bezier(0.16, 1, 0.3, 1),
-                  transform 0.95s cubic-bezier(0.16, 1, 0.3, 1);
-      will-change: opacity, filter, transform;
-    }
-    .anim .reveal.in {
-      opacity: 1;
-      filter: blur(0px);
-      transform: translateY(0) scale(1);
-    }
-
-    /* Footer */
-    .foot { border-top: 1px solid var(--line); padding: 28px 0 calc(28px + env(safe-area-inset-bottom)); font-size: 13px; color: var(--muted); }
-    .foot .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
-    .foot nav { display: flex; flex-wrap: wrap; gap: 20px; }
-    .foot nav a { padding: 4px 0; }
-    .foot nav a:hover { color: var(--text); }
-    .foot .logo { font-size: 15px; color: var(--text); }
-    .foot .logo-mark { width: 24px; height: 24px; }
-
-    /* Toast */
-    .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 60; transform: translate(-50%, 16px); opacity: 0; pointer-events: none; display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; background: #0a0e12; border: 1px solid var(--line-2); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5); font-size: 13.5px; font-weight: 500; transition: opacity 0.2s, transform 0.2s; }
-    .toast.on { opacity: 1; transform: translate(-50%, 0); }
-    .toast svg { width: 15px; height: 15px; color: var(--ok); }
-
-    /* Responsive */
-    @media (max-width: 900px) {
-      .proof { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .proof a { grid-column: 1 / -1; justify-content: center; border-top: 1px solid var(--line); }
-      .proof > div:nth-child(3) { border-right: 0; }
-    }
-    @media (max-width: 900px) {
-      .impact-grid, .start-grid { grid-template-columns: 1fr; }
-      .art-impact, .art-start { margin: -12px auto 0; max-width: 560px; }
-      .start-grid .tabs { margin-left: auto; }
-    }
-    @media (max-width: 820px) {
-      .metrics { grid-template-columns: 1fr; }
-    }
-    @media (max-width: 720px) {
-      .step-list { grid-template-columns: 1fr; grid-auto-rows: auto; gap: 20px; }
-      .step { flex-direction: row; align-items: flex-start; text-align: left; gap: 18px; }
-      .step p { max-width: none; }
-      .track { left: 25px; right: auto; top: 26px; bottom: 26px; width: 2px; height: auto; }
-      .track .fill { width: 100%; height: calc(var(--p) * 100%); transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-      .track .head { top: calc(var(--p) * 100%); left: 50%; transition: top 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-      .dot { flex: 0 0 52px; }
-      .proof { grid-template-columns: 1fr; }
-      .proof > div { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px 18px; }
-      .proof b { font-size: 20px; }
-      .proof span { margin: 0; text-align: right; }
-      .proof a { border-top: 0; }
-    }
-    @media (max-width: 760px) {
-      .hero-stage { aspect-ratio: auto; min-height: 0; margin-top: 0; display: flex; flex-direction: column; }
-      .hero-stage .lede, .hero-actions { position: relative; left: auto; transform: none; height: auto; width: auto; }
-      .hero-stage .lede { margin: 24px auto 0; padding: 0 max(24px, env(safe-area-inset-left)); }
-      .hero-actions { padding: 0 max(24px, env(safe-area-inset-left)); }
-      .hero-visual { position: relative; inset: auto; margin: -22px 0 -26px; z-index: 0; }
-      .hero-visual::after { display: none; }
-      .hero-visual img { height: auto; aspect-ratio: 2 / 1; object-position: 60% 50%;
-        -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%), linear-gradient(to right, transparent 0%, #000 5%, #000 95%, transparent 100%);
-                mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 78%, transparent 100%), linear-gradient(to right, transparent 0%, #000 5%, #000 95%, transparent 100%); }
-      .hero-actions { display: block; }
-    }
-    @media (max-width: 600px) {
-      .nav-links { gap: 12px; }
-      .nav-links .hide-sm { display: none; }
-      .mobile-toggle { display: inline-flex; }
-      .flow { margin-top: 48px; gap: 4px; }
-      .node { flex: 1 1 0; min-width: 0; max-width: 105px; width: auto; padding: 12px 4px; font-size: 11px; }
-      .node svg { width: 16px; height: 16px; }
-      .link { min-width: 12px; }
-      .art-how { aspect-ratio: 16 / 9; margin-bottom: 24px; }
-      .art-impact, .art-start { max-height: 240px; overflow: hidden; }
-      .art-impact img, .art-start img { height: 240px; object-fit: cover; }
-      .row { grid-template-columns: 44px 1fr 36px 60px; gap: 8px; font-size: 11.5px; }
-      .bar-row { grid-template-columns: 76px 1fr 72px; gap: 10px; }
-      .metric { padding: 22px 20px; }
-      .cmd { font-size: 13px; }
-      .term pre { padding: 18px 16px 20px; min-height: 176px; }
-      .term-title { display: none; }
-    }
-    @media (max-width: 480px) {
-      .nav-links .hide-xs { display: none; }
-      .term pre { font-size: 12.5px; line-height: 1.8; }
-      .ln { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 2ch; text-indent: -2ch; }
-      .row .turn { display: none; }
-      .row { grid-template-columns: 1fr 36px 60px; }
-      .cta .btn { width: 100%; }
-      .cmd { width: 100%; justify-content: space-between; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-      *, *::before, *::after { animation: none !important; transition: none !important; }
-    }
-  </style>
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .7s ease,transform .7s ease}.reveal.visible{opacity:1;transform:none}
+@media(max-width:980px){
+  .nav-links{display:none}.nav-actions .btn-ghost{display:none}.mobile-toggle{display:flex}
+  .hero{min-height:auto;padding-top:135px}.hero-visual{margin-top:50px}
+  .problem-grid,.git-grid,.demo-body,.mcp-grid{grid-template-columns:1fr}.git-copy{padding:10px 0}.demo-body{min-height:0}.terminal{border-right:0;border-bottom:1px solid var(--line)}
+  .arch-row{grid-template-columns:repeat(3,1fr)}.arch-arrow{display:none}
+  .feature-grid{grid-template-columns:repeat(2,1fr)}.integration-grid{grid-template-columns:repeat(3,1fr)}
+}
+@media(max-width:680px){
+  .container{width:min(calc(100% - 28px),var(--max))}section{padding:82px 0}
+  h1{font-size:clamp(43px,14vw,66px)}h2{font-size:clamp(34px,11vw,50px)}
+  .hero{padding-top:115px}.hero .lead{font-size:16px}.ctas{width:100%}.ctas .btn{flex:1;min-width:150px}
+  .install{max-width:100%;overflow:auto;white-space:nowrap}
+  .flow-shell{padding:14px;border-radius:18px}.flow{grid-template-columns:1fr;gap:8px}.flow-connector{height:30px}.flow-line{top:14px}.packet{top:11px}.cache-node{min-height:160px}
+  .compare-grid{grid-template-columns:1fr}.compare-card{min-height:auto}
+  .arch-wrap{padding:14px}.arch-row{grid-template-columns:1fr}.arch-arrow{display:block;transform:rotate(90deg);height:22px}
+  .feature-grid{grid-template-columns:1fr}.integration-grid{grid-template-columns:1fr 1fr}.bench-grid{grid-template-columns:1fr}
+  .quick-shell{padding:32px 18px}.quick-code{display:flex;flex-direction:column;align-items:flex-start;gap:5px}
+  .footer-inner{flex-direction:column;align-items:flex-start}.footer-links{flex-wrap:wrap}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}.packet{animation:none}.reveal{transition:none}.btn,.feature,.arch-node{transition:none}
+}
+</style>
 </head>
+
 <body>
-  <a class="skip" href="#main">Skip to content</a>
-
-  <header class="nav" id="nav">
-    <div class="wrap">
-      <a href="#top" class="logo" aria-label="OmniCache home">
-        <span class="logo-mark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
-        omnicache
-      </a>
-      <span id="version-badge" class="version-badge sr-only">v3.1.0 ACTIVE · OmniCache AI Proxy</span>
-      <nav class="nav-links" aria-label="Primary">
-        <a href="#how" class="hide-sm" data-spy="how">How it works</a>
-        <a href="#impact" class="hide-sm" data-spy="impact">Impact</a>
-        <a href="#start" class="hide-sm" data-spy="start">Get started</a>
-        <a href="docs.html" class="hide-xs">Benchmarks</a>
-        <a href="/dashboard" class="nav-dash hide-sm" aria-label="Open Live Dashboard">Dashboard ↗</a>
-        <a class="btn btn-sm gh" data-label="GitHub" href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path fill-rule="evenodd" d="M12 2C6.48 2 2 6.48 2 12.02c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.95 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.03a9.56 9.56 0 0 1 5 0c1.91-1.3 2.75-1.03 2.75-1.03.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.85-2.34 4.7-4.57 4.94.36.31.68.92.68 1.86l-.01 2.75c0 .27.18.58.69.48A10.02 10.02 0 0 0 22 12.02C22 6.48 17.52 2 12 2z"/></svg>
-          GitHub
-          <span class="stars" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg><span class="star-n"></span></span>
-        </a>
-        <button id="mobileNavToggle" class="mobile-toggle" aria-expanded="false" aria-controls="mobileDrawer" aria-label="Toggle mobile navigation menu">
-          <svg class="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-          <svg class="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </nav>
+<header class="nav" id="nav">
+  <div class="container nav-inner">
+    <a class="brand" href="#top" aria-label="OmniCache home">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 2 5 13h7l-2 9 9-12h-7l2-8Z" fill="currentColor"/></svg></span>
+      <span>OmniCache</span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation">
+      <a href="#how">How it works</a>
+      <a href="#demo">Demo</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#features">Features</a>
+      <a href="#benchmarks">Benchmarks</a>
+      <a href="docs.html">Docs</a>
+    </nav>
+    <div class="nav-actions">
+      <a class="btn btn-ghost" href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noreferrer">GitHub</a>
+      <a class="btn btn-primary" href="#quickstart">Get started</a>
+      <button class="mobile-toggle" id="mobileToggle" aria-label="Open navigation" aria-expanded="false"><span></span><span></span><span></span></button>
     </div>
-    <div id="mobileDrawer" class="mobile-drawer" hidden>
-      <nav class="mobile-nav-links" aria-label="Mobile Navigation">
-        <a href="#how" class="mob-link">How it works</a>
-        <a href="#impact" class="mob-link">Impact & Metrics</a>
-        <a href="#start" class="mob-link">Get started</a>
-        <a href="docs.html" class="mob-link">Benchmarks & Technical Report</a>
-        <a href="/dashboard" class="mob-link mob-dash">Live Telemetry Dashboard ↗</a>
-        <a href="/simulator" class="mob-link">Interactive Cache Simulator ↗</a>
-      </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="grid-bg"></div><div class="glow orange"></div>
+    <div class="container hero-copy">
+      <span class="eyebrow"><span class="dot"></span> Local caching for AI coding agents</span>
+      <h1>Stop paying for<br><span class="line2">the same AI work twice.</span></h1>
+      <p class="lead">OmniCache is a local caching sidecar that can replay unchanged agent operations, check workspace freshness, and keep repeated work closer to your machine.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="#demo">See it in action <span>↓</span></a>
+        <a class="btn btn-ghost" href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noreferrer">View on GitHub <span>↗</span></a>
+      </div>
+      <div class="install"><span class="prompt">$</span><span>pip install omnicache-proxy</span><button id="copyInstall" aria-label="Copy install command">copy</button></div>
+
+      <div class="hero-visual reveal">
+        <div class="flow-shell">
+          <div class="flow-top"><span>REQUEST PATH / LOCAL SIDEcar</span><span class="live"><i class="dot"></i> flow active</span></div>
+          <div class="flow">
+            <div class="node">
+              <span class="tag">01 / agent</span>
+              <strong>AI coding agent</strong>
+              <p>Claude Code · Cursor · Cline · Aider</p>
+            </div>
+            <div class="node cache-node active">
+              <span class="tag">02 / interceptor</span>
+              <div class="cache-core"><svg viewBox="0 0 24 24" fill="none"><path d="M7 6h10v12H7z" stroke="currentColor" stroke-width="1.6"/><path d="M9 3h6v3H9zM9 9h6M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+              <strong style="text-align:center">OmniCache</strong>
+              <p style="text-align:center">Git check → cache lookup → replay or upstream</p>
+            </div>
+            <div class="node">
+              <span class="tag">03 / outcome</span>
+              <span class="hit-pill">● CACHE HIT</span>
+              <strong>Local replay</strong>
+              <p>Unchanged work can return without another upstream turn.</p>
+            </div>
+          </div>
+          <div class="flow-connector"><div class="flow-line"></div><i class="packet"></i><i class="packet p2"></i></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="node" style="min-height:auto;padding:13px"><span class="hit-pill">LOCAL</span><span style="margin-left:8px;font:10px var(--mono);color:#788994">replay path</span></div>
+            <div class="node" style="min-height:auto;padding:13px"><span class="miss-pill">MISS</span><span style="margin-left:8px;font:10px var(--mono);color:#788994">forward upstream + record</span></div>
+          </div>
+        </div>
+        <div class="hero-note">The visualization is an illustrative request flow. Runtime behavior depends on the configured agent, cache state, and workspace.</div>
+      </div>
     </div>
-  </header>
+  </section>
 
-  <main id="main">
-    <!-- 1 · HERO -->
-    <section class="hero" id="top">
-      <div class="wrap">
-        <p class="kicker"><span class="live" aria-hidden="true"></span>Local cache for AI agents</p>
-        <h1>Stop paying<br class="br-sm"> twice<br class="br-lg"> <span class="accent">for AI.</span></h1>
-        <div class="hero-stage" id="heroStage">
-        <p class="lede">OmniCache answers repeat calls from Claude Code, Cursor and any LLM app on your own machine, in milliseconds, without spending a token.</p>
-        <figure class="hero-visual" aria-hidden="true" id="heroVisual">
-          <div class="hero-glow-core" aria-hidden="true"></div>
-          <div class="hero-beam-scanner" aria-hidden="true"></div>
-          <img id="heroImg" src="img/hero-1983.webp" srcset="img/hero-1000.webp 1000w, img/hero-1983.webp 1983w" sizes="(max-width: 1240px) 100vw, 1240px" width="1983" height="793" alt="" fetchpriority="high" decoding="async">
-        </figure>
-        <div class="hero-actions">
-        <div class="cta">
-          <button class="cmd" id="copyCmd" type="button" aria-label="Copy install command: pip install omnicache-proxy">
-            <span><span class="dollar">$</span> pip install omnicache-proxy</span>
-            <span class="copy-chip"><svg class="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span class="copy-label">Copy</span></span>
-          </button>
-          <a class="btn" href="#how">See how it works</a>
-          <a class="btn btn-dash" href="/dashboard">Live Dashboard ↗</a>
+  <section class="problem" id="how">
+    <div class="container">
+      <div class="problem-grid">
+        <div class="section-head reveal">
+          <span class="eyebrow">The repetitive loop</span>
+          <h2>Your agent keeps asking the same questions.</h2>
+          <p>Reading unchanged files, inspecting directories, repeating deterministic tool calls, and revisiting the same context can create work that does not need another trip through the cloud.</p>
         </div>
-        <p class="facts">
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Runs on localhost</span>
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>No code changes</span>
-          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>Python 3.9+</span>
-        </p>
-        </div>
-        </div>
-
-        <div class="flow" role="img" aria-label="Diagram: your agent's first request goes through OmniCache to the LLM API. Repeat requests are answered by OmniCache without reaching the API.">
-          <div class="node">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></svg>
-            Your agent
-          </div>
-          <div class="link"><span class="pkt" id="pktA"></span></div>
-          <div class="node node-core" id="nodeCore">
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>
-            OmniCache
-          </div>
-          <div class="link"><span class="pkt" id="pktB"></span></div>
-          <div class="node node-cloud" id="nodeCloud">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>
-            LLM API
-            <span class="wait" aria-hidden="true"><i></i><i></i><i></i></span>
-          </div>
-        </div>
-
-        <div class="log" aria-hidden="true">
-          <div class="row"><span class="turn">turn 1</span><code>read_file("package.json")</code><span class="tag">MISS</span><span class="t">1,450 ms</span></div>
-          <div class="row"><span class="turn">turn 2</span><code>read_file("package.json")</code><span class="tag hit">HIT</span><span class="t hit">1.8 ms</span></div>
-          <div class="row"><span class="turn">turn 3</span><code>read_file("package.json")</code><span class="tag hit">HIT</span><span class="t hit">1.8 ms</span></div>
+        <div class="request-stack reveal">
+          <div class="req"><i>01</i><span>Read src/cache.py</span><span class="cloud">↗ CLOUD</span></div>
+          <div class="req"><i>02</i><span>List project files</span><span class="cloud">↗ CLOUD</span></div>
+          <div class="req"><i>03</i><span>Check git status</span><span class="cloud">↗ CLOUD</span></div>
+          <div class="req"><i>04</i><span>Read src/cache.py</span><span class="cloud">↗ CLOUD</span></div>
+          <div class="repeat">same work · again</div>
         </div>
       </div>
-    </section>
-
-    <!-- 2 · IMPACT -->
-    <section class="sec" id="impact" aria-labelledby="impact-h">
-      <div class="wrap">
-        <h2 class="h2 reveal" id="impact-h">Same session.<br><span class="accent">A fraction of the cost.</span></h2>
-        <div class="impact-grid">
-        <figure class="art art-soft art-impact reveal" aria-hidden="true">
-          <img class="parallax-img" src="img/impact-1536.webp" srcset="img/impact-768.webp 768w, img/impact-1536.webp 1536w" sizes="(max-width: 900px) 92vw, 560px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
-        </figure>
-        <div class="metrics reveal" id="metrics">
-          <div class="metric">
-            <div class="m-head"><span class="m-label">Wait time</span><span class="m-delta">−75%</span></div>
-            <div class="bar-row"><span class="b-name">Direct</span><div class="bar"><i style="--w: 1"></i></div><span class="b-val" data-count="5800" data-suffix=" ms">5,800 ms</span></div>
-            <div class="bar-row hit"><span class="b-name">OmniCache</span><div class="bar"><i style="--w: 0.2509"></i></div><span class="b-val" data-count="1455" data-suffix=" ms">1,455 ms</span></div>
-          </div>
-          <div class="metric">
-            <div class="m-head"><span class="m-label">Tokens billed</span><span class="m-delta">−75%</span></div>
-            <div class="bar-row"><span class="b-name">Direct</span><div class="bar"><i style="--w: 1"></i></div><span class="b-val" data-count="3280">3,280</span></div>
-            <div class="bar-row hit"><span class="b-name">OmniCache</span><div class="bar"><i style="--w: 0.25"></i></div><span class="b-val" data-count="820">820</span></div>
-          </div>
-        </div>
-        </div>
-        <p class="note">Illustrative 4-turn session re-reading one unchanged file: one miss at 1,450&nbsp;ms and 820 tokens, then three local hits at 1.8&nbsp;ms each.</p>
-
-        <p class="proof-label">Measured on a 4-vCPU machine</p>
-        <div class="proof reveal">
-          <div><b>9&nbsp;µs</b><span>exact-match lookup (p50)</span></div>
-          <div><b>0.18&nbsp;ms</b><span>near-duplicate lookup (p50)</span></div>
-          <div><b>0 / 20</b><span>false matches on unrelated prompts</span></div>
-          <a href="docs.html">Benchmark report
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-          </a>
-        </div>
-      </div>
-    </section>
-
-    <!-- 3 · HOW IT WORKS -->
-    <section class="sec" id="how" aria-labelledby="how-h">
-      <div class="wrap">
-        <h2 class="h2 reveal" id="how-h">Four checks.<br><span class="accent">Under a millisecond.</span></h2>
-        <figure class="art art-how reveal" aria-hidden="true">
-          <img class="parallax-img" src="img/how-1536.webp" srcset="img/how-768.webp 768w, img/how-1536.webp 1536w" sizes="(max-width: 900px) 100vw, 860px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
-        </figure>
-        <div class="steps reveal" id="steps">
-          <div class="track" aria-hidden="true"><i class="fill"></i><i class="head"></i></div>
-          <ol class="step-list">
-            <li class="step on">
-              <div class="dot" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-              <div><span class="num">01</span><h3>Intercept</h3><p>Sits on localhost between your agent and the API.</p></div>
-            </li>
-            <li class="step on">
-              <div class="dot" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M6 9v12"/></svg></div>
-              <div><span class="num">02</span><h3>Verify</h3><p>Git SHA and mtime checks. Edited files are never replayed.</p></div>
-            </li>
-            <li class="step on">
-              <div class="dot" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></div>
-              <div><span class="num">03</span><h3>Replay</h3><p>Exact repeats are served from memory.</p></div>
-            </li>
-            <li class="step on">
-              <div class="dot" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
-              <div><span class="num">04</span><h3>Match</h3><p>Reworded prompts match too, with stricter rules for code.</p></div>
-            </li>
-          </ol>
-        </div>
-        <p class="miss-note"><b>Miss?</b> Forwarded once, then cached.</p>
-      </div>
-    </section>
-
-    <!-- 4 · GET STARTED -->
-    <section class="sec" id="start" aria-labelledby="start-h">
-      <div class="wrap">
-        <h2 class="h2 reveal" id="start-h">One install.<br><span class="accent">Zero config.</span></h2>
-
-        <div class="start-grid">
-        <figure class="art art-soft art-start reveal" aria-hidden="true">
-          <img class="parallax-img" src="img/start-1536.webp" srcset="img/start-768.webp 768w, img/start-1536.webp 1536w" sizes="(max-width: 900px) 92vw, 480px" width="1536" height="1024" alt="" loading="lazy" decoding="async">
-        </figure>
-        <div class="start-main reveal">
-        <div class="tabs" role="tablist" aria-label="Choose your agent">
-          <button class="tab" role="tab" id="tab-claude" aria-selected="true" aria-controls="term" data-agent="claude" type="button">Claude Code</button>
-          <button class="tab" role="tab" id="tab-cursor" aria-selected="false" aria-controls="term" data-agent="cursor" type="button" tabindex="-1">Cursor</button>
-          <button class="tab" role="tab" id="tab-any" aria-selected="false" aria-controls="term" data-agent="any" type="button" tabindex="-1">Any LLM app</button>
-        </div>
-
-        <div class="term" id="term" role="tabpanel" aria-labelledby="tab-claude">
-          <div class="term-bar">
-            <i></i><i></i><i></i>
-            <span class="term-title" aria-hidden="true">~/your-project</span>
-            <button class="copy-chip" id="termCopy" type="button" aria-label="Copy commands">
-              <svg class="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              <svg class="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>
-              <span class="copy-label">Copy</span>
-            </button>
-          </div>
-<pre><code id="termCode"><span class="ln"><span class="dollar">$ </span>pip install omnicache-proxy</span><span class="ln"><span class="dollar">$ </span>omnicache run claude</span><span class="ln out"><span class="ok">✓</span> Proxy on http://127.0.0.1:8000</span><span class="ln out"><span class="ok">✓</span> ANTHROPIC_BASE_URL set · launching claude</span></code></pre>
-        </div>
-        </div>
-        </div>
-        <p class="works">Works with Claude Code · Cursor · Cline · Aider · any OpenAI- or Anthropic-compatible client</p>
-        <div class="cta cta-center">
-          <a class="btn btn-primary gh" data-label="Star on GitHub" href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener">
-            Star on GitHub
-            <span class="stars" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg><span class="star-n"></span></span>
-          </a>
-          <a class="btn" href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md" target="_blank" rel="noopener">Read the quickstart</a>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer class="foot">
-    <div class="wrap">
-      <a href="#top" class="logo" aria-label="OmniCache, back to top">
-        <span class="logo-mark"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg></span>
-        omnicache
-      </a>
-      <nav aria-label="Footer">
-        <a href="/dashboard" style="color: var(--accent); font-weight: 500;">Live Dashboard ↗</a>
-        <a href="/simulator">Simulator</a>
-        <a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://pypi.org/project/omnicache-proxy/" target="_blank" rel="noopener">PyPI</a>
-        <a href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/QUICKSTART_GUIDE.md" target="_blank" rel="noopener">Docs</a>
-        <a href="docs.html">Benchmarks</a>
-        <a href="/legacy">Legacy Site</a>
-        <a href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/docs/PRIVACY_POLICY.md" target="_blank" rel="noopener">Privacy</a>
-        <a href="https://github.com/13manmayarai-hash/omnicache-proxy/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
-      </nav>
-      <span>omnicache.rawwgrid.com · Local-first · Source available (FSL-1.1-MIT)</span>
     </div>
-  </footer>
+  </section>
 
-  <div class="toast" id="toast" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M20 6 9 17l-5-5"/></svg><span class="toast-msg">Copied to clipboard</span></div>
-  <p class="sr-only" aria-live="polite" id="copyStatus"></p>
+  <section class="compare">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">The difference</span>
+        <h2>Keep repeatable work close.</h2>
+        <p>OmniCache sits between the agent and the upstream provider. A miss can continue upstream; a valid hit can be replayed locally.</p>
+      </div>
+      <div class="compare-grid">
+        <article class="compare-card bad reveal">
+          <div class="compare-title"><strong>Without OmniCache</strong><span>REPEATED PATH</span></div>
+          <div class="pipeline">
+            <div class="pipe-step"><span class="num">01</span>AI agent<span class="state">REQUEST</span></div>
+            <div class="pipe-arrow">↓</div>
+            <div class="pipe-step cloud"><span class="num">02</span>Remote provider<span class="state">ROUNDTRIP</span></div>
+            <div class="pipe-arrow">↓</div>
+            <div class="pipe-step"><span class="num">03</span>Response<span class="state">TOKENS</span></div>
+            <div class="pipe-arrow">↻</div>
+            <div class="pipe-step cloud"><span class="num">04</span>Same request again<span class="state">ROUNDTRIP</span></div>
+          </div>
+        </article>
+        <article class="compare-card good reveal">
+          <div class="compare-title"><strong>With OmniCache</strong><span>LOCAL REPLAY</span></div>
+          <div class="pipeline">
+            <div class="pipe-step"><span class="num">01</span>AI agent<span class="state">REQUEST</span></div>
+            <div class="pipe-arrow">↓</div>
+            <div class="pipe-step"><span class="num">02</span>OmniCache<span class="state">CHECK</span></div>
+            <div class="pipe-arrow">↓</div>
+            <div class="pipe-step hit"><span class="num">03</span>Cache hit<span class="state">VALID</span></div>
+            <div class="pipe-arrow">↓</div>
+            <div class="pipe-step hit"><span class="num">04</span>Local replay<span class="state">NO UPSTREAM TURN</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
 
-  <script>
-    (() => {
-      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!reduce) document.documentElement.classList.add('anim');
+  <section class="demo" id="demo">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Interactive demo</span>
+        <h2>See the cache decide.</h2>
+        <p>Run the same request twice. This front-end demo visualizes the cache decision; it does not claim to be connected to a live provider.</p>
+      </div>
+      <div class="demo-shell reveal">
+        <div class="demo-bar"><i class="window-dot"></i><i class="window-dot"></i><i class="window-dot"></i><span>omnicache / request-inspector</span></div>
+        <div class="demo-body">
+          <div class="terminal" id="terminal" aria-live="polite">
+            <div><span class="dim">$</span> omnicache inspect --request</div>
+            <div><span class="dim">›</span> Read <span class="orange">src/cache.py</span></div>
+            <div><span class="dim">›</span> checking workspace signature...</div>
+            <div><span class="dim">›</span> exact cache lookup...</div>
+            <div id="terminalResult"><span class="success">✓ CACHE HIT</span> <span class="dim">local replay selected</span></div>
+            <br>
+            <div><span class="dim">path:</span> localhost</div>
+            <div><span class="dim">mode:</span> deterministic replay</div>
+            <div><span class="dim">upstream:</span> skipped</div>
+          </div>
+          <div class="demo-controls">
+            <label for="demoInput">Request</label>
+            <input id="demoInput" class="demo-input" value="Read src/cache.py" aria-label="Demo request">
+            <div class="demo-buttons">
+              <button class="btn btn-primary" id="runDemo">Run request</button>
+              <button class="btn btn-ghost" id="missDemo">Force miss</button>
+            </div>
+            <div class="status-card">
+              <div class="status" id="demoStatus">● CACHE HIT</div>
+              <h3 id="demoHeadline">Local replay</h3>
+              <p class="small" id="demoReason">Valid cache entry selected for this illustrative request.</p>
+              <div class="metrics">
+                <div class="metric"><span>Decision</span><strong id="mDecision">HIT</strong></div>
+                <div class="metric"><span>Path</span><strong id="mPath">LOCAL</strong></div>
+                <div class="metric"><span>State</span><strong id="mState">UNCHANGED</strong></div>
+                <div class="metric"><span>Demo latency</span><strong id="mLatency">0.06 ms*</strong></div>
+              </div>
+            </div>
+            <p class="small" style="margin-top:12px">* Illustrative UI value based on the project's documented local L1 benchmark; not a live measurement.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      const $ = (s, r = document) => r.querySelector(s);
-      const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-      const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  <section class="git-section">
+    <div class="container">
+      <div class="git-grid">
+        <div class="git-visual reveal" id="gitVisual">
+          <div class="file-row"><code>src/cache.py</code><span class="hash" id="hashA">sha: 8a2f…19d</span></div>
+          <div class="git-arrow">↓ workspace check</div>
+          <div class="file-row"><code>cached operation</code><span class="hit-pill">VALID</span></div>
+          <div class="git-arrow">↓ edit detected</div>
+          <div class="invalidation" id="invalidation">● CACHE ENTRY INVALIDATED</div>
+          <div class="file-row"><code>src/cache.py</code><span class="hash changed" id="hashB">sha: c71e…42a</span></div>
+        </div>
+        <div class="git-copy reveal">
+          <span class="eyebrow">Git-aware freshness</span>
+          <h2>Your code changed.<br><span class="orange">Your cache knows.</span></h2>
+          <p>OmniCache can use workspace and Git state when determining whether cached work is still applicable. When relevant state changes, the cache can stop replaying that entry.</p>
+          <div class="toggle" id="gitToggle"><span class="switch"><i></i></span><span>SIMULATE FILE EDIT</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      /* ---------- Nav: background on scroll + current-section highlight ---------- */
-      const nav = $('#nav');
-      let navTick = false;
-      const onScroll = () => {
-        if (navTick) return;
-        navTick = true;
-        requestAnimationFrame(() => { nav.classList.toggle('scrolled', window.scrollY > 8); navTick = false; });
-      };
-      window.addEventListener('scroll', onScroll, { passive: true });
-      onScroll();
+  <section class="arch" id="architecture">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Under the hood</span>
+        <h2>A cache fabric built around the agent loop.</h2>
+        <p>Trace the request from your coding agent through the local sidecar, cache layers, persistence, and upstream provider.</p>
+      </div>
+      <div class="arch-wrap reveal">
+        <div class="arch-row">
+          <div class="arch-node" tabindex="0" data-detail="The developer's AI coding environment initiates a tool call or model request."><span class="num">01</span><strong>AI Agent</strong><p>Claude Code, Cursor, Cline, Aider and compatible workflows.</p></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node" tabindex="0" data-detail="The local proxy intercepts configured traffic and decides whether cached work can be replayed."><span class="num">02</span><strong>OmniCache</strong><p>Local proxy / sidecar entry point.</p></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node" tabindex="0" data-detail="Workspace and Git state can participate in freshness decisions before replay."><span class="num">03</span><strong>Git Check</strong><p>Freshness and workspace state.</p></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node" tabindex="0" data-detail="Exact and semantic cache paths can be used according to the implementation and request type."><span class="num">04</span><strong>Cache Layers</strong><p>Exact + semantic lookup paths.</p></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node" tabindex="0" data-detail="Persisted cache data and tool signatures can be stored locally using the project's persistence layer."><span class="num">05</span><strong>Persistence</strong><p>Local storage and replay records.</p></div>
+          <div class="arch-arrow">→</div>
+          <div class="arch-node" tabindex="0" data-detail="Cache misses continue to the configured upstream provider and can be recorded for future reuse."><span class="num">06</span><strong>Provider</strong><p>Upstream only when needed.</p></div>
+        </div>
+        <div class="arch-detail" id="archDetail"><b>Hover or focus a node.</b> The architecture view will explain that layer.</div>
+      </div>
+    </div>
+  </section>
 
-      const spyLinks = $$('[data-spy]');
-      const spyIO = new IntersectionObserver((entries) => {
-        entries.forEach((e) => {
-          if (!e.isIntersecting) return;
-          spyLinks.forEach((a) => {
-            const on = a.dataset.spy === e.target.id;
-            a.classList.toggle('active', on);
-            if (on) a.setAttribute('aria-current', 'location'); else a.removeAttribute('aria-current');
-          });
-        });
-      }, { rootMargin: '-45% 0px -50% 0px' });
-      ['top', 'impact', 'how', 'start'].forEach((id) => spyIO.observe(document.getElementById(id)));
+  <section class="features" id="features">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Core capabilities</span>
+        <h2>Less repetition. More signal.</h2>
+      </div>
+      <div class="feature-grid">
+        <article class="feature reveal"><div class="feature-icon">↺</div><h3>Exact cache</h3><p>Replay matching requests when the relevant cache entry is valid.</p></article>
+        <article class="feature reveal"><div class="feature-icon">≈</div><h3>Semantic cache</h3><p>Support near-duplicate or intent-based lookup paths where configured.</p></article>
+        <article class="feature reveal"><div class="feature-icon">⌘</div><h3>Git-aware freshness</h3><p>Use workspace state to avoid blindly replaying stale work.</p></article>
+        <article class="feature reveal"><div class="feature-icon">▣</div><h3>Local replay</h3><p>Keep eligible repeated operations on the local path.</p></article>
+        <article class="feature reveal"><div class="feature-icon">◈</div><h3>Agent support</h3><p>Designed around modern AI coding-agent workflows.</p></article>
+        <article class="feature reveal"><div class="feature-icon">M</div><h3>MCP</h3><p>Native MCP tooling for local agent workflows and integrations.</p></article>
+        <article class="feature reveal"><div class="feature-icon">⌁</div><h3>Telemetry</h3><p>Inspect cache behavior, replay activity, and session-level signals.</p></article>
+        <article class="feature reveal"><div class="feature-icon">▤</div><h3>Developer dashboard</h3><p>Explore request flows and cache activity through the included dashboard tooling.</p></article>
+      </div>
+    </div>
+  </section>
 
-      /* ---------- Copy (Clipboard API with a fallback for non-secure contexts) ---------- */
-      const status = $('#copyStatus');
-      const toast = $('#toast');
-      let toastT;
-      const writeClip = async (text) => {
-        try { await navigator.clipboard.writeText(text); return true; } catch (_) { /* fall through */ }
-        try {
-          const ta = document.createElement('textarea');
-          ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
-          document.body.appendChild(ta); ta.select();
-          const ok = document.execCommand('copy');
-          ta.remove();
-          return ok;
-        } catch (_) { return false; }
-      };
-      const copy = async (text, btn, showToast = false) => {
-        const ok = await writeClip(text);
-        const label = btn.querySelector('.copy-label');
-        const msg = ok ? 'Copied' : 'Press Ctrl+C';
-        status.textContent = ok ? 'Copied to clipboard' : 'Copy failed. Select the text and copy it manually.';
-        btn.classList.toggle('copied', ok);
-        if (label) label.textContent = msg;
-        if (ok && showToast) {
-          toast.classList.add('on');
-          clearTimeout(toastT);
-          toastT = setTimeout(() => toast.classList.remove('on'), 1600);
-        }
-        setTimeout(() => { btn.classList.remove('copied'); if (label) label.textContent = 'Copy'; }, 1800);
-      };
-      $('#copyCmd').addEventListener('click', (e) => copy('pip install omnicache-proxy', e.currentTarget, false));
+  <section class="integrations">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Developer workflows</span>
+        <h2>Built for the agent loop you already use.</h2>
+        <p>OmniCache documents support for several popular coding-agent environments and custom runners.</p>
+      </div>
+      <div class="integration-grid">
+        <div class="integration reveal"><strong>Claude Code</strong><span>Local proxy launch workflow.</span></div>
+        <div class="integration reveal"><strong>Cursor</strong><span>OpenAI-compatible base URL workflow.</span></div>
+        <div class="integration reveal"><strong>Cline</strong><span>Agent configuration support.</span></div>
+        <div class="integration reveal"><strong>Aider</strong><span>Agent-oriented caching workflow.</span></div>
+        <div class="integration reveal"><strong>Custom agents</strong><span>Run through the local proxy.</span></div>
+      </div>
+    </div>
+  </section>
 
-      /* ---------- Mobile navigation drawer toggle ---------- */
-      const mobToggle = $('#mobileNavToggle');
-      const mobDrawer = $('#mobileDrawer');
-      if (mobToggle && mobDrawer) {
-        mobToggle.addEventListener('click', () => {
-          const open = mobToggle.getAttribute('aria-expanded') === 'true';
-          mobToggle.setAttribute('aria-expanded', String(!open));
-          mobDrawer.hidden = open;
-        });
-        $$('.mob-link', mobDrawer).forEach((a) => {
-          a.addEventListener('click', () => {
-            mobToggle.setAttribute('aria-expanded', 'false');
-            mobDrawer.hidden = true;
-          });
-        });
-      }
+  <section class="bench" id="benchmarks">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Project benchmarks</span>
+        <h2>Measured locally, not hand-waved.</h2>
+        <p>The repository publishes local micro-benchmark results. Treat these as project measurements, not universal performance guarantees.</p>
+      </div>
+      <div class="bench-grid">
+        <article class="bench-card reveal"><div class="value">0.0609</div><div class="unit">ms / documented L1 replay</div><h3>Exact request cache</h3><p>Repository benchmark for the local exact-cache path.</p></article>
+        <article class="bench-card reveal"><div class="value">1.0232</div><div class="unit">ms / documented fuzzy lookup</div><h3>Near-duplicate path</h3><p>Repository benchmark for its FastHash fuzzy/near-duplicate path.</p></article>
+        <article class="bench-card reveal"><div class="value">0.3052</div><div class="unit">ms / documented tool replay</div><h3>Agent tool replayer</h3><p>Repository benchmark for the Git-aware local replay path.</p></article>
+      </div>
+      <div class="bench-note reveal">Benchmark context: the README describes these as locally measured values on commodity ARM/x86 hardware with Python 3.10–3.14. Upstream-turn figures in the repository are estimates, so this site does not present them as controlled apples-to-apples network benchmarks.</div>
+    </div>
+  </section>
 
-      /* ---------- Get started: per-agent tabs ---------- */
-      const AGENTS = {
-        claude: {
-          cmds: ['pip install omnicache-proxy', 'omnicache run claude'],
-          out: ['Proxy on http://127.0.0.1:8000', 'ANTHROPIC_BASE_URL set · launching claude'],
-        },
-        cursor: {
-          cmds: ['pip install omnicache-proxy', 'omnicache run cursor .'],
-          out: ['Proxy on http://127.0.0.1:8000', 'OPENAI_BASE_URL set · launching cursor'],
-        },
-        any: {
-          cmds: ['pip install omnicache-proxy', 'omnicache start &', 'export OPENAI_BASE_URL=http://127.0.0.1:8000/v1'],
-          out: ['Point any OpenAI- or Anthropic-compatible client here'],
-        },
-      };
-      const tabs = $$('.tab');
-      const term = $('#term');
-      const code = $('#termCode');
-      let agent = 'claude';
-      let typingRun = 0;
+  <section class="mcp">
+    <div class="container">
+      <div class="mcp-grid">
+        <div class="mcp-card reveal">
+          <span class="eyebrow">Model Context Protocol</span>
+          <h3 style="margin-top:18px">Give your agent a cache-aware tool layer.</h3>
+          <p>OmniCache includes an MCP server workflow documented for local stdio use and a streamable HTTP transport.</p>
+          <div class="code"><span class="c">claude</span> mcp add omnicache -- <span class="g">omnicache mcp</span></div>
+        </div>
+        <div class="mcp-card reveal">
+          <span class="eyebrow">Local first</span>
+          <h3 style="margin-top:18px">Make the request path visible.</h3>
+          <p>Use the dashboard and telemetry tooling to inspect what is being intercepted, replayed, or sent upstream.</p>
+          <div class="code"><span class="d"># start a local agent session</span><br><span class="c">$</span> omnicache run claude<br><span class="d"># inspect the session after it exits</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      const lineHTML = (kind, text, pending) => {
-        const cls = 'ln' + (kind === 'out' ? ' out' : '') + (pending ? ' pending' : '');
-        return kind === 'out'
-          ? `<span class="${cls}"><span class="ok">✓</span> ${esc(text)}</span>`
-          : `<span class="${cls}" data-text="${esc(text)}"><span class="dollar">$ </span><span class="typed">${esc(text)}</span></span>`;
-      };
-      const render = (key, pending = false) => {
-        const a = AGENTS[key];
-        code.innerHTML = a.cmds.map((c) => lineHTML('cmd', c, pending)).join('') + a.out.map((o) => lineHTML('out', o, pending)).join('');
-      };
-      const selectTab = (key, focus) => {
-        agent = key;
-        typingRun++; // cancels any typing in progress
-        tabs.forEach((t) => {
-          const on = t.dataset.agent === key;
-          t.setAttribute('aria-selected', String(on));
-          t.tabIndex = on ? 0 : -1;
-          if (on) { term.setAttribute('aria-labelledby', t.id); if (focus) t.focus(); }
-        });
-        render(key);
-      };
-      tabs.forEach((t, i) => {
-        t.addEventListener('click', () => selectTab(t.dataset.agent));
-        t.addEventListener('keydown', (e) => {
-          const dir = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
-          if (e.key === 'Home' || e.key === 'End' || dir) {
-            e.preventDefault();
-            const n = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + dir + tabs.length) % tabs.length;
-            selectTab(tabs[n].dataset.agent, true);
-          }
-        });
-      });
-      $('#termCopy').addEventListener('click', (e) => copy(AGENTS[agent].cmds.join('\n'), e.currentTarget, true));
+  <section class="quickstart" id="quickstart">
+    <div class="container">
+      <div class="quick-shell reveal">
+        <span class="eyebrow">Start locally</span>
+        <h2 style="margin-top:20px">Give your AI agent a memory.</h2>
+        <p>Install the proxy, launch your supported coding agent through OmniCache, and inspect the resulting cache behavior.</p>
+        <div class="quick-code">
+          <span class="cmd"><b>$</b> pip install omnicache-proxy</span>
+          <span class="cmd"><b>$</b> omnicache run claude</span>
+        </div>
+        <div class="ctas" style="margin-bottom:0">
+          <a class="btn btn-primary" href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noreferrer">Open repository ↗</a>
+          <a class="btn btn-ghost" href="docs.html">Read documentation →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
 
-      /* ---------- GitHub stars (progressive enhancement; hidden below a threshold) ---------- */
-      const STAR_MIN = 25;
-      const showStars = (n) => {
-        if (!(n >= STAR_MIN)) return;
-        const label = n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
-        $$('.gh').forEach((a) => {
-          a.classList.add('has-stars');
-          $('.star-n', a).textContent = label;
-          a.setAttribute('aria-label', `${a.dataset.label}, ${n.toLocaleString('en-US')} stars`);
-        });
-      };
-      try {
-        const cached = JSON.parse(sessionStorage.getItem('omc-stars') || 'null');
-        if (cached && Date.now() - cached.t < 36e5) showStars(cached.n);
-        else throw 0;
-      } catch (_) {
-        fetch('https://api.github.com/repos/13manmayarai-hash/omnicache-proxy', { headers: { Accept: 'application/vnd.github+json' } })
-          .then((r) => (r.ok ? r.json() : null))
-          .then((d) => {
-            if (!d || typeof d.stargazers_count !== 'number') return;
-            showStars(d.stargazers_count);
-            try { sessionStorage.setItem('omc-stars', JSON.stringify({ n: d.stargazers_count, t: Date.now() })); } catch (_) {}
-          })
-          .catch(() => {});
-      }
+<footer class="footer">
+  <div class="container footer-inner">
+    <div><span class="footer-brand">OmniCache</span><span class="small"> · local caching for AI coding agents</span></div>
+    <div class="footer-links">
+      <a href="docs.html">Docs</a><a href="simulator.html">Simulator</a><a href="index.html">Dashboard</a><a href="https://github.com/13manmayarai-hash/omnicache-proxy" target="_blank" rel="noreferrer">GitHub ↗</a>
+    </div>
+  </div>
+</footer>
 
-      if (reduce) return; // Static final states are already in the markup.
+<script>
+(function(){
+  const nav=document.getElementById('nav');
+  const toggle=document.getElementById('mobileToggle');
+  function onScroll(){nav.classList.toggle('scrolled',window.scrollY>12)}
+  window.addEventListener('scroll',onScroll,{passive:true});onScroll();
 
-      /* ---------- Visibility gates: loops pause while off-screen or in a hidden tab ---------- */
-      const gate = (el, threshold = 0.3) => {
-        const state = { visible: false, waiters: [] };
-        const release = () => { if (state.visible && !document.hidden) state.waiters.splice(0).forEach((r) => r()); };
-        new IntersectionObserver(([entry]) => { state.visible = entry.isIntersecting; release(); }, { threshold }).observe(el);
-        document.addEventListener('visibilitychange', release);
-        state.wait = () => (state.visible && !document.hidden ? Promise.resolve() : new Promise((r) => state.waiters.push(r)));
-        return state;
-      };
-      const once = (el, fn, threshold = 0.35) => {
-        const io = new IntersectionObserver(([entry]) => {
-          if (entry.isIntersecting) { io.disconnect(); fn(); }
-        }, { threshold });
-        io.observe(el);
-      };
+  if(toggle){
+    toggle.addEventListener('click',function(){
+      const open=toggle.getAttribute('aria-expanded')==='true';
+      toggle.setAttribute('aria-expanded',String(!open));
+      let menu=document.getElementById('mobileMenu');
+      if(!menu){
+        menu=document.createElement('div');menu.id='mobileMenu';
+        menu.style.cssText='position:fixed;top:70px;left:14px;right:14px;background:#0e141a;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px;z-index:99;box-shadow:0 30px 80px rgba(0,0,0,.5)';
+        menu.innerHTML='<a href="#how" style="display:block;padding:12px;color:#c5d0d8">How it works</a><a href="#demo" style="display:block;padding:12px;color:#c5d0d8">Demo</a><a href="#architecture" style="display:block;padding:12px;color:#c5d0d8">Architecture</a><a href="#features" style="display:block;padding:12px;color:#c5d0d8">Features</a><a href="#benchmarks" style="display:block;padding:12px;color:#c5d0d8">Benchmarks</a><a href="docs.html" style="display:block;padding:12px;color:#c5d0d8">Docs</a>';
+        document.body.appendChild(menu);
+        menu.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{menu.remove();toggle.setAttribute('aria-expanded','false')}));
+      }else menu.remove();
+    });
+  }
 
-      $$('.reveal').forEach((el) => once(el, () => el.classList.add('in'), 0.2));
+  const copy=document.getElementById('copyInstall');
+  if(copy) copy.addEventListener('click',async()=>{
+    try{await navigator.clipboard.writeText('pip install omnicache-proxy');copy.textContent='copied';setTimeout(()=>copy.textContent='copy',1200)}
+    catch(e){copy.textContent='select'}
+  });
 
-      /* 1 · Hero flow: first call goes to the cloud, repeats bounce back from OmniCache. */
-      const heroGate = gate($('.flow'), 0.2);
-      const pktA = $('#pktA'), pktB = $('#pktB'), core = $('#nodeCore'), cloud = $('#nodeCloud');
-      const rows = $$('.log .row');
-      const move = async (pkt, from, to, duration, hit) => {
-        await heroGate.wait();
-        pkt.classList.toggle('hit', !!hit);
-        await pkt.animate(
-          [{ left: from, opacity: 1 }, { left: to, opacity: 1 }],
-          { duration, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' }
-        ).finished;
-      };
-      const flash = (el, cls, ms) => { el.classList.add(cls); setTimeout(() => el.classList.remove(cls), ms); };
-      (async function heroLoop() {
-        for (;;) {
-          rows.forEach((r) => r.classList.remove('show'));
-          await sleep(700);
-          await move(pktA, '0%', '100%', 650);
-          await move(pktB, '0%', '100%', 650);
-          cloud.classList.add('busy');
-          await sleep(900);
-          cloud.classList.remove('busy');
-          await move(pktB, '100%', '0%', 650);
-          flash(core, 'store', 700);
-          await move(pktA, '100%', '0%', 650);
-          rows[0].classList.add('show');
-          for (const i of [1, 2]) {
-            await sleep(750);
-            await move(pktA, '0%', '100%', 520, true);
-            flash(core, 'pulse', 450);
-            await move(pktA, '100%', '0%', 240, true);
-            rows[i].classList.add('show');
-          }
-          await sleep(2800);
-        }
-      })();
+  const run=document.getElementById('runDemo'), miss=document.getElementById('missDemo');
+  const status=document.getElementById('demoStatus'), headline=document.getElementById('demoHeadline'), reason=document.getElementById('demoReason');
+  const result=document.getElementById('terminalResult'), mDecision=document.getElementById('mDecision'), mPath=document.getElementById('mPath'), mState=document.getElementById('mState'), mLatency=document.getElementById('mLatency');
+  function demoHit(){
+    status.textContent='● CACHE HIT';status.className='status demo-hit';headline.textContent='Local replay';reason.textContent='Valid cache entry selected for this illustrative request.';
+    result.innerHTML='<span class="success">✓ CACHE HIT</span> <span class="dim">local replay selected</span>';
+    mDecision.textContent='HIT';mPath.textContent='LOCAL';mState.textContent='UNCHANGED';mLatency.textContent='0.06 ms*';
+  }
+  function demoMiss(){
+    status.textContent='● CACHE MISS';status.className='status demo-miss';headline.textContent='Forward upstream';reason.textContent='No valid local entry in this illustrative scenario, so the request continues upstream.';
+    result.innerHTML='<span class="demo-miss">× CACHE MISS</span> <span class="dim">forwarding upstream</span>';
+    mDecision.textContent='MISS';mPath.textContent='UPSTREAM';mState.textContent='NEW';mLatency.textContent='1.8 s*';
+  }
+  if(run) run.addEventListener('click',()=>{demoHit();run.textContent='Replay hit ✓';setTimeout(()=>run.textContent='Run request',900)});
+  if(miss) miss.addEventListener('click',()=>{demoMiss();miss.textContent='Miss selected';setTimeout(()=>miss.textContent='Force miss',900)});
 
-      /* 2 · Impact: bars grow and numbers count up once. */
-      const metrics = $('#metrics');
-      once(metrics, () => {
-        metrics.classList.add('in');
-        $$('[data-count]', metrics).forEach((el, idx) => {
-          const end = Number(el.dataset.count);
-          const suffix = el.dataset.suffix || '';
-          const start = performance.now() + (idx % 2 ? 250 : 0);
-          const duration = 1200;
-          const tick = (now) => {
-            const k = Math.min(1, Math.max(0, (now - start) / duration));
-            const eased = 1 - Math.pow(1 - k, 3);
-            el.textContent = Math.round(end * eased).toLocaleString('en-US') + suffix;
-            if (k < 1) requestAnimationFrame(tick);
-          };
-          el.textContent = '0' + suffix;
-          requestAnimationFrame(tick);
-        });
-      });
+  const gt=document.getElementById('gitToggle'), hashA=document.getElementById('hashA'), inv=document.getElementById('invalidation');
+  if(gt) gt.addEventListener('click',()=>{
+    const on=gt.classList.toggle('on');
+    if(on){hashA.textContent='sha: c71e…42a';hashA.classList.add('changed');inv.textContent='● FILE EDIT DETECTED · CACHE ENTRY INVALIDATED'}
+    else{hashA.textContent='sha: 8a2f…19d';hashA.classList.remove('changed');inv.textContent='● CACHE ENTRY INVALIDATED'}
+  });
 
-      /* 3 · How it works: a packet walks the four checks on a loop. */
-      const steps = $('#steps');
-      const items = $$('.step', steps);
-      const stepsGate = gate(steps, 0.3);
-      items.forEach((s) => s.classList.remove('on'));
-      steps.style.setProperty('--p', 0);
-      (async function stepsLoop() {
-        for (;;) {
-          for (let i = 0; i < items.length; i++) {
-            await stepsGate.wait();
-            items.forEach((s, j) => { s.classList.toggle('on', j <= i); s.classList.toggle('now', j === i); });
-            steps.style.setProperty('--p', i / (items.length - 1));
-            await sleep(i === items.length - 1 ? 1900 : 1050);
-          }
-          items.forEach((s) => s.classList.remove('on', 'now'));
-          steps.style.setProperty('--p', 0);
-          await sleep(800);
-        }
-      })();
+  const detail=document.getElementById('archDetail');
+  document.querySelectorAll('.arch-node').forEach(n=>{
+    const show=()=>{detail.innerHTML='<b>'+n.querySelector('strong').textContent+'</b> · '+n.dataset.detail};
+    n.addEventListener('mouseenter',show);n.addEventListener('focus',show);
+  });
 
-      /* 4 · Get started: type the first tab's commands once; later tab switches render instantly. */
-      render('claude', true);
-      once(term, async () => {
-        const run = ++typingRun;
-        for (const ln of $$('.ln', code)) {
-          if (run !== typingRun) return;
-          if (ln.classList.contains('out')) { await sleep(350); if (run !== typingRun) return; ln.classList.remove('pending'); continue; }
-          const text = ln.dataset.text;
-          const typed = $('.typed', ln);
-          typed.textContent = '';
-          ln.classList.remove('pending');
-          ln.classList.add('typing');
-          for (let i = 1; i <= text.length; i++) {
-            if (run !== typingRun) return;
-            typed.textContent = text.slice(0, i);
-            await sleep(32);
-          }
-          ln.classList.remove('typing');
-          await sleep(300);
-        }
-      }, 0.5);
-
-      /* ---------- Kinetic Parallax Scrolling & Interactive 3D Depth ---------- */
-      const heroStage = $('#heroStage');
-      const heroVisual = $('#heroVisual');
-      const heroImg = $('#heroImg');
-      const parallaxImages = $$('.parallax-img');
-
-      // Desktop interactive mouse-tracking 3D tilt on hero engine
-      if (heroStage && heroVisual && window.matchMedia('(pointer: fine)').matches) {
-        let stageBounds = null;
-        const updateBounds = () => { stageBounds = heroStage.getBoundingClientRect(); };
-        window.addEventListener('resize', updateBounds, { passive: true });
-
-        heroStage.addEventListener('mouseenter', () => { updateBounds(); });
-        heroStage.addEventListener('mousemove', (e) => {
-          if (!stageBounds) updateBounds();
-          const x = (e.clientX - stageBounds.left) / stageBounds.width - 0.5;
-          const y = (e.clientY - stageBounds.top) / stageBounds.height - 0.5;
-          const rotX = (-y * 6.5).toFixed(2);
-          const rotY = (x * 8.5).toFixed(2);
-          heroVisual.style.transform = `perspective(1000px) rotateX(${rotX}deg) rotateY(${rotY}deg) scale3d(1.015, 1.015, 1.015)`;
-        });
-        heroStage.addEventListener('mouseleave', () => {
-          heroVisual.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)';
-        });
-      }
-
-      // 60fps RequestAnimationFrame Parallax Engine
-      let parallaxTicking = false;
-      const updateParallax = () => {
-        const scrollY = window.scrollY || window.pageYOffset;
-        const vh = window.innerHeight;
-
-        // Hero image subtle deep parallax drift
-        if (heroImg && scrollY < vh * 1.5) {
-          heroImg.style.transform = `translate3d(0, ${(scrollY * 0.18).toFixed(1)}px, 0)`;
-        }
-
-        // Section illustrations multi-plane parallax drift
-        parallaxImages.forEach((img) => {
-          const rect = img.getBoundingClientRect();
-          if (rect.bottom > -100 && rect.top < vh + 100) {
-            const center = rect.top + rect.height / 2;
-            const distFromMid = center - vh / 2;
-            const offset = (distFromMid * -0.11).toFixed(1);
-            img.style.transform = `translate3d(0, ${offset}px, 0) scale(1.05)`;
-          }
-        });
-        parallaxTicking = false;
-      };
-
-      window.addEventListener('scroll', () => {
-        if (!parallaxTicking) {
-          parallaxTicking = true;
-          requestAnimationFrame(updateParallax);
-        }
-      }, { passive: true });
-      updateParallax();
-    })();
-  </script>
+  const reveals=document.querySelectorAll('.reveal');
+  if('IntersectionObserver' in window){
+    const io=new IntersectionObserver(entries=>entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');io.unobserve(e.target)}}),{threshold:.12});
+    reveals.forEach(el=>io.observe(el));
+  }else reveals.forEach(el=>el.classList.add('visible'));
+})();
+</script>
 </body>
 </html>

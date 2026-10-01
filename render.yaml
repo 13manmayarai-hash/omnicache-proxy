@@ -1,0 +1,37 @@
+# Render Blueprint for the hosted OmniCache MCP connector.
+# Always-on paid instance with a persistent disk, authentication enforced.
+# Secrets marked `sync: false` must be entered in the Render dashboard; never commit them.
+services:
+  - type: web
+    name: omnicache-proxy
+    runtime: docker
+    plan: starter
+    healthCheckPath: /healthz
+    disk:
+      name: omnicache-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: REQUIRE_AUTH
+        value: "true"
+      - key: OMNICACHE_HOST
+        value: 0.0.0.0
+      - key: OMNICACHE_PORT
+        value: "8000"
+      - key: PORT
+        value: "8000"
+      # SQLite entries, virtual keys and OAuth access tokens live on the persistent disk,
+      # so they survive restarts and redeploys.
+      - key: OMNICACHE_DATA_DIR
+        value: /var/data
+      - key: OMNICACHE_AUDIT_LOG_PATH
+        value: /var/data/mcp_audit.jsonl
+      - key: ADMIN_API_KEY
+        sync: false
+      # Google sign-in lets new users create their own isolated account from the OAuth consent page.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false

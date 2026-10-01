@@ -536,9 +536,10 @@ class TestPhase4RemoteMCP(unittest.TestCase):
                 }
             }
         }
-        resp_rec = self.client.post("/mcp", json=rec_req, headers={"x-api-key": "mcp_tenant_key"})
-        self.assertEqual(resp_rec.status_code, 200)
-        tool_key = json.loads(resp_rec.json()["result"]["content"][0]["text"])["tool_key"]
+        # record_tool is local-only (stdio); it is not exposed on the hosted /mcp endpoint.
+        from mcp.server import process_mcp_jsonrpc
+        resp_rec = process_mcp_jsonrpc(rec_req, default_org_id="pii_org", token_scope="mcp:write")
+        tool_key = json.loads(resp_rec["result"]["content"][0]["text"])["tool_key"]
 
         # Verify the recorded output was sanitized before storage
         entry = tool_cache._cache.get(tool_key)

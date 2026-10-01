@@ -79,7 +79,8 @@ class TestToolReplayAndVersionE2E:
         assert res_invalidated.json().get("status") == "MISS"
 
     def test_03_mcp_tool_replay_and_record(self, client):
-        """Verify MCP JSON-RPC tools for tool replay and recording."""
+        """Verify MCP JSON-RPC tools for tool replay and recording over the local (stdio) transport."""
+        from mcp.server import process_mcp_jsonrpc
         # 1. Record via MCP tools/call
         record_mcp_req = {
             "jsonrpc": "2.0",
@@ -96,9 +97,8 @@ class TestToolReplayAndVersionE2E:
                 }
             }
         }
-        res_mcp_rec = client.post("/v1/mcp", json=record_mcp_req)
-        assert res_mcp_rec.status_code == 200
-        assert "STORED" in res_mcp_rec.json()["result"]["content"][0]["text"]
+        res_mcp_rec = process_mcp_jsonrpc(record_mcp_req)
+        assert "STORED" in res_mcp_rec["result"]["content"][0]["text"]
 
         # 2. Replay via MCP tools/call
         replay_mcp_req = {
@@ -115,10 +115,14 @@ class TestToolReplayAndVersionE2E:
                 }
             }
         }
-        res_mcp_rep = client.post("/v1/mcp", json=replay_mcp_req)
-        assert res_mcp_rep.status_code == 200
-        assert "HIT" in res_mcp_rep.json()["result"]["content"][0]["text"]
-        assert "nothing to commit" in res_mcp_rep.json()["result"]["content"][0]["text"]
+        res_mcp_rep = process_mcp_jsonrpc(replay_mcp_req)
+        assert "HIT" in res_mcp_rep["result"]["content"][0]["text"]
+        assert "nothing to commit" in res_mcp_rep["result"]["content"][0]["text"]
+
+        # 3. The hosted HTTP endpoint does not expose these local-only tools
+        res_http = client.post("/v1/mcp", json=record_mcp_req)
+        assert res_http.status_code == 200
+        assert res_http.json()["error"]["code"] == -32601
 
     def test_04_git_status_no_args_workspace_invalidation(self, client):
         """

@@ -5,6 +5,8 @@
 **Maintainer:** Rajiv Prasad (<13manmayarai@gmail.com>)  
 **Project:** OmniCache AI Proxy & MCP Server ([https://github.com/13manmayarai-hash/omnicache-proxy](https://github.com/13manmayarai-hash/omnicache-proxy))
 
+> **Scope:** this policy covers the open-source package you run yourself. The hosted connector at `https://omnicache-proxy.onrender.com/mcp` stores data on a server we operate and is covered by the [Hosted Connector Privacy Policy](docs/HOSTED_PRIVACY_POLICY.md).
+
 ---
 
 ## 1. Overview & Core Privacy Commitment

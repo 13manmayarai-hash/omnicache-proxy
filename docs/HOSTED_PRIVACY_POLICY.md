@@ -3,9 +3,7 @@
 **Applies to:** the hosted OmniCache MCP connector at `https://omnicache-proxy.onrender.com/mcp`, used from Claude or other MCP clients.
 **Does not apply to:** the open-source package you install and run yourself (`pip install omnicache-proxy`). That runs on your own machine and is covered by [PRIVACY.md](../PRIVACY.md).
 **Operator:** Rajiv Prasad (<13manmayarai@gmail.com>)
-**Effective date:** [OWNER: set on publication]
-
-> **Owner checklist before publishing:** fill in every `[OWNER: …]` marker below. Each one is a fact about the live deployment that can't be confirmed from the source code.
+**Effective date:** October 1, 2026
 
 ## 1. What we collect
 
@@ -31,18 +29,18 @@ We don't sell your data, use it for advertising, or use it to train models. The 
 
 ## 3. Where it is stored
 
-Data is stored in a SQLite database on a persistent disk attached to the service on Render, in the [OWNER: Render region, e.g. Oregon (US West)] region. Connections to the service use HTTPS.
+Data is stored in a SQLite database on a persistent disk attached to the service on Render, in the Oregon (US West) region. Connections to the service use HTTPS.
 
 ## 4. How long we keep it
 
 - **Saved entries** expire automatically **7 days** after they are saved. You can delete them sooner at any time.
 - **Account records** (your Google email, workspace ID, access tokens) are kept until you ask us to delete your account.
-- **Audit records** are kept for [OWNER: retention period, e.g. 90 days] and then deleted.
+- **Audit records** are kept for 90 days and then deleted.
 
 ## 5. Deleting your data
 
 - **Delete entries yourself:** ask Claude to use `omnicache_invalidate`. With a tag it deletes the entries carrying that tag; without one it deletes all of your entries. Deletion takes effect immediately.
-- **Delete your account:** email <13manmayarai@gmail.com> from the address you signed in with. We will delete your account, entries and tokens within [OWNER: e.g. 30 days] and confirm by email.
+- **Delete your account:** email <13manmayarai@gmail.com> from the address you signed in with. We will delete your account, entries and tokens within 30 days and confirm by email.
 - **Disconnect:** removing the connector in Claude stops further access but does not delete stored data. Use the steps above to delete it.
 
 ## 6. Children

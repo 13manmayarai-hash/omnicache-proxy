@@ -384,13 +384,13 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
     elif clean_name == "invalidate":
         tag = arguments.get("tag")
         if tag:
-            removed = cache_instance.invalidate_tag(tag, org_id=org_id)
-            snapshot_store.remove_by_tag(tag, org_id=org_id)
-            return {"content": [{"type": "text", "text": f"Invalidated {removed} entries with tag '{tag}'."}]}
+            cache_instance.invalidate_tag(tag, org_id=org_id)
+            db_removed = snapshot_store.remove_by_tag(tag, org_id=org_id)
+            return {"content": [{"type": "text", "text": f"Invalidated {db_removed} entries with tag '{tag}'."}]}
         else:
-            removed = cache_instance.purge(org_id=org_id)
-            snapshot_store.purge_all(org_id=org_id)
-            return {"content": [{"type": "text", "text": f"Purged {removed} entries for tenant '{org_id}'."}]}
+            cache_instance.purge(org_id=org_id)
+            db_removed = snapshot_store.purge_all(org_id=org_id)
+            return {"content": [{"type": "text", "text": f"Purged {db_removed} entries for tenant '{org_id}'."}]}
 
     elif clean_name == "stats":
         stats = cache_instance.get_stats(org_id)

@@ -216,14 +216,16 @@ class RadixPrefixTree:
             curr.last_accessed = time.time()
             return curr
 
-    def align_ephemeral_cache_blocks(self, messages: List[Dict[str, Any]], block_size_tokens: int = 1024) -> List[Dict[str, Any]]:
+    def align_ephemeral_cache_blocks(self, messages: List[Dict[str, Any]], block_size_tokens: int = 1024, reserved_breakpoints: int = 0) -> List[Dict[str, Any]]:
         """
         Aligns message turns to downstream provider (Anthropic/OpenAI) 1024-token prompt caching blocks.
         Injects Anthropic cache_control metadata on the last content block of turns that cross the 1024-token boundary.
         Never sets cache_control at the top-level message object (Anthropic schema forbids extra inputs on MessageParam).
         Enforces Anthropic hard ceiling of at most 4 cache_control breakpoints per request.
+        reserved_breakpoints: breakpoints already used outside `messages` (system blocks, tools),
+        which count toward the same per-request ceiling.
         """
-        existing_breakpoints = 0
+        existing_breakpoints = reserved_breakpoints
         for m in messages:
             content = m.get("content")
             if isinstance(content, list):

@@ -970,6 +970,13 @@ async def handle_chat_completions(request: Request) -> Response:
             resp_headers["X-OmniCache-Schema-Validated"] = "true"
 
         rehydrated_response = privacy_shield.rehydrate_response(entry.response_payload, pii_token_map)
+        if isinstance(rehydrated_response, dict) and "usage" in rehydrated_response:
+            rehydrated_response = dict(rehydrated_response)
+            rehydrated_response["usage"] = {
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0
+            }
 
         # DeepSeek R1 / Reasoning Token Stripping on Demand
         strip_thinking = (
@@ -1175,7 +1182,7 @@ async def handle_chat_completions(request: Request) -> Response:
         buffer = ""
         stream_cleanly_completed = False
         try:
-            async for chunk in upstream_resp.aiter_raw():
+            async for chunk in upstream_resp.aiter_bytes():
                 if not chunk:
                     continue
                 yield chunk
@@ -1740,7 +1747,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
             "model": entry.model or requested_model,
             "content": content_blocks,
             "stop_reason": stop_reason or "end_turn",
-            "usage": {"input_tokens": prompt_tokens, "output_tokens": completion_tokens}
+            "usage": {"input_tokens": 0, "output_tokens": 0}
         }
         rehydrated = privacy_shield.rehydrate_response(anthropic_response, pii_token_map)
 
@@ -1791,7 +1798,10 @@ async def handle_anthropic_messages(request: Request) -> Response:
 
     req_params = dict(request.query_params) if request.query_params else None
     if "messages" in anthropic_payload and isinstance(anthropic_payload["messages"], list):
-        anthropic_payload["messages"] = radix_tree.align_ephemeral_cache_blocks(anthropic_payload["messages"])
+        # cache_control blocks in system and tools count toward Anthropic's 4-per-request limit too.
+        reserved = sum(1 for b in (anthropic_payload.get("system") if isinstance(anthropic_payload.get("system"), list) else []) if isinstance(b, dict) and "cache_control" in b)
+        reserved += sum(1 for t in (anthropic_payload.get("tools") or []) if isinstance(t, dict) and "cache_control" in t)
+        anthropic_payload["messages"] = radix_tree.align_ephemeral_cache_blocks(anthropic_payload["messages"], reserved_breakpoints=reserved)
 
     if is_stream:
         print(f"[OmniCache {time.strftime('%H:%M:%S')}] Forwarding Anthropic stream upstream for model '{requested_model}'...", flush=True)
@@ -1812,7 +1822,7 @@ async def handle_anthropic_messages(request: Request) -> Response:
             buffer = ""
             stream_cleanly_completed = False
             try:
-                async for chunk in stream_resp.aiter_raw():
+                async for chunk in stream_resp.aiter_bytes():
                     if not chunk:
                         continue
                     yield chunk

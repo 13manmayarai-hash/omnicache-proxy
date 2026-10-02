@@ -6,13 +6,14 @@ import unittest
 import json
 import subprocess
 import os
+import sys
 
 class TestOmniCacheMCP(unittest.TestCase):
     def test_mcp_jsonrpc_protocol(self):
         mcp_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mcp", "server.py"))
 
         proc = subprocess.Popen(
-            ["python3", mcp_script],
+            [sys.executable, mcp_script],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -94,7 +95,7 @@ class TestOmniCacheMCP(unittest.TestCase):
     def test_mcp_cli_command(self):
         cli_script = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "server", "cli.py"))
         proc = subprocess.Popen(
-            ["python3", cli_script, "mcp"],
+            [sys.executable, cli_script, "mcp"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

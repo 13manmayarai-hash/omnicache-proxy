@@ -21,16 +21,19 @@ class StreamReplayer:
         cls,
         entry_payload: Dict[str, Any],
         stream_chunks: Optional[List[Dict[str, Any]]] = None,
-        tokens_per_sec: float = 65.0
+        tokens_per_sec: float = 0.0
     ) -> AsyncGenerator[str, None]:
         """
         Replays cached completion as an OpenAI-compatible SSE stream.
         """
-        delay_per_chunk = 1.0 / max(10.0, tokens_per_sec)
+        delay_per_chunk = (1.0 / max(10.0, tokens_per_sec)) if tokens_per_sec > 0 else 0.0
 
         # 1. If we have recorded raw stream chunks, replay them
         if stream_chunks and len(stream_chunks) > 0:
             for idx, chunk in enumerate(stream_chunks):
+                if isinstance(chunk, dict) and "usage" in chunk and chunk["usage"]:
+                    chunk = dict(chunk)
+                    chunk["usage"] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
                 yield cls.format_sse_chunk(chunk)
                 if idx > 0 and delay_per_chunk > 0:
                     await asyncio.sleep(delay_per_chunk)
@@ -81,7 +84,8 @@ class StreamReplayer:
                     }]
                 }
                 yield cls.format_sse_chunk(r_chunk)
-                await asyncio.sleep(delay_per_chunk)
+                if delay_per_chunk > 0:
+                    await asyncio.sleep(delay_per_chunk)
 
         # C. Stream main content tokens
         if full_content:
@@ -99,7 +103,8 @@ class StreamReplayer:
                     }]
                 }
                 yield cls.format_sse_chunk(c_chunk)
-                await asyncio.sleep(delay_per_chunk)
+                if delay_per_chunk > 0:
+                    await asyncio.sleep(delay_per_chunk)
 
         # D. Stream tool calls if present
         if tool_calls:
@@ -136,7 +141,7 @@ class StreamReplayer:
         cls,
         entry_payload: Dict[str, Any],
         stream_chunks: Optional[List[Dict[str, Any]]] = None,
-        tokens_per_sec: float = 65.0
+        tokens_per_sec: float = 0.0
     ) -> AsyncGenerator[str, None]:
         """
         Replays cached completion as an Anthropic-compatible SSE stream.
@@ -144,13 +149,20 @@ class StreamReplayer:
         """
         delay_per_chunk = (1.0 / max(10.0, tokens_per_sec)) if tokens_per_sec > 0 else 0.0
 
-        # If recorded raw stream chunks exist, replay them
+        # If recorded raw stream chunks exist, replay them with 0 billable token usage
         if stream_chunks and len(stream_chunks) > 0:
             for idx, chunk in enumerate(stream_chunks):
                 if isinstance(chunk, str):
                     yield chunk
                 else:
                     event_type = chunk.get("type", "message_delta")
+                    if event_type == "message_start" and "message" in chunk and isinstance(chunk["message"], dict):
+                        chunk = dict(chunk)
+                        chunk["message"] = dict(chunk["message"])
+                        chunk["message"]["usage"] = {"input_tokens": 0, "output_tokens": 0}
+                    elif event_type == "message_delta" and "usage" in chunk:
+                        chunk = dict(chunk)
+                        chunk["usage"] = {"output_tokens": 0}
                     yield f"event: {event_type}\ndata: {json.dumps(chunk, separators=(',', ':'))}\n\n"
                 if idx > 0 and delay_per_chunk > 0:
                     await asyncio.sleep(delay_per_chunk)
@@ -158,7 +170,7 @@ class StreamReplayer:
 
         msg_id = entry_payload.get("id", f"msg_cached_{int(time.time()*1000)}")
         model = entry_payload.get("model", "claude-3-5-sonnet-20241022")
-        usage = entry_payload.get("usage", {"input_tokens": 10, "output_tokens": 10})
+        usage = entry_payload.get("usage", {"input_tokens": 0, "output_tokens": 0})
         content_blocks = entry_payload.get("content", [])
 
         # 1. Emit message_start
@@ -173,7 +185,7 @@ class StreamReplayer:
                 "stop_reason": None,
                 "stop_sequence": None,
                 "usage": {
-                    "input_tokens": usage.get("input_tokens", 10),
+                    "input_tokens": 0,
                     "output_tokens": 0
                 }
             }
@@ -247,7 +259,7 @@ class StreamReplayer:
                 "stop_sequence": entry_payload.get("stop_sequence", None)
             },
             "usage": {
-                "output_tokens": usage.get("output_tokens", total_output_tokens or 10)
+                "output_tokens": 0
             }
         }
         yield f"event: message_delta\ndata: {json.dumps(msg_delta, separators=(',', ':'))}\n\n"

@@ -1,6 +1,6 @@
 # OmniCache Hosted Connector — Privacy Policy
 
-**Applies to:** the hosted OmniCache MCP connector at `https://omnicache-proxy.onrender.com/mcp`, used from Claude or other MCP clients.
+**Applies to:** the hosted OmniCache MCP connector at `https://omnicache.rawwgrid.com/mcp`, used from Claude or other MCP clients.
 **Does not apply to:** the open-source package you install and run yourself (`pip install omnicache-proxy`). That runs on your own machine and is covered by [PRIVACY.md](../PRIVACY.md).
 **Operator:** Rajiv Prasad (<13manmayarai@gmail.com>)
 **Effective date:** October 1, 2026

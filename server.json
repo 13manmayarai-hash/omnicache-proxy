@@ -9,7 +9,7 @@
     "type": "git",
     "url": "https://github.com/13manmayarai-hash/omnicache-proxy"
   },
-  "homepage": "https://omnicache-proxy.onrender.com",
+  "homepage": "https://omnicache.rawwgrid.com",
   "packages": [
     {
       "registryType": "pypi",
@@ -23,7 +23,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://omnicache-proxy.onrender.com/mcp"
+      "url": "https://omnicache.rawwgrid.com/mcp"
     }
   ]
 }

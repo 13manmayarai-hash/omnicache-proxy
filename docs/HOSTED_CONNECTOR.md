@@ -2,7 +2,7 @@
 
 OmniCache gives Claude a searchable memory scoped to your account. Save answers, code snippets, configuration notes and documentation, then find and reuse them in later conversations.
 
-- **Connector URL:** `https://omnicache-proxy.onrender.com/mcp`
+- **Connector URL:** `https://omnicache.rawwgrid.com/mcp`
 - **Transport:** Streamable HTTP (MCP)
 - **Authentication:** OAuth 2.0 with PKCE and dynamic client registration
 - **Privacy policy:** [HOSTED_PRIVACY_POLICY.md](HOSTED_PRIVACY_POLICY.md)

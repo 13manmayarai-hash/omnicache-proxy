@@ -30,15 +30,27 @@ def load_dotenv():
 
 load_dotenv()
 
+def get_omnicache_data_dir() -> str:
+    """Returns the configured data directory, honoring OMNICACHE_DATA_DIR or defaulting to ~/.omnicache."""
+    data_dir = os.getenv("OMNICACHE_DATA_DIR", "").strip()
+    if not data_dir:
+        data_dir = os.path.expanduser("~/.omnicache")
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+    except Exception:
+        pass
+    return data_dir
+
 def get_or_generate_privacy_salt() -> str:
     """
     Returns configured PRIVACY_SALT or generates a cryptographically strong random salt
     unique to this deployment. Never uses a public hardcoded static string.
+    Persists to OMNICACHE_DATA_DIR/.privacy_salt so restarts preserve consistent hashing across processes.
     """
     salt = os.getenv("PRIVACY_SALT", os.getenv("OMNICACHE_PRIVACY_SALT", "")).strip()
     if salt:
         return salt
-    salt_file = os.path.expanduser("~/.omnicache/.privacy_salt")
+    salt_file = os.path.join(get_omnicache_data_dir(), ".privacy_salt")
     if os.path.exists(salt_file):
         try:
             with open(salt_file, "r", encoding="utf-8") as f:
@@ -95,6 +107,7 @@ class ProxyConfig:
     HOST: str = os.getenv("HOST", os.getenv("OMNICACHE_HOST", "127.0.0.1"))
     
     # Master Admin Key and Authentication Controls
+    DATA_DIR: str = get_omnicache_data_dir()
     ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", os.getenv("OMNICACHE_ADMIN_KEY", ""))
     REQUIRE_AUTH: bool = os.getenv("REQUIRE_AUTH", "false").lower() in ("true", "1")
     ALLOW_INSECURE_NETWORK_EXPOSURE: bool = os.getenv("OMNICACHE_ALLOW_INSECURE_NETWORK_EXPOSURE", "false").lower() in ("true", "1")

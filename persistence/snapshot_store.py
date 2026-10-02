@@ -115,6 +115,22 @@ class SnapshotStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_email ON signups(email)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_ip ON signups(ip_address)")
 
+            # Durable OAuth refresh tokens table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+                    token_hash TEXT PRIMARY KEY,
+                    key_id TEXT NOT NULL,
+                    org_id TEXT NOT NULL,
+                    client_id TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL,
+                    consumed INTEGER DEFAULT 0
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ref_org ON oauth_refresh_tokens(org_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ref_consumed ON oauth_refresh_tokens(consumed)")
+
     def _start_worker(self):
         self._running = True
         self._worker_thread = threading.Thread(
@@ -687,6 +703,93 @@ class SnapshotStore:
             return row[0] if row else 0
         except Exception as exc:
             logger.warning(f"[SnapshotStore] Error counting signups by ip: {exc}")
+            return 0
+
+    # =========================================================================
+    # OAuth Refresh Tokens Durability
+    # =========================================================================
+
+    def store_refresh_token(
+        self,
+        token_hash: str,
+        key_id: str,
+        org_id: str,
+        client_id: str,
+        scope: str,
+        expires_at: float,
+        created_at: Optional[float] = None
+    ) -> None:
+        """Persists a hashed OAuth refresh token to SQLite."""
+        conn = self._get_connection()
+        c_at = created_at or time.time()
+        try:
+            with conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO oauth_refresh_tokens (
+                        token_hash, key_id, org_id, client_id, scope, created_at, expires_at, consumed
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                """, (token_hash, key_id, org_id, client_id, scope, c_at, expires_at))
+        except Exception as exc:
+            logger.error(f"[SnapshotStore] Failed to store refresh token: {exc}")
+
+    def get_refresh_token(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        """Retrieves an OAuth refresh token record by its SHA-256 hash."""
+        conn = self._get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT token_hash, key_id, org_id, client_id, scope, created_at, expires_at, consumed FROM oauth_refresh_tokens WHERE token_hash = ?",
+                (token_hash,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "token_hash": row[0],
+                    "key_id": row[1],
+                    "org_id": row[2],
+                    "client_id": row[3],
+                    "scope": row[4],
+                    "created_at": row[5],
+                    "expires_at": row[6],
+                    "consumed": bool(row[7])
+                }
+            return None
+        except Exception as exc:
+            logger.error(f"[SnapshotStore] Failed to get refresh token: {exc}")
+            return None
+
+    def consume_refresh_token(self, token_hash: str) -> bool:
+        """
+        Atomically marks a refresh token as consumed (RFC 6749 single-use rotation).
+        Returns True if the token was unconsumed and successfully marked consumed; False otherwise.
+        """
+        conn = self._get_connection()
+        try:
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE oauth_refresh_tokens SET consumed = 1 WHERE token_hash = ? AND consumed = 0",
+                    (token_hash,)
+                )
+                return cursor.rowcount > 0
+        except Exception as exc:
+            logger.error(f"[SnapshotStore] Failed to consume refresh token: {exc}")
+            return False
+
+    def purge_expired_refresh_tokens(self) -> int:
+        """Prunes expired or consumed refresh tokens older than 7 days."""
+        conn = self._get_connection()
+        try:
+            cutoff = time.time() - (7 * 86400)
+            with conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM oauth_refresh_tokens WHERE expires_at < ? OR (consumed = 1 AND created_at < ?)",
+                    (time.time(), cutoff)
+                )
+                return cursor.rowcount
+        except Exception as exc:
+            logger.error(f"[SnapshotStore] Failed to purge expired refresh tokens: {exc}")
             return 0
 
     # =========================================================================

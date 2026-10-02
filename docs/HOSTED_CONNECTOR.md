@@ -20,14 +20,14 @@ If your organization has issued you an OmniCache API key, you can paste it into 
 
 | Tool | What it does | Changes data? |
 |---|---|---|
-| `omnicache_store` | Saves an answer, snippet or note, with an optional tag | Adds an entry |
+| `omnicache_store` | Saves an answer, snippet or note, with an optional tag and time-to-live | Adds an entry |
 | `omnicache_query` | Returns a stored answer whose prompt is semantically similar to yours, with a similarity score | Read-only |
 | `omnicache_search` | Searches your entries by meaning and lists the closest matches | Read-only |
 | `omnicache_invalidate` | Deletes entries with a given tag, or all of your entries if no tag is given | **Destructive** |
 | `omnicache_stats` | Shows entry counts, lookups and hit rate for your workspace | Read-only |
 | `omnicache_health` | Reports whether the service and its storage are ready | Read-only |
 
-Saved entries expire 7 days after they are saved.
+Saved entries expire 7 days after they are saved by default, or up to 30 days if a custom time-to-live is specified.
 
 The tool-replay tools in the open-source package (`omnicache_replay_tool`, `omnicache_record_tool`) work on files and git state on your own machine. They are only available when you run OmniCache locally, not through this hosted connector.
 

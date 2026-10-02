@@ -5670,15 +5670,37 @@ routes = [
     Route("/{rest_of_path:path}", handle_catchall, methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
 ]
 
+async def _periodic_audit_cleanup_worker():
+    """Background task running every 24 hours to enforce 90-day retention without requiring restarts."""
+    while True:
+        try:
+            await asyncio.sleep(86400)  # 24 hours
+            audit_logger.prune_expired_logs(retention_days=90)
+            prune_jsonl_audit_logs(retention_days=90)
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning(f"Error during scheduled audit cleanup: {exc}")
+
+
 @asynccontextmanager
 async def lifespan(app: Starlette):
-    """Enforces critical startup security invariants under all ASGI servers (SEC-05)."""
+    """Enforces critical startup security invariants and maintains periodic compliance workers."""
     validate_startup_security_invariants()
     try:
         audit_logger.prune_expired_logs(retention_days=90)
         prune_jsonl_audit_logs(retention_days=90)
     except Exception:
         pass
-    yield
+
+    cleanup_task = asyncio.create_task(_periodic_audit_cleanup_worker())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 app = Starlette(debug=False, routes=routes, lifespan=lifespan)

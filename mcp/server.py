@@ -32,6 +32,10 @@ DEFAULT_MCP_MODEL = "gpt-4o"
 # meaningful over the local stdio transport and are not exposed on the hosted HTTP endpoint.
 LOCAL_ONLY_TOOLS = {"omnicache_replay_tool", "omnicache_record_tool"}
 
+# Retention boundaries for omnicache_store (7 days default, 30 days maximum cap)
+MAX_STORE_TTL_SECONDS = 30 * 86400  # 30 days (2,592,000s)
+MIN_STORE_TTL_SECONDS = 60  # 1 minute minimum
+
 TOOLS_METADATA = [
     {
         "name": "omnicache_query",
@@ -65,7 +69,7 @@ TOOLS_METADATA = [
                 "model": {"type": "string", "description": "Optional model label to associate with the stored answer."},
                 "tag": {"type": "string", "description": "Optional domain tag (e.g. 'docs-v1', 'sql-tips')."},
                 "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"},
-                "ttl_seconds": {"type": "integer", "description": "Optional time-to-live in seconds (default: 604800, i.e. 7 days).", "default": 604800}
+                "ttl_seconds": {"type": "integer", "description": "Optional time-to-live in seconds (default: 604800, i.e. 7 days; max: 2592000, i.e. 30 days).", "default": 604800}
             },
             "required": ["prompt", "answer"]
         },
@@ -254,7 +258,8 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         ttl_seconds = None
         if raw_ttl is not None:
             try:
-                ttl_seconds = max(60, int(raw_ttl))
+                parsed_ttl = int(raw_ttl)
+                ttl_seconds = max(MIN_STORE_TTL_SECONDS, min(MAX_STORE_TTL_SECONDS, parsed_ttl))
             except (ValueError, TypeError):
                 ttl_seconds = None
 

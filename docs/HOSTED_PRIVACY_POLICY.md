@@ -33,7 +33,7 @@ Data is stored in a SQLite database on a persistent disk attached to the service
 
 ## 4. How long we keep it
 
-- **Saved entries** expire automatically **7 days** after they are saved. You can delete them sooner at any time.
+- **Saved entries** expire automatically **7 days** after they are saved (or up to **30 days** if a custom TTL is specified). You can delete them sooner at any time.
 - **Account records** (your Google email, workspace ID, access tokens) are kept until you ask us to delete your account.
 - **Audit records** are kept for 90 days and then deleted.
 

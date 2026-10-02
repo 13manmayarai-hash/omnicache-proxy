@@ -113,5 +113,27 @@ class TestAuditPruningAndTTL(unittest.TestCase):
         self.assertIsNotNone(entry)
         self.assertEqual(entry.ttl_seconds, custom_ttl)
 
+    def test_custom_ttl_clamped_to_30_days_max(self):
+        # Pass 1 year TTL (31536000 seconds) -> must be capped at 30 days (2592000 seconds)
+        one_year_ttl = 31536000
+        prompt = f"Test Capped TTL {time.time()}"
+        answer = "Test Capped Answer"
+        res = handle_tool_call(
+            "omnicache_store",
+            {
+                "prompt": prompt,
+                "answer": answer,
+                "ttl_seconds": one_year_ttl,
+                "org_id": "test_capped_org"
+            },
+            default_org_id="test_capped_org"
+        )
+        self.assertIn("Successfully stored entry into OmniCache", res["content"][0]["text"])
+
+        payload = {"messages": [{"role": "user", "content": prompt}], "model": "gpt-4o", "temperature": 0.0}
+        status, entry, sim, reason = cache_instance.lookup(payload, org_id="test_capped_org")
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.ttl_seconds, 2592000)
+
 if __name__ == "__main__":
     unittest.main()

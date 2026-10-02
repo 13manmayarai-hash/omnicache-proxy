@@ -3953,10 +3953,18 @@ async def handle_prometheus_metrics(request: Request) -> Response:
 
 async def handle_healthz(request: Request) -> Response:
     cors_headers = get_cors_headers(request)
+    db_exists = os.path.exists(snapshot_store.db_path)
+    data_dir_env = os.getenv("OMNICACHE_DATA_DIR", "").strip()
+    is_durable = bool(data_dir_env) and db_exists
     return JSONResponse({
         "status": "healthy",
         "version": getattr(config, "VERSION", "3.1.0"),
         "service": "omnicache-proxy",
+        "persistence": {
+            "connected": db_exists,
+            "durable": is_durable,
+            "storage_backend": "sqlite3_wal_persistent" if is_durable else "sqlite3_wal_ephemeral"
+        },
         "circuit_breaker": failover_engine.circuit_breaker.get_status(),
         "keepalive": keepalive_worker.get_status()
     }, headers=cors_headers)
@@ -4292,7 +4300,13 @@ GOOGLE_OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
 
 CONSUMED_OAUTH_STATES: Dict[str, float] = {}
 _CONSUMED_OAUTH_LOCK = threading.Lock()
-_CONSUMED_OAUTH_DB_PATH = os.path.expanduser("~/.omnicache/oauth_consumed.db")
+
+def _get_consumed_oauth_db_path() -> str:
+    base_dir = os.getenv("OMNICACHE_DATA_DIR", os.path.expanduser("~/.omnicache"))
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "oauth_consumed.db")
+
+_CONSUMED_OAUTH_DB_PATH = _get_consumed_oauth_db_path()
 
 
 def _init_consumed_oauth_db() -> None:
@@ -4925,6 +4939,17 @@ async def handle_oauth_token(request: Request) -> Response:
 
         access_token = f"omni_tok_{uuid.uuid4().hex}"
         refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+        ref_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        ref_ttl = 30 * 86400  # 30 days
+
+        snapshot_store.store_refresh_token(
+            token_hash=ref_hash,
+            key_id=access_token,
+            org_id=target_org,
+            client_id=client_id or code_entry.get("client_id", "unknown"),
+            scope=granted_scope,
+            expires_at=time.time() + ref_ttl
+        )
 
         OAUTH_TOKENS[access_token] = {
             "client_id": client_id or code_entry.get("client_id", "unknown"),
@@ -4995,6 +5020,17 @@ async def handle_oauth_token(request: Request) -> Response:
         requested_scope = params.get("scope", "mcp:read mcp:write").strip()
         access_token = f"omni_tok_{uuid.uuid4().hex}"
         refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+        ref_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        ref_ttl = 30 * 86400  # 30 days
+
+        snapshot_store.store_refresh_token(
+            token_hash=ref_hash,
+            key_id=access_token,
+            org_id=target_org,
+            client_id=client_id or "client_credentials",
+            scope=requested_scope,
+            expires_at=time.time() + ref_ttl
+        )
 
         OAUTH_TOKENS[access_token] = {
             "client_id": client_id or "client_credentials",
@@ -5019,16 +5055,109 @@ async def handle_oauth_token(request: Request) -> Response:
             "scope": requested_scope
         }, headers=cors_headers)
 
+    # =========================================================================
+    # Grant Type 3: refresh_token (RFC 6749 Section 6)
+    # =========================================================================
     elif grant_type == "refresh_token":
+        raw_refresh = params.get("refresh_token", "").strip()
+        if not raw_refresh:
+            return JSONResponse({
+                "error": "invalid_request",
+                "error_description": "Missing required parameter: refresh_token."
+            }, status_code=400, headers=cors_headers)
+
+        token_hash = hashlib.sha256(raw_refresh.encode("utf-8")).hexdigest()
+        token_entry = snapshot_store.get_refresh_token(token_hash)
+
+        if not token_entry:
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Invalid, unknown, or revoked refresh token."
+            }, status_code=400, headers=cors_headers)
+
+        # RFC 6749 Section 5.2: Detect token reuse / revocation
+        if token_entry.get("consumed"):
+            audit_logger.log_event(
+                "OAUTH_TOKEN_REUSE_DETECTED",
+                tenant_id=token_entry.get("org_id", "default"),
+                severity="CRITICAL",
+                actor=client_id or token_entry.get("client_id", "unknown"),
+                description="Reused OAuth refresh token presented; access denied.",
+                details={"token_hash": token_hash[:16]}
+            )
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Refresh token has already been consumed."
+            }, status_code=400, headers=cors_headers)
+
+        if time.time() > token_entry.get("expires_at", 0):
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Refresh token has expired."
+            }, status_code=400, headers=cors_headers)
+
+        # Atomic single-use rotation (consume previous token)
+        if not snapshot_store.consume_refresh_token(token_hash):
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Refresh token has already been consumed."
+            }, status_code=400, headers=cors_headers)
+
+        target_org = token_entry.get("org_id", "default")
+        target_client = token_entry.get("client_id", client_id or "oauth_client")
+        granted_scope = token_entry.get("scope", "mcp:read mcp:write")
+        target_team = f"OAuth Client ({target_client})"
+
+        new_access_token = f"omni_tok_{uuid.uuid4().hex}"
+        new_refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+        new_ref_hash = hashlib.sha256(new_refresh_token.encode("utf-8")).hexdigest()
+        ref_ttl = 30 * 86400  # 30 days
+
+        snapshot_store.store_refresh_token(
+            token_hash=new_ref_hash,
+            key_id=new_access_token,
+            org_id=target_org,
+            client_id=target_client,
+            scope=granted_scope,
+            expires_at=time.time() + ref_ttl
+        )
+
+        quota_manager.register_key(
+            new_access_token,
+            team_name=target_team,
+            org_id=target_org,
+            role="tenant"
+        )
+
+        OAUTH_TOKENS[new_access_token] = {
+            "client_id": target_client,
+            "org_id": target_org,
+            "scope": granted_scope,
+            "created_at": time.time(),
+            "expires_at": time.time() + 86400
+        }
+
+        audit_logger.log_event(
+            "OAUTH_TOKEN_REFRESH",
+            tenant_id=target_org,
+            severity="INFO",
+            actor=target_client,
+            description="Successfully refreshed OAuth access token with rotating refresh token.",
+            details={"client_id": target_client, "org_id": target_org}
+        )
+
         return JSONResponse({
-            "error": "unsupported_grant_type",
-            "error_description": "refresh_token grant is not yet implemented."
-        }, status_code=400, headers=cors_headers)
+            "access_token": new_access_token,
+            "token_type": "Bearer",
+            "expires_in": 86400,
+            "refresh_token": new_refresh_token,
+            "scope": granted_scope
+        }, headers=cors_headers)
 
     else:
         return JSONResponse({
             "error": "unsupported_grant_type",
-            "error_description": f"Grant type '{grant_type}' is unsupported. Supported grant types: 'authorization_code', 'client_credentials'."
+            "error_description": f"Grant type '{grant_type}' is unsupported. Supported grant types: 'authorization_code', 'client_credentials', 'refresh_token'."
         }, status_code=400, headers=cors_headers)
 
 

@@ -399,7 +399,13 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
     elif clean_name == "health":
         stats = cache_instance.get_stats(org_id)
         db_exists = os.path.exists(snapshot_store.db_path)
-        persistence_info = {"connected": db_exists}
+        data_dir_env = os.getenv("OMNICACHE_DATA_DIR", "").strip()
+        is_durable = bool(data_dir_env) and db_exists
+        persistence_info = {
+            "connected": db_exists,
+            "durable": is_durable,
+            "storage_backend": "sqlite3_wal_persistent" if is_durable else "sqlite3_wal_ephemeral"
+        }
         if not remote:
             persistence_info["sqlite_path"] = snapshot_store.db_path
         health_info = {

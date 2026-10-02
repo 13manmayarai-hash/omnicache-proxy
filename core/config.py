@@ -230,7 +230,7 @@ class ProxyConfig:
     # Google OAuth 2.0 Identity Federation
     GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
     GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
-    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "https://omnicache.rawwgrid.com/auth/google/callback").strip()
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "").strip()
 
     # Razorpay Payment Gateway (Option C Hybrid Billing)
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "").strip()

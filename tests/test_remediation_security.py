@@ -47,8 +47,8 @@ class TestSecurityRemediation(unittest.TestCase):
         args = {"file": "main.py"}
         output = "+ print('hello world')"
 
-        # Store with 1 second TTL
-        tool_cache.store_tool_call(tool_name, args, output, ttl_seconds=1)
+        # Store with 2.5 second TTL
+        tool_cache.store_tool_call(tool_name, args, output, ttl_seconds=2.5)
 
         # Immediate lookup -> HIT
         is_hit, cached_out, _ = tool_cache.lookup_tool_call(tool_name, args)
@@ -56,7 +56,7 @@ class TestSecurityRemediation(unittest.TestCase):
         self.assertEqual(cached_out, output)
 
         # Wait for TTL expiry
-        time.sleep(1.1)
+        time.sleep(2.6)
 
         # Lookup after expiry -> MISS (must be evicted)
         is_hit_expired, cached_out_expired, _ = tool_cache.lookup_tool_call(tool_name, args)

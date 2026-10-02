@@ -23,15 +23,24 @@ from core.privacy_shield import PrivacyShield
 # Restore persistent entries into cache
 snapshot_store.load_into_cache(cache_instance)
 
+# Internal fallback when a client omits `model`. L2 lookups are scoped by model family,
+# so this stays at the value earlier releases used to keep previously stored entries reachable.
+# It is not advertised in the tool schemas.
+DEFAULT_MCP_MODEL = "gpt-4o"
+
+# Tools that operate on the caller's local workspace (paths, git state). They are only
+# meaningful over the local stdio transport and are not exposed on the hosted HTTP endpoint.
+LOCAL_ONLY_TOOLS = {"omnicache_replay_tool", "omnicache_record_tool"}
+
 TOOLS_METADATA = [
     {
         "name": "omnicache_query",
-        "description": "Performs an intent-gated semantic cache lookup for a prompt. Returns cached answer if similarity exceeds threshold (<1ms latency), saving 100% LLM tokens and API cost.",
+        "description": "Looks up a previously stored answer whose prompt is semantically similar to the given prompt. Returns the stored answer and its similarity score, or a miss if nothing is close enough.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "prompt": {"type": "string", "description": "The user prompt or query to look up in cache."},
-                "model": {"type": "string", "description": "Target model (default: gpt-4o).", "default": "gpt-4o"},
+                "model": {"type": "string", "description": "Optional model label used to scope the lookup to answers stored for the same model family."},
                 "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"},
                 "threshold": {"type": "number", "description": "Optional minimum cosine similarity (0.0 - 1.0)."}
             },
@@ -47,13 +56,13 @@ TOOLS_METADATA = [
     },
     {
         "name": "omnicache_store",
-        "description": "Explicitly stores a high-value answer, documentation snippet, or code solution into the OmniCache vector memory for future instant retrieval.",
+        "description": "Stores an answer, documentation snippet, or code solution in your OmniCache memory so it can be found later with omnicache_query or omnicache_search.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "prompt": {"type": "string", "description": "The prompt or question associated with this answer."},
                 "answer": {"type": "string", "description": "The generated answer, code, or explanation to cache."},
-                "model": {"type": "string", "description": "Model associated with answer (default: gpt-4o).", "default": "gpt-4o"},
+                "model": {"type": "string", "description": "Optional model label to associate with the stored answer."},
                 "tag": {"type": "string", "description": "Optional domain tag (e.g. 'docs-v1', 'sql-tips')."},
                 "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"}
             },
@@ -69,7 +78,7 @@ TOOLS_METADATA = [
     },
     {
         "name": "omnicache_search",
-        "description": "Performs sub-millisecond semantic similarity vector search across all cached prompts and solutions.",
+        "description": "Searches your stored entries by meaning and returns the closest matches with their similarity scores.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -133,7 +142,7 @@ TOOLS_METADATA = [
     },
     {
         "name": "omnicache_invalidate",
-        "description": "Purges or invalidates cached knowledge by tag, tenant ID, or pattern.",
+        "description": "Deletes stored entries. With a tag, deletes only entries carrying that tag; without a tag, deletes all of your entries.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -151,7 +160,7 @@ TOOLS_METADATA = [
     },
     {
         "name": "omnicache_stats",
-        "description": "Returns real-time telemetry: cache hit ratios, total requests, and total dollars saved in LLM costs.",
+        "description": "Returns usage statistics for your entries: entry counts, total lookups and hit rate.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -168,7 +177,7 @@ TOOLS_METADATA = [
     },
     {
         "name": "omnicache_health",
-        "description": "Performs enterprise health and readiness check: verifies SQLite persistence, active L1/L2 vector entries, tool replayer integrity, and uptime.",
+        "description": "Reports whether the service is ready: storage connectivity and the number of active entries.",
         "inputSchema": {
             "type": "object",
             "properties": {}
@@ -184,7 +193,7 @@ TOOLS_METADATA = [
 ]
 
 
-def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default", is_admin: bool = False) -> dict:
+def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default", is_admin: bool = False, remote: bool = False) -> dict:
     target_org = arguments.get("org_id")
     if target_org and target_org != default_org_id and not is_admin:
         return {
@@ -198,7 +207,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
 
     if clean_name == "query":
         prompt = arguments.get("prompt", "")
-        model = arguments.get("model", "gpt-4o")
+        model = arguments.get("model") or DEFAULT_MCP_MODEL
         threshold = arguments.get("threshold", None)
 
         payload = {
@@ -238,7 +247,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         answer = arguments.get("answer", "")
         clean_prompt, _, _ = PrivacyShield.sanitize_text(prompt)
         clean_answer, _, _ = PrivacyShield.sanitize_text(answer)
-        model = arguments.get("model", "gpt-4o")
+        model = arguments.get("model") or DEFAULT_MCP_MODEL
         tag = arguments.get("tag", None)
 
         payload = {
@@ -377,14 +386,14 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
     elif clean_name == "health":
         stats = cache_instance.get_stats(org_id)
         db_exists = os.path.exists(snapshot_store.db_path)
+        persistence_info = {"connected": db_exists}
+        if not remote:
+            persistence_info["sqlite_path"] = snapshot_store.db_path
         health_info = {
             "status": "healthy",
-            "version": getattr(config, "VERSION", "3.0.5"),
+            "version": getattr(config, "VERSION", "3.1.0"),
             "tenant_id": org_id,
-            "persistence": {
-                "sqlite_path": snapshot_store.db_path,
-                "connected": db_exists
-            },
+            "persistence": persistence_info,
             "vector_cache": {
                 "active_l1_exact": stats.get("active_l1_exact_entries", 0),
                 "active_l2_semantic": stats.get("active_l2_semantic_entries", 0),
@@ -427,7 +436,35 @@ def log_audit_event(tool_name: str, org_id: str, duration_ms: float, status: str
             pass
 
 
-def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False, token_scope: str = "mcp:admin") -> Optional[Dict[str, Any]]:
+def list_tools(remote: bool = False) -> list:
+    """Returns the tool definitions exposed on the given transport."""
+    if not remote:
+        return TOOLS_METADATA
+    return [t for t in TOOLS_METADATA if t["name"] not in LOCAL_ONLY_TOOLS]
+
+
+def build_server_instructions(remote: bool = False) -> str:
+    """Describes what the server offers. Deliberately factual: it does not tell the model when to call tools."""
+    lines = [
+        "OmniCache is a searchable memory for answers, code snippets and notes, scoped to your account.",
+        "",
+        "Tools:",
+        "- omnicache_store: save an answer, snippet or note, optionally with a tag.",
+        "- omnicache_query: look up a stored answer for a semantically similar prompt.",
+        "- omnicache_search: search stored entries by meaning.",
+        "- omnicache_invalidate: delete entries by tag, or all of your entries (destructive).",
+        "- omnicache_stats: usage statistics for your entries.",
+        "- omnicache_health: service readiness.",
+    ]
+    if not remote:
+        lines += [
+            "- omnicache_replay_tool: look up a recorded output of a deterministic local tool call.",
+            "- omnicache_record_tool: record a local tool call output for later replay.",
+        ]
+    return "\n".join(lines)
+
+
+def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default", is_admin: bool = False, token_scope: str = "mcp:admin", remote: bool = False) -> Optional[Dict[str, Any]]:
     """Processes a single JSON-RPC 2.0 MCP request dict. Returns None for notifications."""
     is_notification = ("id" not in req)
     req_id = req.get("id")
@@ -446,23 +483,7 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
                     "name": "omnicache-mcp",
                     "version": getattr(config, "VERSION", "3.1.0")
                 },
-                "instructions": (
-                    "OmniCache is an enterprise AI semantic caching proxy, vector memory engine, and "
-                    "deterministic tool replay platform.\n\n"
-                    "Core capabilities and tools:\n"
-                    "1. omnicache_query: Check semantic cache for a prompt before generating responses (<1ms latency, 100% token savings).\n"
-                    "2. omnicache_store: Save high-value solutions, code snippets, and explanations into vector memory for future instant recall.\n"
-                    "3. omnicache_search: Perform sub-millisecond semantic similarity search across cached knowledge.\n"
-                    "4. omnicache_replay_tool: Retrieve cached deterministic tool outputs (read_file, git_status, grep, etc.).\n"
-                    "5. omnicache_record_tool: Record tool outputs for subsequent replays with automatic PII scrubbing.\n"
-                    "6. omnicache_invalidate: Invalidate cache entries by domain tag or tenant.\n"
-                    "7. omnicache_stats: Retrieve real-time telemetry (hit rates, tokens saved, dollars saved).\n"
-                    "8. omnicache_health: Verify SQLite persistence and L1/L2 vector index readiness.\n\n"
-                    "Usage guidelines:\n"
-                    "- When the user asks a coding or conceptual question, call omnicache_query first to see if a verified answer is cached.\n"
-                    "- When you generate a high-quality answer, solution, or configuration, offer or use omnicache_store to remember it.\n"
-                    "- Use omnicache_stats when the user asks about system performance, savings, or cache efficiency."
-                ),
+                "instructions": build_server_instructions(remote),
                 "capabilities": {
                     "tools": {"listChanged": False},
                     "resources": {"listChanged": False},
@@ -480,7 +501,7 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
         return {
             "jsonrpc": "2.0",
             "id": req_id,
-            "result": {"tools": TOOLS_METADATA}
+            "result": {"tools": list_tools(remote)}
         }
     elif method == "resources/list":
         if is_notification:
@@ -502,6 +523,15 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
         tool_name = params.get("name", "")
         tool_args = params.get("arguments", {})
         clean_name = tool_name[len("omnicache_"):] if tool_name.startswith("omnicache_") else tool_name
+
+        if remote and f"omnicache_{clean_name}" in LOCAL_ONLY_TOOLS:
+            if is_notification:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32601, "message": f"Unknown tool: {tool_name}"}
+            }
 
         if clean_name == "invalidate" and ("mcp:admin" not in token_scope and "mcp:write" not in token_scope):
             if is_notification:
@@ -541,7 +571,7 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
         org = target_org if is_admin and target_org else default_org_id
         t0 = time.perf_counter()
         try:
-            tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org, is_admin=is_admin)
+            tool_res = handle_tool_call(tool_name, tool_args, default_org_id=org, is_admin=is_admin, remote=remote)
         except Exception as exc:
             dur = round((time.perf_counter() - t0) * 1000, 3)
             log_audit_event(tool_name, org, dur, "error", {"error": str(exc)})
@@ -581,7 +611,7 @@ def _process_single_jsonrpc(req: Dict[str, Any], default_org_id: str = "default"
         }
 
 
-def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: bool = False, token_scope: str = "mcp:admin") -> Optional[Any]:
+def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: bool = False, token_scope: str = "mcp:admin", remote: bool = False) -> Optional[Any]:
     """Processes a standard JSON-RPC 2.0 MCP message (single dict or batch list) and returns response."""
     if isinstance(req, list):
         if not req:
@@ -599,7 +629,7 @@ def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: boo
                     "error": {"code": -32600, "message": "Invalid Request: expected object"}
                 })
                 continue
-            item_res = _process_single_jsonrpc(single_req, default_org_id=default_org_id, is_admin=is_admin, token_scope=token_scope)
+            item_res = _process_single_jsonrpc(single_req, default_org_id=default_org_id, is_admin=is_admin, token_scope=token_scope, remote=remote)
             if item_res is not None:
                 batch_responses.append(item_res)
         return batch_responses if batch_responses else None
@@ -611,7 +641,7 @@ def process_mcp_jsonrpc(req: Any, default_org_id: str = "default", is_admin: boo
             "error": {"code": -32600, "message": "Invalid Request: expected object or array"}
         }
 
-    return _process_single_jsonrpc(req, default_org_id=default_org_id, is_admin=is_admin, token_scope=token_scope)
+    return _process_single_jsonrpc(req, default_org_id=default_org_id, is_admin=is_admin, token_scope=token_scope, remote=remote)
 
 
 def run_stdio_server():

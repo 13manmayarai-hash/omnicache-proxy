@@ -1,5 +1,7 @@
 # Privacy Policy for OmniCache
 
+> **Scope:** this policy covers the open-source package you run yourself. The hosted connector is covered by the [Hosted Connector Privacy Policy](HOSTED_PRIVACY_POLICY.md).
+
 **Effective Date:** September 13, 2026  
 **Last Updated:** September 13, 2026  
 **Maintainer:** Rajiv Prasad (<13manmayarai@gmail.com>)  

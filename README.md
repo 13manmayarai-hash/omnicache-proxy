@@ -342,6 +342,7 @@ docker-compose up -d
 ## 📄 Documentation
 
 * 📜 [Privacy Policy](PRIVACY.md) & [Full Policy Document](docs/PRIVACY_POLICY.md)
+* ☁️ [Hosted Connector for Claude](docs/HOSTED_CONNECTOR.md) & [Hosted Connector Privacy Policy](docs/HOSTED_PRIVACY_POLICY.md)
 * 📖 [Architecture Deep Dive](docs/ARCHITECTURE.md)
 * 🤖 [Agent Integrations Guide (Claude Code, Cursor, Cline)](docs/AGENT_INTEGRATIONS.md)
 * 📡 [API Reference](docs/API_REFERENCE.md)

@@ -55,7 +55,7 @@ from server.translator import ProtocolTranslator
 from server.failover import failover_engine
 from server.keepalive import keepalive_worker
 from persistence.snapshot_store import snapshot_store
-from mcp.server import process_mcp_jsonrpc, TOOLS_METADATA
+from mcp.server import process_mcp_jsonrpc, list_tools
 from server.audit import audit_logger
 from server.openapi import OPENAPI_SPEC, render_swagger_html
 
@@ -131,6 +131,21 @@ mesh_bus.register_invalidation_handler(_handle_mesh_tombstone)
 # Real-Time WebSocket Telemetry Dispatcher & Event Buffer
 ACTIVE_WS_CLIENTS: Set[WebSocket] = set()
 RECENT_WS_EVENTS: collections.deque = collections.deque(maxlen=100)
+# Tenant scope per connected WebSocket: None sees every event (admin, or local mode without auth);
+# an org_id string sees only events whose data carries that same org_id.
+WS_CLIENT_SCOPES: Dict[WebSocket, Optional[str]] = {}
+
+
+def ws_event_visible(event: Dict[str, Any], scope: Optional[str]) -> bool:
+    """Fail-closed tenant filter: events without a matching org_id are hidden from tenant scopes."""
+    if scope is None:
+        return True
+    data = event.get("data") or {}
+    return isinstance(data, dict) and data.get("org_id") == scope
+
+
+def ws_visible_events(scope: Optional[str]) -> list:
+    return [e for e in list(RECENT_WS_EVENTS) if ws_event_visible(e, scope)]
 
 
 async def broadcast_ws_event(event_type: str, data: Dict[str, Any]) -> None:
@@ -149,12 +164,16 @@ async def broadcast_ws_event(event_type: str, data: Dict[str, Any]) -> None:
         return
     dead = set()
     for ws in list(ACTIVE_WS_CLIENTS):
+        if not ws_event_visible(event_payload, WS_CLIENT_SCOPES.get(ws)):
+            continue
         try:
             await ws.send_json(event_payload)
         except Exception:
             dead.add(ws)
     if dead:
         ACTIVE_WS_CLIENTS.difference_update(dead)
+        for ws in dead:
+            WS_CLIENT_SCOPES.pop(ws, None)
 
 
 def emit_telemetry_event(event_type: str, data: Dict[str, Any]) -> None:
@@ -4748,9 +4767,10 @@ async def handle_oauth_authorize(request: Request) -> Response:
                     "error_description": "User authentication required. Supply a valid OmniCache API Key to authorize this client."
                 }, status_code=401, headers=auth_headers)
     else:
-        # In local developer mode (REQUIRE_AUTH=false)
+        # In local developer mode (REQUIRE_AUTH=false). The startup invariants only allow this on a
+        # loopback bind. A client-supplied x-org-id header is never trusted when minting codes.
         is_authenticated = True
-        auth_org_id = request.headers.get("x-org-id", "default").strip() or "default"
+        auth_org_id = "default"
         auth_team = "Local Developer"
 
     # Mint single-use, time-bound authorization code
@@ -5414,13 +5434,13 @@ async def handle_mcp(request: Request) -> Response:
         # Standard discovery JSON response for REST / health probes
         return JSONResponse({
             "service": "omnicache-mcp",
-            "description": "Enterprise AI semantic caching proxy, vector memory engine, and deterministic tool replay platform.",
+            "description": "Searchable memory for answers, code snippets and notes, scoped to your account.",
             "protocol": "jsonrpc-2.0",
             "mcp_version": proto_version,
             "transport": "streamable-http",
             "session_id": session_id,
             "tenant_org_id": org_id,
-            "tools_count": len(TOOLS_METADATA),
+            "tools_count": len(list_tools(remote=True)),
             "sse_endpoint": f"/mcp?sessionId={session_id}"
         }, headers=base_headers)
 
@@ -5441,7 +5461,14 @@ async def handle_mcp(request: Request) -> Response:
     # Scope enforcement for OAuth Bearer tokens
     auth_key = extract_auth_key(request)
     oauth_info = OAUTH_TOKENS.get(auth_key)
-    token_scope = oauth_info.get("scope", "mcp:admin") if oauth_info else "mcp:admin"
+    if oauth_info:
+        token_scope = oauth_info.get("scope", "mcp:read mcp:write")
+    elif auth_key.startswith("omni_tok_"):
+        # OAuth access tokens persist in quota storage but their scope lives in memory. After a
+        # restart, fall back to the default granted scope instead of escalating to admin scope.
+        token_scope = "mcp:read mcp:write"
+    else:
+        token_scope = "mcp:admin"
 
     is_admin = False
     if key_info:
@@ -5451,7 +5478,7 @@ async def handle_mcp(request: Request) -> Response:
     elif not getattr(config, "REQUIRE_AUTH", False) and not getattr(config, "ADMIN_API_KEY", "").strip():
         is_admin = True
 
-    res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin, token_scope=token_scope)
+    res = process_mcp_jsonrpc(req_body, default_org_id=org_id, is_admin=is_admin, token_scope=token_scope, remote=True)
     if res is None:
         return Response(status_code=204, headers=base_headers)
 
@@ -5492,6 +5519,7 @@ async def handle_ws_http(request: Request) -> Response:
 
 async def handle_ws(websocket: WebSocket):
     """Native WebSocket endpoint for client connections, live streaming, and real-time activity ticker."""
+    scope: Optional[str] = None
     if getattr(config, "REQUIRE_AUTH", False):
         key = websocket.query_params.get("api_key") or websocket.query_params.get("key")
         if not key:
@@ -5503,16 +5531,19 @@ async def handle_ws(websocket: WebSocket):
         if not allowed:
             await websocket.close(code=1008, reason=f"Forbidden: {auth_reason}")
             return
+        if not (key_info.get("role") == "admin" or quota_manager.is_admin(key)):
+            scope = key_info.get("org_id") or key_info.get("team_name") or key
 
     await websocket.accept()
     ACTIVE_WS_CLIENTS.add(websocket)
+    WS_CLIENT_SCOPES[websocket] = scope
     try:
         await websocket.send_json({
             "type": "connection_established",
             "service": "omnicache-proxy",
             "version": getattr(config, "VERSION", "3.1.0"),
             "status": "connected",
-            "recent_events": list(RECENT_WS_EVENTS)
+            "recent_events": ws_visible_events(scope)
         })
         while True:
             msg = await websocket.receive_text()
@@ -5522,7 +5553,9 @@ async def handle_ws(websocket: WebSocket):
                 try:
                     payload = json.loads(msg)
                     action = payload.get("action", "ping")
-                    if action == "stats":
+                    if action == "stats" and scope is not None:
+                        await websocket.send_json({"type": "error", "message": "Forbidden: global stats require an admin key"})
+                    elif action == "stats":
                         stats = {
                             "type": "stats",
                             "tokens_saved": METRICS_LEDGER["total_tokens_saved"],
@@ -5536,7 +5569,7 @@ async def handle_ws(websocket: WebSocket):
                     elif action == "events":
                         await websocket.send_json({
                             "type": "events_replay",
-                            "events": list(RECENT_WS_EVENTS)
+                            "events": ws_visible_events(scope)
                         })
                     else:
                         await websocket.send_json({"type": "ack", "status": "ok"})
@@ -5546,6 +5579,7 @@ async def handle_ws(websocket: WebSocket):
         pass
     finally:
         ACTIVE_WS_CLIENTS.discard(websocket)
+        WS_CLIENT_SCOPES.pop(websocket, None)
 
 
 # =====================================================================

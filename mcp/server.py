@@ -64,7 +64,8 @@ TOOLS_METADATA = [
                 "answer": {"type": "string", "description": "The generated answer, code, or explanation to cache."},
                 "model": {"type": "string", "description": "Optional model label to associate with the stored answer."},
                 "tag": {"type": "string", "description": "Optional domain tag (e.g. 'docs-v1', 'sql-tips')."},
-                "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"}
+                "org_id": {"type": "string", "description": "Tenant ID (default: default).", "default": "default"},
+                "ttl_seconds": {"type": "integer", "description": "Optional time-to-live in seconds (default: 604800, i.e. 7 days).", "default": 604800}
             },
             "required": ["prompt", "answer"]
         },
@@ -249,6 +250,13 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
         clean_answer, _, _ = PrivacyShield.sanitize_text(answer)
         model = arguments.get("model") or DEFAULT_MCP_MODEL
         tag = arguments.get("tag", None)
+        raw_ttl = arguments.get("ttl_seconds")
+        ttl_seconds = None
+        if raw_ttl is not None:
+            try:
+                ttl_seconds = max(60, int(raw_ttl))
+            except (ValueError, TypeError):
+                ttl_seconds = None
 
         payload = {
             "model": model,
@@ -263,7 +271,7 @@ def handle_tool_call(name: str, arguments: dict, default_org_id: str = "default"
             "choices": [{"message": {"role": "assistant", "content": clean_answer}}],
             "usage": {"prompt_tokens": len(clean_prompt.split()), "completion_tokens": len(clean_answer.split())}
         }
-        entry = cache_instance.store(payload, res_payload, org_id=org_id, tag=tag)
+        entry = cache_instance.store(payload, res_payload, org_id=org_id, tag=tag, custom_ttl=ttl_seconds)
         snapshot_store.persist_entry(entry, synchronous=False)
 
         return {
@@ -434,6 +442,42 @@ def log_audit_event(tool_name: str, org_id: str, duration_ms: float, status: str
                 af.write(json.dumps(event) + "\n")
         except Exception:
             pass
+
+
+def prune_jsonl_audit_logs(retention_days: int = 90) -> int:
+    """Prunes JSONL audit file entries older than retention_days (SOC2/GDPR retention enforcement)."""
+    audit_file = os.environ.get("OMNICACHE_AUDIT_LOG_PATH")
+    if not audit_file:
+        homedir = os.path.expanduser("~")
+        omni_dir = os.path.join(homedir, ".omnicache")
+        if os.path.isdir(omni_dir):
+            audit_file = os.path.join(omni_dir, "mcp_audit.jsonl")
+    if not audit_file or not os.path.isfile(audit_file):
+        return 0
+
+    cutoff = time.time() - (retention_days * 86400)
+    pruned_count = 0
+    try:
+        surviving_lines = []
+        with open(audit_file, "r", encoding="utf-8") as af:
+            for line in af:
+                if not line.strip():
+                    continue
+                try:
+                    ev = json.loads(line)
+                    ts = ev.get("timestamp", 0)
+                    if ts >= cutoff:
+                        surviving_lines.append(line)
+                    else:
+                        pruned_count += 1
+                except Exception:
+                    surviving_lines.append(line)
+        if pruned_count > 0:
+            with open(audit_file, "w", encoding="utf-8") as af:
+                af.writelines(surviving_lines)
+    except Exception:
+        pass
+    return pruned_count
 
 
 def list_tools(remote: bool = False) -> list:

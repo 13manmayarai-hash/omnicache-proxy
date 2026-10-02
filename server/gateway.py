@@ -55,7 +55,7 @@ from server.translator import ProtocolTranslator
 from server.failover import failover_engine
 from server.keepalive import keepalive_worker
 from persistence.snapshot_store import snapshot_store
-from mcp.server import process_mcp_jsonrpc, list_tools
+from mcp.server import process_mcp_jsonrpc, list_tools, prune_jsonl_audit_logs
 from server.audit import audit_logger
 from server.openapi import OPENAPI_SPEC, render_swagger_html
 
@@ -5674,6 +5674,11 @@ routes = [
 async def lifespan(app: Starlette):
     """Enforces critical startup security invariants under all ASGI servers (SEC-05)."""
     validate_startup_security_invariants()
+    try:
+        audit_logger.prune_expired_logs(retention_days=90)
+        prune_jsonl_audit_logs(retention_days=90)
+    except Exception:
+        pass
     yield
 
 app = Starlette(debug=False, routes=routes, lifespan=lifespan)

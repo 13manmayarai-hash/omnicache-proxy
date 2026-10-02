@@ -331,5 +331,30 @@ class AuditLogger:
             "event_types": dict(counts_by_type)
         }
 
+    def prune_expired_logs(self, retention_days: int = 90) -> int:
+        """
+        Enforces compliance retention policy by pruning audit records older than retention_days.
+        Prunes SQLite audit_events and in-memory ledger. Returns count of deleted database records.
+        """
+        cutoff_epoch = time.time() - (retention_days * 86400)
+        deleted_count = 0
+
+        with self._lock:
+            self._memory_ledger = collections.deque(
+                [r for r in self._memory_ledger if r.get("timestamp_epoch", 0) >= cutoff_epoch],
+                maxlen=self.max_memory_records
+            )
+
+        try:
+            with sqlite3.connect(self.db_path, timeout=5.0) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM audit_events WHERE timestamp_epoch < ?", (cutoff_epoch,))
+                deleted_count = cursor.rowcount
+                conn.commit()
+        except Exception:
+            pass
+
+        return deleted_count
+
 
 audit_logger = AuditLogger()

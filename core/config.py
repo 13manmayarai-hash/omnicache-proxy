@@ -38,7 +38,7 @@ def get_or_generate_privacy_salt() -> str:
     salt = os.getenv("PRIVACY_SALT", os.getenv("OMNICACHE_PRIVACY_SALT", "")).strip()
     if salt:
         return salt
-    salt_file = os.path.expanduser("~/.omnicache/.privacy_salt")
+    salt_file = os.path.join(os.getenv("OMNICACHE_DATA_DIR", os.path.expanduser("~/.omnicache")), ".privacy_salt")
     if os.path.exists(salt_file):
         try:
             with open(salt_file, "r", encoding="utf-8") as f:

@@ -4291,8 +4291,41 @@ OAUTH_CLIENTS: Dict[str, Dict[str, Any]] = {}
 GOOGLE_OAUTH_STATES: Dict[str, Dict[str, Any]] = {}
 
 CONSUMED_OAUTH_STATES: Dict[str, float] = {}
+ACCESS_TOKEN_TTL_SECONDS = 86400
+REFRESH_TOKEN_TTL_SECONDS = 90 * 86400
+
+
+def _hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _issue_refresh_token(client_id: str, org_id: str, team_name: str, scope: str) -> str:
+    """Creates a refresh token and stores its hash on the data dir, so it survives restarts and redeploys."""
+    refresh_token = f"omni_ref_{uuid.uuid4().hex}"
+    snapshot_store.save_refresh_token(
+        _hash_refresh_token(refresh_token), client_id, org_id, team_name, scope,
+        time.time() + REFRESH_TOKEN_TTL_SECONDS
+    )
+    return refresh_token
+
+
+def _issue_access_token(client_id: str, org_id: str, team_name: str, scope: str) -> str:
+    access_token = f"omni_tok_{uuid.uuid4().hex}"
+    OAUTH_TOKENS[access_token] = {
+        "client_id": client_id,
+        "org_id": org_id,
+        "scope": scope,
+        "created_at": time.time(),
+        "expires_at": time.time() + ACCESS_TOKEN_TTL_SECONDS
+    }
+    quota_manager.register_key(access_token, team_name=team_name, org_id=org_id, role="tenant")
+    return access_token
+
+
 _CONSUMED_OAUTH_LOCK = threading.Lock()
-_CONSUMED_OAUTH_DB_PATH = os.path.expanduser("~/.omnicache/oauth_consumed.db")
+_CONSUMED_OAUTH_DB_PATH = os.path.join(
+    os.getenv("OMNICACHE_DATA_DIR", os.path.expanduser("~/.omnicache")), "oauth_consumed.db"
+)
 
 
 def _init_consumed_oauth_db() -> None:
@@ -4923,28 +4956,14 @@ async def handle_oauth_token(request: Request) -> Response:
         target_team = code_entry.get("team_name", f"OAuth Client ({client_id or 'default'})")
         granted_scope = code_entry.get("scope", "mcp:read mcp:write")
 
-        access_token = f"omni_tok_{uuid.uuid4().hex}"
-        refresh_token = f"omni_ref_{uuid.uuid4().hex}"
-
-        OAUTH_TOKENS[access_token] = {
-            "client_id": client_id or code_entry.get("client_id", "unknown"),
-            "org_id": target_org,
-            "scope": granted_scope,
-            "created_at": time.time(),
-            "expires_at": time.time() + 86400
-        }
-
-        quota_manager.register_key(
-            access_token,
-            team_name=target_team,
-            org_id=target_org,
-            role="tenant"
-        )
+        token_client_id = client_id or code_entry.get("client_id", "unknown")
+        access_token = _issue_access_token(token_client_id, target_org, target_team, granted_scope)
+        refresh_token = _issue_refresh_token(token_client_id, target_org, target_team, granted_scope)
 
         return JSONResponse({
             "access_token": access_token,
             "token_type": "Bearer",
-            "expires_in": 86400,
+            "expires_in": ACCESS_TOKEN_TTL_SECONDS,
             "refresh_token": refresh_token,
             "scope": granted_scope
         }, headers=cors_headers)
@@ -4993,23 +5012,9 @@ async def handle_oauth_token(request: Request) -> Response:
             }, status_code=401, headers=auth_headers)
 
         requested_scope = params.get("scope", "mcp:read mcp:write").strip()
-        access_token = f"omni_tok_{uuid.uuid4().hex}"
-        refresh_token = f"omni_ref_{uuid.uuid4().hex}"
-
-        OAUTH_TOKENS[access_token] = {
-            "client_id": client_id or "client_credentials",
-            "org_id": target_org,
-            "scope": requested_scope,
-            "created_at": time.time(),
-            "expires_at": time.time() + 86400
-        }
-
-        quota_manager.register_key(
-            access_token,
-            team_name=target_team,
-            org_id=target_org,
-            role="tenant"
-        )
+        token_client_id = client_id or "client_credentials"
+        access_token = _issue_access_token(token_client_id, target_org, target_team, requested_scope)
+        refresh_token = _issue_refresh_token(token_client_id, target_org, target_team, requested_scope)
 
         return JSONResponse({
             "access_token": access_token,
@@ -5019,16 +5024,56 @@ async def handle_oauth_token(request: Request) -> Response:
             "scope": requested_scope
         }, headers=cors_headers)
 
+    # =========================================================================
+    # Grant Type 3: refresh_token (RFC 6749 Section 6), rotated on every use
+    # =========================================================================
     elif grant_type == "refresh_token":
+        presented = params.get("refresh_token", "").strip()
+        if not presented:
+            return JSONResponse({
+                "error": "invalid_request",
+                "error_description": "Parameter 'refresh_token' is required for refresh_token grant."
+            }, status_code=400, headers=cors_headers)
+
+        record = snapshot_store.consume_refresh_token(_hash_refresh_token(presented))
+        if record is None:
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Refresh token is invalid, expired, or has already been used."
+            }, status_code=400, headers=cors_headers)
+
+        if client_id and record["client_id"] not in (client_id, "unknown"):
+            return JSONResponse({
+                "error": "invalid_grant",
+                "error_description": "Refresh token was not issued to this client."
+            }, status_code=400, headers=cors_headers)
+
+        # A refresh may narrow the scope but never widen it.
+        granted_scope = record["scope"]
+        requested_scope = params.get("scope", "").strip()
+        if requested_scope:
+            if not set(requested_scope.split()) <= set(granted_scope.split()):
+                return JSONResponse({
+                    "error": "invalid_scope",
+                    "error_description": "Requested scope exceeds the scope originally granted."
+                }, status_code=400, headers=cors_headers)
+            granted_scope = requested_scope
+
+        access_token = _issue_access_token(record["client_id"], record["org_id"], record["team_name"], granted_scope)
+        new_refresh_token = _issue_refresh_token(record["client_id"], record["org_id"], record["team_name"], granted_scope)
+
         return JSONResponse({
-            "error": "unsupported_grant_type",
-            "error_description": "refresh_token grant is not yet implemented."
-        }, status_code=400, headers=cors_headers)
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": ACCESS_TOKEN_TTL_SECONDS,
+            "refresh_token": new_refresh_token,
+            "scope": granted_scope
+        }, headers=cors_headers)
 
     else:
         return JSONResponse({
             "error": "unsupported_grant_type",
-            "error_description": f"Grant type '{grant_type}' is unsupported. Supported grant types: 'authorization_code', 'client_credentials'."
+            "error_description": f"Grant type '{grant_type}' is unsupported. Supported grant types: 'authorization_code', 'client_credentials', 'refresh_token'."
         }, status_code=400, headers=cors_headers)
 
 

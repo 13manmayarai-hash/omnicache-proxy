@@ -115,6 +115,27 @@ class SnapshotStore:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_email ON signups(email)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_signup_ip ON signups(ip_address)")
 
+            # OAuth refresh tokens, stored as SHA-256 hashes so a copied database can't mint access tokens.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+                    token_hash TEXT PRIMARY KEY,
+                    client_id TEXT NOT NULL,
+                    org_id TEXT NOT NULL,
+                    team_name TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+            """)
+            try:
+                cur = conn.execute("PRAGMA table_info(oauth_refresh_tokens)")
+                cols = {row[1] for row in cur.fetchall()}
+                if "team_name" not in cols:
+                    conn.execute("ALTER TABLE oauth_refresh_tokens ADD COLUMN team_name TEXT NOT NULL DEFAULT ''")
+            except Exception:
+                pass
+
+
     def _start_worker(self):
         self._running = True
         self._worker_thread = threading.Thread(
@@ -688,6 +709,33 @@ class SnapshotStore:
         except Exception as exc:
             logger.warning(f"[SnapshotStore] Error counting signups by ip: {exc}")
             return 0
+
+    def save_refresh_token(self, token_hash: str, client_id: str, org_id: str, team_name: str,
+                           scope: str, expires_at: float) -> None:
+        """Stores a refresh token hash. Written synchronously: the client holds the token as soon as we answer."""
+        conn = self._get_connection()
+        with conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO oauth_refresh_tokens "
+                "(token_hash, client_id, org_id, team_name, scope, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (token_hash, client_id, org_id, team_name, scope, time.time(), expires_at)
+            )
+            conn.execute("DELETE FROM oauth_refresh_tokens WHERE expires_at <= ?", (time.time(),))
+
+    def consume_refresh_token(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        """Deletes and returns a live refresh token record. Single use: a replayed token finds nothing."""
+        conn = self._get_connection()
+        with conn:
+            row = conn.execute(
+                "SELECT client_id, org_id, team_name, scope, expires_at FROM oauth_refresh_tokens WHERE token_hash = ?",
+                (token_hash,)
+            ).fetchone()
+            if row is None:
+                return None
+            deleted = conn.execute("DELETE FROM oauth_refresh_tokens WHERE token_hash = ?", (token_hash,)).rowcount
+        if not deleted or row[4] <= time.time():
+            return None
+        return {"client_id": row[0], "org_id": row[1], "team_name": row[2], "scope": row[3]}
 
     # =========================================================================
     # Lifecycle & Cleanup
